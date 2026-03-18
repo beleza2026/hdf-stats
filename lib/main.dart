@@ -538,18 +538,21 @@ class _MainScreenState extends State<MainScreen> {
         expand: false,
         builder: (context, scrollController) => FutureBuilder<List<dynamic>>(
           future: jugado && fixtureId != null
-            ? Future.wait([ApiService.getEstadisticasPartido(fixtureId), ApiService.getEventosPartido(fixtureId)])
-            : Future.value([null, []]),
+          ? Future.wait([ApiService.getEstadisticasPartido(fixtureId), ApiService.getEventosPartido(fixtureId), ApiService.getLineupsPartido(fixtureId)])
+            : Future.value([null, [], []]),
           builder: (context, snap) {
             final stats = snap.data?[0] as Map<String, dynamic>?;
             final eventos = List<Map<String, dynamic>>.from(snap.data?[1] ?? []);
- 
+
+ final lineups = List<Map<String, dynamic>>.from(snap.data?[2] ?? []);
             String moralLocal = '-', moralVisitante = '-', moralDesc = 'Calculando...';
+            
             if (stats != null && stats['response'] != null && (stats['response'] as List).length >= 2) {
               final statLocal = List<Map<String, dynamic>>.from(stats['response'][0]['statistics'] ?? []);
               final statVisit = List<Map<String, dynamic>>.from(stats['response'][1]['statistics'] ?? []);
               double posLocal = 0, posVisit = 0;
               int tirosLocal = 0, tirosVisit = 0, cornersLocal = 0, cornersVisit = 0;
+             
               for (var s in statLocal) {
                 if (s['type'] == 'Ball Possession') posLocal = double.tryParse(s['value']?.toString().replaceAll('%', '') ?? '0') ?? 0;
                 if (s['type'] == 'Shots on Goal') tirosLocal = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
@@ -560,8 +563,8 @@ class _MainScreenState extends State<MainScreen> {
                 if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
                 if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
               }
-              double puntLocal = (posLocal * 0.3) + (tirosLocal * 4.0) + (cornersLocal * 1.5);
-              double puntVisit = (posVisit * 0.3) + (tirosVisit * 4.0) + (cornersVisit * 1.5);
+              double puntLocal = (posLocal * 0.3) + (tirosLocal * 2.5) + (cornersLocal * 1.5);
+              double puntVisit = (posVisit * 0.3) + (tirosVisit * 2.5) + (cornersVisit * 1.5);
               double total = puntLocal + puntVisit;
               if (total > 0) {
                 int golesM = 3;
@@ -644,6 +647,16 @@ class _MainScreenState extends State<MainScreen> {
                         }
                         return _incidencia(icono, minuto, tipoText, equipo);
                       }),
+                      const SizedBox(height: 16),
+                    if (lineups.length >= 2) ...[
+                      _detalleSeccion('FORMACIONES'),
+                      const SizedBox(height: 8),
+                      _buildCancha(lineups, local, visitante),
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      _detalleSeccion('FORMACIONES'),
+                      const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
+                    ],
                   ] else ...[
                     const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No hay estadísticas disponibles', style: TextStyle(color: Colors.white38), textAlign: TextAlign.center)),
                   ],
@@ -724,5 +737,82 @@ class _MainScreenState extends State<MainScreen> {
  
   Widget _sectionTitle(String title) {
     return Text(title, style: const TextStyle(color: Color(0xFF00C853), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 2));
+  }
+  Widget _buildCancha(List<Map<String, dynamic>> lineups, String local, String visitante) {
+    final teamLocal = lineups[0];
+    final teamVisit = lineups[1];
+    final formLocal = teamLocal['formation'] ?? '';
+    final formVisit = teamVisit['formation'] ?? '';
+    final playersLocal = List<Map<String, dynamic>>.from(teamLocal['startXI'] ?? []);
+    final playersVisit = List<Map<String, dynamic>>.from(teamVisit['startXI'] ?? []);
+
+    Map<int, List<Map<String, dynamic>>> groupByPos(List<Map<String, dynamic>> players) {
+      final Map<int, List<Map<String, dynamic>>> rows = {};
+      for (var p in players) {
+        final pos = (p['player']['pos'] as String? ?? 'M');
+        int row;
+        if (pos == 'G') row = 1;
+        else if (pos == 'D') row = 2;
+        else if (pos == 'M') row = 3;
+        else row = 4;
+        rows.putIfAbsent(row, () => []).add(p);
+      }
+      return rows;
+    }
+
+    Widget buildPlayerDot(Map<String, dynamic> p, bool isLocal) {
+      final name = (p['player']['name'] ?? '') as String;
+      final number = p['player']['number']?.toString() ?? '';
+      final shortName = name.split(' ').last;
+      return Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(
+            color: isLocal ? const Color(0xFF00C853) : const Color(0xFF2196F3),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 1.5),
+          ),
+          child: Center(child: Text(number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+        ),
+        const SizedBox(height: 2),
+        SizedBox(width: 50, child: Text(shortName, style: const TextStyle(color: Colors.white, fontSize: 9), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis)),
+      ]);
+    }
+
+    Widget buildRows(Map<int, List<Map<String, dynamic>>> rowsMap, bool isLocal, bool invertir) {
+      final sortedKeys = rowsMap.keys.toList()..sort();
+      if (invertir) sortedKeys.sort((a, b) => b.compareTo(a));
+      return Column(mainAxisSize: MainAxisSize.min, children: sortedKeys.map((row) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: rowsMap[row]!.map((p) => buildPlayerDot(p, isLocal)).toList()),
+        );
+      }).toList());
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B5E20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2E7D32), width: 2),
+      ),
+      child: Column(children: [
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+          Text(visitante, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(formVisit, style: const TextStyle(color: Color(0xFF2196F3), fontSize: 12, fontWeight: FontWeight.bold)),
+        ])),
+        Container(height: 1, color: Colors.white12),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: buildRows(groupByPos(playersVisit), false, false)),
+        Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 4), color: Colors.white24),
+        Container(width: 60, height: 30, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white24))),
+        Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 4), color: Colors.white24),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: buildRows(groupByPos(playersLocal), true, true)),
+        Container(height: 1, color: Colors.white12),
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+          Text(local, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(formLocal, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold)),
+        ])),
+      ]),
+    );
   }
 }

@@ -147,5 +147,20 @@ class ApiService {
     } catch (e) {
       return [];
     }
+  }static Future<List<Map<String, dynamic>>> getLineupsPartido(int fixtureId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/fixtures/lineups?fixture=$fixtureId'),
+        headers: _headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final lineups = data['response'] as List;
+        return lineups.map((l) => l as Map<String, dynamic>).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
   }
 }
