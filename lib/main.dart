@@ -563,17 +563,52 @@ class _MainScreenState extends State<MainScreen> {
                 if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
                 if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
               }
-              double puntLocal = (posLocal * 0.3) + (tirosLocal * 2.5) + (cornersLocal * 1.5);
-              double puntVisit = (posVisit * 0.3) + (tirosVisit * 2.5) + (cornersVisit * 1.5);
-              double total = puntLocal + puntVisit;
-              if (total > 0) {
-                int golesM = 3;
-                moralLocal = ((puntLocal / total) * golesM).round().toString();
-                moralVisitante = ((puntVisit / total) * golesM).round().toString();
-                if (puntLocal > puntVisit * 1.2) moralDesc = '$local mereció ganar';
-                else if (puntVisit > puntLocal * 1.2) moralDesc = '$visitante mereció ganar';
-                else moralDesc = 'El resultado fue justo';
-              }
+             final partes = resultado.split('-');
+final int glLocal = int.tryParse(partes.isNotEmpty ? partes[0].trim() : '0') ?? 0;
+final int glVisit = int.tryParse(partes.length > 1 ? partes[1].trim() : '0') ?? 0;
+int moralL = glLocal;
+int moralV = glVisit;
+
+final double difPos = posLocal - posVisit;
+final int difTiros = tirosLocal - tirosVisit;
+final int difCorners = cornersLocal - cornersVisit;
+
+double dominio = 0;
+if (difPos.abs() > 25) dominio += difPos > 0 ? 1.5 : -1.5;
+else if (difPos.abs() > 15) dominio += difPos > 0 ? 1.0 : -1.0;
+
+if (difTiros.abs() >= 3) dominio += difTiros > 0 ? 1.0 : -1.0;
+else if (difTiros.abs() >= 1) dominio += difTiros > 0 ? 0.5 : -0.5;
+
+if (difCorners.abs() >= 5) dominio += difCorners > 0 ? 0.5 : -0.5;
+
+final int diferencia = (glLocal - glVisit).abs();
+final int ajuste = dominio.round().clamp(-1, 1);
+moralL += ajuste;
+moralV -= ajuste;
+
+if (moralL < 0) moralL = 0;
+if (moralV < 0) moralV = 0;
+
+// Para 1 gol de diferencia, máximo empate moral (sin invertir)
+if (diferencia == 1) {
+  if (glLocal > glVisit && moralL < moralV) moralL = moralV;
+  if (glVisit > glLocal && moralV < moralL) moralV = moralL;
+}
+
+// Para empates, limitar diferencia moral a 1
+if (glLocal == glVisit) {
+  if (moralL > moralV + 1) moralL = moralV + 1;
+  if (moralV > moralL + 1) moralV = moralL + 1;
+}
+
+moralLocal = moralL.toString();
+moralVisitante = moralV.toString();
+moralDesc = moralL > moralV
+    ? '$local mereció ganar'
+    : moralV > moralL
+        ? '$visitante mereció ganar'
+        : 'El resultado fue justo';
             }
  
             return ListView(
