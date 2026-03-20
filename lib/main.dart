@@ -673,7 +673,63 @@ moralDesc = moralL > moralV
                         })
                       : []),
                     const SizedBox(height: 16),
-                    _detalleSeccion('RESULTADO MORAL'),
+                    // FIGURA DEL PARTIDO
+if (jugado && eventos.isNotEmpty) ...[
+  _detalleSeccion('FIGURA DEL PARTIDO HDF'),
+  Builder(builder: (context) {
+    final Map<String, int> puntos = {};
+    final Map<String, String> equipos = {};
+    for (var e in eventos) {
+      final jugador = e['player']?['name'] ?? '';
+      final tipo = e['type'] ?? '';
+      final detalle = e['detail'] ?? '';
+      final equipo = e['team']?['name'] ?? '';
+      if (jugador.isEmpty) continue;
+      puntos[jugador] ??= 0;
+      equipos[jugador] = equipo;
+      if (tipo == 'Goal' && detalle != 'Own Goal') puntos[jugador] = puntos[jugador]! + 3;
+      if (tipo == 'Goal' && detalle == 'Own Goal') puntos[jugador] = puntos[jugador]! - 2;
+      if (tipo == 'subst') { final sale = e['assist']?['name'] ?? ''; if (sale.isNotEmpty) { puntos[sale] ??= 0; equipos[sale] ??= equipo; } }
+      if (tipo == 'Card' && detalle == 'Yellow Card') puntos[jugador] = puntos[jugador]! - 1;
+      if (tipo == 'Card' && detalle == 'Red Card') puntos[jugador] = puntos[jugador]! - 3;
+    }
+    if (puntos.isEmpty) return const SizedBox();
+    final sorted = puntos.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final figura = sorted.first;
+    final peor = sorted.last;
+    return Column(children: [
+      Container(
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
+        child: Row(children: [
+          const Text('⭐', style: TextStyle(fontSize: 20)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('FIGURA DEL PARTIDO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+            Text(figura.key, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            Text(equipos[figura.key] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ])),
+        ]),
+      ),
+      Container(
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.withValues(alpha: 0.3))),
+        child: Row(children: [
+          const Text('😤', style: TextStyle(fontSize: 20)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('PARA QUÉ TE TRAJE', style: TextStyle(color: Colors.red, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+            Text(peor.key, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            Text(equipos[peor.key] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ])),
+        ]),
+      ),
+      const SizedBox(height: 8),
+    ]);
+  }),
+],_detalleSeccion('RESULTADO MORAL'),
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
