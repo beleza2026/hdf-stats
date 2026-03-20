@@ -658,6 +658,33 @@ moralDesc = moralL > moralV
       ]),
     ]),
   ),
+const SizedBox(height: 8),
+              _detalleSeccion('MEJORES JUGADORES'),
+              Builder(builder: (context) {
+                final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
+                if (jugadores.isEmpty) return const SizedBox.shrink();
+                return Column(children: jugadores.take(5).map((j) {
+                  final rating = j['rating'] as double;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8)),
+                    child: Row(children: [
+                      Expanded(child: Text(j['nombre'], style: const TextStyle(color: Colors.white, fontSize: 13))),
+                      Text(j['equipo'], style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: rating >= 7.5 ? Colors.green : rating >= 6.5 ? const Color(0xFFFF9800) : Colors.red,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(rating.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ]),
+                  );
+                }).toList());
+              }),
   const SizedBox(height: 8),
 ], _detalleSeccion('ESTADÍSTICAS'),
                     ...((stats['response'] as List).isNotEmpty
@@ -697,6 +724,12 @@ if (jugado && eventos.isNotEmpty) ...[
     final sorted = puntos.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final figura = sorted.first;
     final peor = sorted.last;
+    final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
+final figNombre = jugadores.isNotEmpty ? jugadores.first['nombre'] as String : figura.key;
+final figEquipo = jugadores.isNotEmpty ? jugadores.first['equipo'] as String : (equipos[figura.key] ?? '');
+final peorNombre = jugadores.isNotEmpty ? jugadores.last['nombre'] as String : peor.key;
+final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (equipos[peor.key] ?? '');
+    
     return Column(children: [
       Container(
         margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -708,7 +741,7 @@ if (jugado && eventos.isNotEmpty) ...[
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('FIGURA DEL PARTIDO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
             Text(figura.key, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(equipos[figura.key] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            Text(equipos[figNombre] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
           ])),
         ]),
       ),
