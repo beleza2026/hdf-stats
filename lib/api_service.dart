@@ -173,4 +173,30 @@ class ApiService {
       return null;
     } catch (e) { return null; }
   }
+  static Future<List<Map<String, dynamic>>> getPlayersPartido(String fixtureId) async {
+    final url = Uri.parse('$_baseUrl/fixtures/players?fixture=$fixtureId');
+    final response = await http.get(url, headers: _headers);
+    if (response.statusCode != 200) return [];
+    final data = jsonDecode(response.body);
+    final teams = data['response'] as List;
+    List<Map<String, dynamic>> jugadores = [];
+    for (var team in teams) {
+      final teamName = team['team']['name'] as String;
+      final players = team['players'] as List;
+      for (var p in players) {
+        final stats = p['statistics'][0];
+        final rating = stats['games']['rating'];
+        if (rating == null) continue;
+        jugadores.add({
+          'nombre': p['player']['name'],
+          'equipo': teamName,
+          'rating': double.tryParse(rating.toString()) ?? 0.0,
+          'tiros': stats['shots']['on'] ?? 0,
+          'pases': stats['passes']['accuracy'] ?? 0,
+        });
+      }
+    }
+    jugadores.sort((a, b) => b['rating'].compareTo(a['rating']));
+    return jugadores;
+  }
 }

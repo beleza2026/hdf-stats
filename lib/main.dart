@@ -538,8 +538,8 @@ class _MainScreenState extends State<MainScreen> {
         expand: false,
         builder: (context, scrollController) => FutureBuilder<List<dynamic>>(
           future: jugado && fixtureId != null
-          ? Future.wait([ApiService.getEstadisticasPartido(fixtureId), ApiService.getEventosPartido(fixtureId), ApiService.getLineupsPartido(fixtureId), ApiService.getDetallePartido(fixtureId)])
-            : Future.value([null, [], []]),
+          ? Future.wait([ApiService.getEstadisticasPartido(fixtureId), ApiService.getEventosPartido(fixtureId), ApiService.getLineupsPartido(fixtureId), ApiService.getDetallePartido(fixtureId), ApiService.getPlayersPartido(fixtureId.toString())])
+            : Future.value([null, [], [], null, []]),
           builder: (context, snap) {
             final stats = snap.data?[0] as Map<String, dynamic>?;
             final eventos = List<Map<String, dynamic>>.from(snap.data?[1] ?? []);
