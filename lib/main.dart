@@ -538,13 +538,19 @@ class _MainScreenState extends State<MainScreen> {
         expand: false,
         builder: (context, scrollController) => FutureBuilder<List<dynamic>>(
           future: jugado && fixtureId != null
-          ? Future.wait([ApiService.getEstadisticasPartido(fixtureId), ApiService.getEventosPartido(fixtureId), ApiService.getLineupsPartido(fixtureId)])
+          ? Future.wait([ApiService.getEstadisticasPartido(fixtureId), ApiService.getEventosPartido(fixtureId), ApiService.getLineupsPartido(fixtureId), ApiService.getDetallePartido(fixtureId)])
             : Future.value([null, [], []]),
           builder: (context, snap) {
             final stats = snap.data?[0] as Map<String, dynamic>?;
             final eventos = List<Map<String, dynamic>>.from(snap.data?[1] ?? []);
 
  final lineups = List<Map<String, dynamic>>.from(snap.data?[2] ?? []);
+final detalle = snap.data?.length != null && snap.data!.length > 3 
+    ? snap.data![3] as Map<String, dynamic>? 
+    : null;
+final arbitro = detalle?['fixture']?['referee'] ?? 'No disponible';
+final estadio = detalle?['fixture']?['venue']?['name'] ?? '';
+final ciudad = detalle?['fixture']?['venue']?['city'] ?? '';
             String moralLocal = '-', moralVisitante = '-', moralDesc = 'Calculando...';
             
             if (stats != null && stats['response'] != null && (stats['response'] as List).length >= 2) {
@@ -634,7 +640,26 @@ moralDesc = moralL > moralV
                   if (snap.connectionState == ConnectionState.waiting)
                     const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFF00C853))))
                   else if (stats != null) ...[
-                    _detalleSeccion('ESTADÍSTICAS'),
+                   ...[
+  _detalleSeccion('INFO DEL PARTIDO'),
+  Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    child: Column(children: [
+      Row(children: [
+        const Icon(Icons.sports, color: Color(0xFF00C853), size: 16),
+        const SizedBox(width: 8),
+        Text('Árbitro: $arbitro', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      ]),
+      const SizedBox(height: 6),
+      Row(children: [
+        const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16),
+        const SizedBox(width: 8),
+        Text('$estadio${ciudad.isNotEmpty ? " · $ciudad" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      ]),
+    ]),
+  ),
+  const SizedBox(height: 8),
+], _detalleSeccion('ESTADÍSTICAS'),
                     ...((stats['response'] as List).isNotEmpty
                       ? (stats['response'][0]['statistics'] as List).where((s) => ['Ball Possession', 'Shots on Goal', 'Corner Kicks', 'Fouls'].contains(s['type'])).map((s) {
                           final i = (stats['response'][0]['statistics'] as List).indexOf(s);

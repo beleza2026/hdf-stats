@@ -163,4 +163,14 @@ class ApiService {
       return [];
     }
   }
+  static Future<Map<String, dynamic>?> getDetallePartido(int fixtureId) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/fixtures?id=$fixtureId'), headers: _headers);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['response'] != null && (data['response'] as List).isNotEmpty) return data['response'][0];
+      }
+      return null;
+    } catch (e) { return null; }
+  }
 }
