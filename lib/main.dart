@@ -659,11 +659,11 @@ moralDesc = moralL > moralV
     ]),
   ),
 const SizedBox(height: 8),
-              _detalleSeccion('MEJORES JUGADORES'),
+              _detalleSeccion('PODIO DEL PARTIDO'),
               Builder(builder: (context) {
                 final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
                 if (jugadores.isEmpty) return const SizedBox.shrink();
-                return Column(children: jugadores.take(5).map((j) {
+                return Column(children: jugadores.take(3).map((j) {
                   final rating = j['rating'] as double;
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
@@ -721,13 +721,10 @@ if (jugado && eventos.isNotEmpty) ...[
       if (tipo == 'Card' && detalle == 'Red Card') puntos[jugador] = puntos[jugador]! - 3;
     }
     if (puntos.isEmpty) return const SizedBox();
+   final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
     final sorted = puntos.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final figura = sorted.first;
-    final peor = sorted.last;
-    final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
-final figNombre = jugadores.isNotEmpty ? jugadores.first['nombre'] as String : figura.key;
-final figEquipo = jugadores.isNotEmpty ? jugadores.first['equipo'] as String : (equipos[figura.key] ?? '');
-final peorNombre = jugadores.isNotEmpty ? jugadores.last['nombre'] as String : peor.key;
+    final figura = jugadores.isNotEmpty ? MapEntry(jugadores.first['nombre'] as String, 0) : sorted.first;
+    final peor = jugadores.isNotEmpty ? MapEntry(jugadores.last['nombre'] as String, 0) : sorted.last;
 final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (equipos[peor.key] ?? '');
     
     return Column(children: [
@@ -741,7 +738,7 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('FIGURA DEL PARTIDO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
             Text(figura.key, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(equipos[figNombre] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+           Text(equipos[figura.key] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
           ])),
         ]),
       ),
