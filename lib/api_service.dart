@@ -40,7 +40,7 @@ class ApiService {
         final data = jsonDecode(response.body);
         final standings = data['response'][0]['league']['standings'] as List;
         Map<String, List<Map<String, dynamic>>> zonas = {};
-        for (int i = 0; i < standings.length; i++) {
+   for (int i = 0; i < standings.length && i < 2; i++) {
           final zona = standings[i] as List;
           zonas['Zona ${String.fromCharCode(65 + i)}'] =
               zona.map((e) => e as Map<String, dynamic>).toList();

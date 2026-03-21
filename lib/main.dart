@@ -192,7 +192,7 @@ class _MainScreenState extends State<MainScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            ...zonas.entries.map((zona) => Column(
+           ...zonas.entries.where((zona) => zona.key == 'Zona A' || zona.key == 'Zona B').map((zona) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _sectionTitle(zona.key.toUpperCase()),
