@@ -127,7 +127,7 @@ class _MainScreenState extends State<MainScreen> {
               } else if (status == '1H' || status == '2H' || status == 'ET') {
                 statusDisplay = "${fixture['status']['elapsed']}'";
               } else if (status == 'NS') {
-                final date = DateTime.parse(fixture['date']);
+                final date = DateTime.parse(fixture['date'].toString()).toLocal();
                 statusDisplay = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
               } else {
                 statusDisplay = status;
@@ -485,7 +485,7 @@ class _MainScreenState extends State<MainScreen> {
                   final visitante = p['teams']['away']['name'];
                   final golesL = p['goals']['home']?.toString() ?? '-';
                   final golesV = p['goals']['away']?.toString() ?? '-';
-                  final fecha = DateTime.parse(p['fixture']['date']);
+                  final fecha = DateTime.parse(p['fixture']['date']).toLocal();
                   final fixtureId = p['fixture']['id'] as int?;
                   final statusShort = p['fixture']['status']['short'];
                   final esJugado = statusShort == 'FT' || statusShort == 'AET' || statusShort == 'PEN' || statusShort == 'AWD' || statusShort == 'WO';
