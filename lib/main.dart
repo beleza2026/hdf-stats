@@ -834,16 +834,29 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
     );
   }
  
-  Widget _statRow(String stat, String local, String visitante) {
+ Widget _statRow(String stat, String local, String visitante) {
+    final vLocal = double.tryParse(local.replaceAll('%', '').replaceAll('-', '0')) ?? 0;
+    final vVisit = double.tryParse(visitante.replaceAll('%', '').replaceAll('-', '0')) ?? 0;
+    final total = vLocal + vVisit;
+    final pLocal = total > 0 ? vLocal / total : 0.5;
+    final pVisit = total > 0 ? vVisit / total : 0.5;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(child: Text(local, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-          Expanded(flex: 2, child: Text(stat, style: const TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.center)),
-          Expanded(child: Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(local, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(stat, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+        ]),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Row(children: [
+            Expanded(flex: (pLocal * 100).round(), child: Container(height: 6, color: const Color(0xFF00C853))),
+            Expanded(flex: (pVisit * 100).round(), child: Container(height: 6, color: const Color(0xFF2196F3))),
+          ]),
+        ),
+      ]),
     );
   }
  
