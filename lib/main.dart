@@ -912,14 +912,18 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
       final shortName = name.split(' ').last;
       return Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(
-            color: isLocal ? const Color(0xFF00C853) : const Color(0xFF2196F3),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 1.5),
-          ),
-          child: Center(child: Text(number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: isLocal ? const Color(0xFF00C853) : const Color(0xFF2196F3), width: 2),
+          image: p['player']['photo'] != null ? DecorationImage(
+            image: NetworkImage(p['player']['photo'] as String),
+            fit: BoxFit.cover,
+          ) : null,
+          color: isLocal ? const Color(0xFF00C853) : const Color(0xFF2196F3),
         ),
+        child: p['player']['photo'] == null ? Center(child: Text(number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))) : null,
+      ),
         const SizedBox(height: 2),
         SizedBox(width: 50, child: Text(shortName, style: const TextStyle(color: Colors.white, fontSize: 9), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis)),
       ]);
