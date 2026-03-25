@@ -199,33 +199,4 @@ class ApiService {
     jugadores.sort((a, b) => b['rating'].compareTo(a['rating']));
     return jugadores;
   }
-
-  static Future<List<Map<String, dynamic>>> getUltimos5(int teamId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?team=$teamId&season=$_season&last=5'),
-        headers: _headers,
-      );
-      if (response.statusCode != 200) return [];
-      final data = jsonDecode(response.body);
-      final list = data['response'] as List? ?? [];
-      return list.cast<Map<String, dynamic>>();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  static Future<Map<String, dynamic>> getStatsEquipo(int teamId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/teams/statistics?team=$teamId&season=$_season&league=$_ligaArgentina'),
-        headers: _headers,
-      );
-      if (response.statusCode != 200) return {};
-      final data = jsonDecode(response.body);
-      return Map<String, dynamic>.from(data['response'] ?? {});
-    } catch (e) {
-      return {};
-    }
-  }
 }
