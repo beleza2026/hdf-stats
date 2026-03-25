@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'api_service.dart';
  
 void main() {
@@ -107,7 +107,7 @@ class _MainScreenState extends State<MainScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('HOY — LIGA PROFESIONAL'),
+            _sectionTitle('HOY â€” LIGA PROFESIONAL'),
             const SizedBox(height: 12),
             ...partidos.map((partido) {
               final teams = partido['teams'];
@@ -263,7 +263,7 @@ class _MainScreenState extends State<MainScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('GOLEADORES — LIGA PROFESIONAL'),
+            _sectionTitle('GOLEADORES â€” LIGA PROFESIONAL'),
             const SizedBox(height: 12),
             ...goleadores.asMap().entries.map((entry) {
               final i = entry.key;
@@ -319,7 +319,7 @@ class _MainScreenState extends State<MainScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('ARQUEROS — VALLAS INVICTAS'),
+            _sectionTitle('ARQUEROS â€” VALLAS INVICTAS'),
             const SizedBox(height: 12),
             ...arqueros.asMap().entries.map((entry) {
               final i = entry.key;
@@ -413,7 +413,7 @@ class _MainScreenState extends State<MainScreen> {
  
         final fechas = porFecha.keys.toList()..sort();
  
-        // Inicializar en la última fecha con partidos jugados
+        // Inicializar en la Ãºltima fecha con partidos jugados
         if (_fechaActual == -1) {
           _fechaActual = 0;
           for (int i = 0; i < fechas.length; i++) {
@@ -468,7 +468,7 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                   Column(children: [
                     Text('FECHA $numFecha', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 2)),
-                    Text(hayJugadosEnFecha ? 'JUGADA' : 'PRÓXIMA', style: TextStyle(color: hayJugadosEnFecha ? Colors.white38 : const Color(0xFF00C853), fontSize: 11, letterSpacing: 1)),
+                    Text(hayJugadosEnFecha ? 'JUGADA' : 'PRÃ“XIMA', style: TextStyle(color: hayJugadosEnFecha ? Colors.white38 : const Color(0xFF00C853), fontSize: 11, letterSpacing: 1)),
                   ]),
                   IconButton(
                     icon: const Icon(Icons.chevron_right, color: Color(0xFF00C853), size: 28),
@@ -596,7 +596,7 @@ moralV -= ajuste;
 if (moralL < 0) moralL = 0;
 if (moralV < 0) moralV = 0;
 
-// Para 1 gol de diferencia, máximo empate moral (sin invertir)
+// Para 1 gol de diferencia, mÃ¡ximo empate moral (sin invertir)
 if (diferencia == 1) {
   if (glLocal > glVisit && moralL < moralV) moralL = moralV;
   if (glVisit > glLocal && moralV < moralL) moralV = moralL;
@@ -611,9 +611,9 @@ if (glLocal == glVisit) {
 moralLocal = moralL.toString();
 moralVisitante = moralV.toString();
 moralDesc = moralL > moralV
-    ? '$local mereció ganar'
+    ? '$local mereciÃ³ ganar'
     : moralV > moralL
-        ? '$visitante mereció ganar'
+        ? '$visitante mereciÃ³ ganar'
         : 'El resultado fue justo';
             }
  
@@ -648,13 +648,13 @@ moralDesc = moralL > moralV
       Row(children: [
         const Icon(Icons.sports, color: Color(0xFF00C853), size: 16),
         const SizedBox(width: 8),
-        Text('Árbitro: $arbitro', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        Text('Ãrbitro: $arbitro', style: const TextStyle(color: Colors.white70, fontSize: 13)),
       ]),
       const SizedBox(height: 6),
       Row(children: [
         const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16),
         const SizedBox(width: 8),
-        Text('$estadio${ciudad.isNotEmpty ? " · $ciudad" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        Text('$estadio${ciudad.isNotEmpty ? " Â· $ciudad" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
       ]),
     ]),
   ),
@@ -686,13 +686,13 @@ const SizedBox(height: 8),
                 }).toList());
               }),
   const SizedBox(height: 8),
-], _detalleSeccion('ESTADÍSTICAS'),
+], _detalleSeccion('ESTADÃSTICAS'),
                     ...((stats['response'] as List).isNotEmpty
                       ? (stats['response'][0]['statistics'] as List).where((s) => ['Ball Possession', 'Shots on Goal', 'Corner Kicks', 'Fouls'].contains(s['type'])).map((s) {
                           final i = (stats['response'][0]['statistics'] as List).indexOf(s);
                           final valVisit = i < (stats['response'][1]['statistics'] as List).length ? stats['response'][1]['statistics'][i]['value']?.toString() ?? '-' : '-';
                           String label = s['type'];
-                          if (label == 'Ball Possession') label = 'Posesión';
+                          if (label == 'Ball Possession') label = 'PosesiÃ³n';
                           if (label == 'Shots on Goal') label = 'Tiros al arco';
                           if (label == 'Corner Kicks') label = 'Corners';
                           if (label == 'Fouls') label = 'Faltas';
@@ -733,7 +733,7 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
         child: Row(children: [
-          const Text('⭐', style: TextStyle(fontSize: 20)),
+          const Text('â­', style: TextStyle(fontSize: 20)),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('FIGURA DEL PARTIDO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
@@ -747,10 +747,10 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.withValues(alpha: 0.3))),
         child: Row(children: [
-          const Text('😤', style: TextStyle(fontSize: 20)),
+          const Text('ðŸ˜¤', style: TextStyle(fontSize: 20)),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('PARA QUÉ TE TRAJE', style: TextStyle(color: Colors.red, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+            const Text('PARA QUÃ‰ TE TRAJE', style: TextStyle(color: Colors.red, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
             Text(peor.key, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
             Text(equipos[peor.key] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
           ])),
@@ -770,7 +770,7 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
                           Text(visitante, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                         ]),
                         const SizedBox(height: 8),
-                        Text('🧠 $moralDesc', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
+                        Text('ðŸ§  $moralDesc', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
                       ]),
                     ),
                     const SizedBox(height: 16),
@@ -782,13 +782,13 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
                         final tipo = e['type'];
                         final minuto = "${e['time']['elapsed']}'";
                         final equipo = e['team']['name'] ?? '';
-                        String icono = '⚽';
+                        String icono = 'âš½';
                         String tipoText = 'Gol: ${e['player']['name'] ?? ''}';
                         if (tipo == 'Card') {
-                          icono = e['detail'] == 'Yellow Card' ? '🟡' : '🔴';
+                          icono = e['detail'] == 'Yellow Card' ? 'ðŸŸ¡' : 'ðŸ”´';
                           tipoText = '${e['detail'] == 'Yellow Card' ? 'Amarilla' : 'Roja'}: ${e['player']['name'] ?? ''}';
                         } else if (tipo == 'subst') {
-                          icono = '🔄';
+                          icono = 'ðŸ”„';
                           tipoText = 'Entra: ${e['player']['name'] ?? ''} / Sale: ${e['assist']['name'] ?? ''}';
                         }
                         return _incidencia(icono, minuto, tipoText, equipo);
@@ -804,19 +804,19 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
                     ],
                   ] else ...[
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No hay estadísticas disponibles', style: TextStyle(color: Colors.white38), textAlign: TextAlign.center)),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No hay estadÃ­sticas disponibles', style: TextStyle(color: Colors.white38), textAlign: TextAlign.center)),
                   ],
                 ] else if (!jugado) ...[
                   _detalleSeccion('HISTORIAL ENTRE AMBOS'),
-                  _historialRow(local, '2-1', visitante, 'Ganó local'),
+                  _historialRow(local, '2-1', visitante, 'GanÃ³ local'),
                   _historialRow(visitante, '1-1', local, 'Empate'),
-                  _historialRow(local, '0-1', visitante, 'Ganó visitante'),
+                  _historialRow(local, '0-1', visitante, 'GanÃ³ visitante'),
                   const SizedBox(height: 16),
                   _detalleSeccion('PREDICCION HDF STATS'),
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
-                    child: const Text('Predicción próximamente', style: TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
+                    child: const Text('PredicciÃ³n prÃ³ximamente', style: TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
                   ),
                 ],
               ],
@@ -906,6 +906,8 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
     final playersVisit = List<Map<String, dynamic>>.from(teamVisit['startXI'] ?? []);
     final subsLocal = List<Map<String, dynamic>>.from(teamLocal['substitutes'] ?? []);
     final subsVisit = List<Map<String, dynamic>>.from(teamVisit['substitutes'] ?? []);
+    final subsLocal = List<Map<String, dynamic>>.from(teamLocal['substitutes'] ?? []);
+    final subsVisit = List<Map<String, dynamic>>.from(teamVisit['substitutes'] ?? []);
     final coachLocal = teamLocal['coach']?['name'] as String? ?? '';
     final coachVisit = teamVisit['coach']?['name'] as String? ?? '';
     
@@ -982,12 +984,9 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
           Text(formLocal, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold)),
           Text('DT: $coachLocal', style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ])),
-        Container(height: 1, color: Colors.white12),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Text('SUPLENTES', style: const TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)),
-        ),
+      ]),
+    const SizedBox(height: 8),
+        _sectionTitle('SUPLENTES'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
@@ -998,8 +997,6 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
               children: subsVisit.map((p) => buildPlayerDot(p, false)).toList())),
           ]),
         ),
-        const SizedBox(height: 8),
-      ]),
     );
   }
 }

@@ -906,6 +906,8 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
     final playersVisit = List<Map<String, dynamic>>.from(teamVisit['startXI'] ?? []);
     final subsLocal = List<Map<String, dynamic>>.from(teamLocal['substitutes'] ?? []);
     final subsVisit = List<Map<String, dynamic>>.from(teamVisit['substitutes'] ?? []);
+    final subsLocal = List<Map<String, dynamic>>.from(teamLocal['substitutes'] ?? []);
+    final subsVisit = List<Map<String, dynamic>>.from(teamVisit['substitutes'] ?? []);
     final coachLocal = teamLocal['coach']?['name'] as String? ?? '';
     final coachVisit = teamVisit['coach']?['name'] as String? ?? '';
     
@@ -982,12 +984,9 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
           Text(formLocal, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold)),
           Text('DT: $coachLocal', style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ])),
-        Container(height: 1, color: Colors.white12),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Text('SUPLENTES', style: const TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)),
-        ),
+      ]),
+    const SizedBox(height: 8),
+        _sectionTitle('SUPLENTES'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
@@ -998,8 +997,6 @@ final peorEquipo = jugadores.isNotEmpty ? jugadores.last['equipo'] as String : (
               children: subsVisit.map((p) => buildPlayerDot(p, false)).toList())),
           ]),
         ),
-        const SizedBox(height: 8),
-      ]),
     );
   }
 }
