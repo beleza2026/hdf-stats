@@ -1345,7 +1345,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
       // 2. Traer fixtures jugados
       final fixtureResp = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&timezone=America/Argentina/Buenos_Aires'),
+        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
         headers: _headers,
       );
       if (fixtureResp.statusCode != 200) return {};
