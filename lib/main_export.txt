@@ -79,19 +79,21 @@ class _MainScreenState extends State<MainScreen> {
   }
 
 
-  final FlutterLocalNotificationsPlugin _localNotif = FlutterLocalNotificationsPlugin();
-
   Future<void> _inicializarFCM() async {
-    if (kIsWeb) return; // FCM no disponible en web
+    if (kIsWeb) return;
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
     if (settings.authorizationStatus != AuthorizationStatus.authorized) return;
-    const channel = AndroidNotificationChannel('hdf_partidos', 'Partidos HDF Stats',
-        description: 'Alertas pre-partido, goles en vivo y analisis post-partido',
-        importance: Importance.high, playSound: true, enableVibration: true);
-    await _localNotif.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
-    await _localNotif.initialize(const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
-        onDidReceiveNotificationResponse: (d) => _manejarTapNotificacion(d.payload));
+    final localNotif = FlutterLocalNotificationsPlugin();
+    const channelId = 'hdf_partidos';
+    const channelName = 'Partidos HDF Stats';
+    await localNotif.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(const AndroidNotificationChannel(channelId, channelName,
+            description: 'Alertas pre-partido, goles en vivo y analisis post-partido',
+            importance: Importance.high));
+    await localNotif.initialize(
+      const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+      onDidReceiveNotificationResponse: (d) => _manejarTapNotificacion(d.payload));
     final token = await messaging.getToken();
     debugPrint('FCM Token: $token');
     if (token != null) {
@@ -102,13 +104,12 @@ class _MainScreenState extends State<MainScreen> {
             .set({'token': token, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
       }
     }
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       final notif = message.notification;
       if (notif != null && message.notification?.android != null) {
-        _localNotif.show(notif.hashCode, notif.title, notif.body,
-            NotificationDetails(android: AndroidNotificationDetails(channel.id, channel.name,
-                channelDescription: channel.description, icon: '@mipmap/ic_launcher',
-                importance: Importance.high, priority: Priority.high)),
+        await localNotif.show(notif.hashCode, notif.title, notif.body,
+            const NotificationDetails(android: AndroidNotificationDetails(channelId, channelName,
+                importance: Importance.high, priority: Priority.high, icon: '@mipmap/ic_launcher')),
             payload: message.data['fixtureId']);
       }
     });
@@ -121,6 +122,115 @@ class _MainScreenState extends State<MainScreen> {
     if (fixtureId == null || !mounted) return;
     setState(() => _selectedIndex = 0);
   }
+
+  // â”€â”€ PERFIL DE CLUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  static const Map<int, Map<String, dynamic>> _clubInfo = {
+    499: {'presidente': 'Juan Roman Riquelme', 'estadio': 'Estadio Alberto J. Armando (La Bombonera)', 'capacidad': '54.000', 'fundacion': '1905', 'socios': '70.000', 'titulosLocales': ['Liga 2022','Liga 2020','Clausura 2015','Clausura 2011','Clausura 2008','Clausura 2006'], 'titulosInternacionales': ['Copa Libertadores 2007','Copa Libertadores 2003','Copa Libertadores 2001','Copa Libertadores 2000','Copa Libertadores 1978','Copa Libertadores 1977'], 'ultimoTituloLocal': 'Liga Profesional 2022', 'ultimoTituloInternacional': 'Copa Libertadores 2007', 'dt': 'Fernando Gago'},
+    341: {'presidente': 'Maximiliano Abad', 'estadio': 'Estadio Monumental Antonio Vespucio Liberti', 'capacidad': '84.567', 'fundacion': '1901', 'socios': '120.000', 'titulosLocales': ['Liga 2023','Liga 2021','Liga 2019','Liga 2018','Clausura 2014','Clausura 2012'], 'titulosInternacionales': ['Copa Libertadores 2018','Copa Libertadores 2015','Copa Libertadores 1996','Copa Libertadores 1986'], 'ultimoTituloLocal': 'Liga Profesional 2023', 'ultimoTituloInternacional': 'Copa Libertadores 2018', 'dt': 'Marcelo Gallardo'},
+    435: {'presidente': 'Victor Blanco', 'estadio': 'Estadio Presidente Peron (El Cilindro)', 'capacidad': '51.389', 'fundacion': '1903', 'socios': '55.000', 'titulosLocales': ['Liga 2024','Apertura 2014','Clausura 2010','Apertura 2010'], 'titulosInternacionales': ['Copa Sudamericana 2018','Intercontinental 1967'], 'ultimoTituloLocal': 'Liga Profesional 2024', 'ultimoTituloInternacional': 'Copa Sudamericana 2018', 'dt': 'Gustavo Costas'},
+    452: {'presidente': 'Marcelo Moretti', 'estadio': 'Estadio Pedro Bidegain (El Nuevo Gasometro)', 'capacidad': '48.916', 'fundacion': '1908', 'socios': '45.000', 'titulosLocales': ['Apertura 2007','Clausura 2007','Clausura 2004'], 'titulosInternacionales': ['Copa Libertadores 1986'], 'ultimoTituloLocal': 'Clausura 2007', 'ultimoTituloInternacional': 'Copa Libertadores 1986', 'dt': 'Miguel Angel Russo'},
+    453: {'presidente': 'Alejandro Nadur', 'estadio': 'Estadio Tomas Adolfo Duco (El Palacio)', 'capacidad': '48.314', 'fundacion': '1908', 'socios': '28.000', 'titulosLocales': ['Clausura 2009'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2009', 'ultimoTituloInternacional': '-', 'dt': 'Frank Dario Kudelka'},
+    454: {'presidente': 'Juan Sebastian Veron', 'estadio': 'Estadio Jorge Luis Hirschi', 'capacidad': '30.518', 'fundacion': '1905', 'socios': '40.000', 'titulosLocales': ['Liga 2023','Apertura 2010','Clausura 2010'], 'titulosInternacionales': ['Copa Libertadores 2009'], 'ultimoTituloLocal': 'Liga Profesional 2023', 'ultimoTituloInternacional': 'Copa Libertadores 2009', 'dt': 'Eduardo Dominguez'},
+    455: {'presidente': 'Fabian Gardinetti', 'estadio': 'Estadio Jose Amalfitani', 'capacidad': '49.540', 'fundacion': '1910', 'socios': '38.000', 'titulosLocales': ['Clausura 2012','Clausura 2011'], 'titulosInternacionales': ['Copa Sudamericana 2023'], 'ultimoTituloLocal': 'Clausura 2012', 'ultimoTituloInternacional': 'Copa Sudamericana 2023', 'dt': 'Gustavo Quinteros'},
+    456: {'presidente': 'Cristian Malaspina', 'estadio': 'Estadio Diego Armando Maradona', 'capacidad': '26.000', 'fundacion': '1904', 'socios': '18.000', 'titulosLocales': ['Clausura 2010'], 'titulosInternacionales': ['Copa Sudamericana 2014'], 'ultimoTituloLocal': 'Clausura 2010', 'ultimoTituloInternacional': 'Copa Sudamericana 2014', 'dt': 'Leandro Stillitano'},
+    457: {'presidente': 'Andres Fassi', 'estadio': 'Estadio Mario Alberto Kempes', 'capacidad': '57.000', 'fundacion': '1913', 'socios': '42.000', 'titulosLocales': ['Copa de la Liga 2022'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Copa de la Liga 2022', 'ultimoTituloInternacional': '-', 'dt': 'Alexander Medina'},
+    442: {'presidente': 'Sebastian Peratta', 'estadio': 'Estadio Marcelo Bielsa', 'capacidad': '42.000', 'fundacion': '1903', 'socios': '35.000', 'titulosLocales': ['Apertura 2004','Clausura 2004'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2004', 'ultimoTituloInternacional': '-', 'dt': 'Mariano Soso'},
+    441: {'presidente': 'Gonzalo Belloso', 'estadio': 'Estadio Gigante de Arroyito', 'capacidad': '42.000', 'fundacion': '1889', 'socios': '50.000', 'titulosLocales': ['Apertura 2012','Clausura 2008'], 'titulosInternacionales': ['Copa Libertadores 2000'], 'ultimoTituloLocal': 'Apertura 2012', 'ultimoTituloInternacional': 'Copa Libertadores 2000', 'dt': 'Facundo Sava'},
+    501: {'presidente': 'Nestor Ortega', 'estadio': 'Estadio Jose Dellagiovanna', 'capacidad': '27.000', 'fundacion': '1902', 'socios': '20.000', 'titulosLocales': ['Clausura 2012'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2012', 'ultimoTituloInternacional': '-', 'dt': 'Gustavo Alvarez'},
+  };
+
+  void _mostrarPerfilClub(BuildContext context, int teamId, String nombre, String? logo) {
+    final info = _clubInfo[teamId];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0D1B2A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75, maxChildSize: 0.95, minChildSize: 0.4, expand: false,
+        builder: (_, sc) => DefaultTabController(
+          length: 3,
+          child: Column(children: [
+            Container(margin: const EdgeInsets.only(top: 10, bottom: 6), width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(children: [
+                if (logo != null) Image.network(logo, width: 48, height: 48,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 48)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  if (info != null) Text('Fundado en ${info["fundacion"]}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                ])),
+              ]),
+            ),
+            const TabBar(
+              indicatorColor: Color(0xFFFFD700),
+              labelColor: Color(0xFFFFD700),
+              unselectedLabelColor: Colors.white54,
+              tabs: [Tab(text: 'INFO'), Tab(text: 'TITULOS'), Tab(text: 'PLANTEL')],
+            ),
+            Expanded(
+              child: info == null
+                ? const Center(child: Text('Datos proximos', style: TextStyle(color: Colors.white54)))
+                : TabBarView(children: [
+                    ListView(controller: sc, padding: const EdgeInsets.all(16), children: [
+                      _clubInfoRow('Estadio', info['estadio'] as String),
+                      _clubInfoRow('Capacidad', '${info["capacidad"]} espectadores'),
+                      _clubInfoRow('Presidente', info['presidente'] as String),
+                      _clubInfoRow('Director Tecnico', info['dt'] as String),
+                      _clubInfoRow('Fundacion', info['fundacion'] as String),
+                      _clubInfoRow('Socios', '~${info["socios"]}'),
+                    ]),
+                    ListView(controller: sc, padding: const EdgeInsets.all(16), children: [
+                      const Text('LOCALES', style: TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const SizedBox(height: 6),
+                      ...(info['titulosLocales'] as List).map((t) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text('ðŸ† $t', style: const TextStyle(color: Colors.white, fontSize: 13)))),
+                      const SizedBox(height: 12),
+                      const Text('INTERNACIONALES', style: TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const SizedBox(height: 6),
+                      ...((info['titulosInternacionales'] as List).isEmpty
+                        ? [const Text('Sin titulos internacionales', style: TextStyle(color: Colors.white54, fontSize: 13))]
+                        : (info['titulosInternacionales'] as List).map((t) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text('ðŸŒŽ $t', style: const TextStyle(color: Colors.white, fontSize: 13))))),
+                      const SizedBox(height: 12),
+                      _clubInfoRow('Ultimo local', info['ultimoTituloLocal'] as String),
+                      _clubInfoRow('Ultimo internacional', info['ultimoTituloInternacional'] as String),
+                    ]),
+                    const Center(child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('Plantel disponible proximamente', style: TextStyle(color: Colors.white54, fontSize: 13), textAlign: TextAlign.center),
+                    )),
+                  ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _clubInfoRow(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 140, child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13))),
+      Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
+    ]),
+  );
+
+  Widget _logoConTap(String? logo, double size, int? teamId, String nombre) {
+    final img = logo != null
+        ? Image.network(logo, width: size, height: size,
+            errorBuilder: (_, __, ___) => Icon(Icons.shield, color: Colors.white38, size: size))
+        : Icon(Icons.shield, color: Colors.white38, size: size);
+    if (teamId == null) return img;
+    return GestureDetector(onTap: () => _mostrarPerfilClub(context, teamId, nombre, logo), child: img);
+  }
+  // â”€â”€ FIN PERFIL DE CLUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
   @override
   void dispose() {
     _timerEnVivo?.cancel();
@@ -1119,7 +1229,7 @@ class _MainScreenState extends State<MainScreen> {
                     final e = (s['draw'] as num? ?? 0).toString();
                     final p = (s['lose'] as num? ?? 0).toString();
                     final pts = (((s['win'] as num? ?? 0) * 3) + (s['draw'] as num? ?? 0)).toString();
-                    return _tablaRow(i.toString(), eq['team']['name'], pj, g, e, p, pts, logo: eq['team']['logo'] as String?);
+                    return _tablaRow(i.toString(), eq['team']['name'], pj, g, e, p, pts, logo: eq['team']['logo'] as String?, teamId: eq['team']['id'] as int?);
                   }),
                   const SizedBox(height: 16),
                 ],
@@ -1274,7 +1384,7 @@ Widget _tabTiempo(String tipo) {
     );
   }
 
-  Widget _tablaRow(String pos, String equipo, String pj, String g, String e, String p, String pts, {bool enVivo = false, String? logo}) {
+  Widget _tablaRow(String pos, String equipo, String pj, String g, String e, String p, String pts, {bool enVivo = false, String? logo, int? teamId}) {
     return Container(
       margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1287,7 +1397,7 @@ Widget _tabTiempo(String tipo) {
         SizedBox(width: 24, child: Text(pos, style: const TextStyle(color: Colors.white54, fontSize: 13))),
         if (logo != null) ...[
           const SizedBox(width: 4),
-          Image.network(logo, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+          _logoConTap(logo, 20, teamId, equipo),
           const SizedBox(width: 6),
         ] else
           const SizedBox(width: 8),
@@ -3475,6 +3585,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 }
+
+
 
 
 
