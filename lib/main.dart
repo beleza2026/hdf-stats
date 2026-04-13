@@ -98,7 +98,7 @@ class _MainScreenState extends State<MainScreen> {
     {'icon': Icons.sports_handball, 'label': 'Arqueros'},
     {'icon': Icons.calendar_month, 'label': 'Fixture'},
     {'icon': Icons.live_tv, 'label': 'En Vivo'},
-    {'icon': Icons.auto_graph, 'label': 'PredicciÃ³n'},
+    {'icon': Icons.auto_graph, 'label': 'Predicción'},
   ];
 
   @override
@@ -189,7 +189,7 @@ class _MainScreenState extends State<MainScreen> {
             child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                const Text('ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚Â¤', style: TextStyle(fontSize: 22)),
+                const Text('👤', style: TextStyle(fontSize: 22)),
                 const SizedBox(width: 10),
                 const Text('MI CUENTA', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                 const Spacer(),
@@ -197,9 +197,9 @@ class _MainScreenState extends State<MainScreen> {
               ]),
               const Divider(color: Colors.white12),
               const SizedBox(height: 12),
-              const Text('CÃƒÆ’Ã¢â‚¬Å“DIGO DE CORTESÃƒÆ’Ã‚ÂA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const Text('CÓDIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 8),
-              const Text('IngresÃ¡ tu cÃ³digo para acceder a HDF Stats Premium gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
+              const Text('Ingresá tu código para acceder a HDF Stats Premium gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(
@@ -238,27 +238,27 @@ class _MainScreenState extends State<MainScreen> {
                             .doc(codigo)
                             .get();
                           if (!docRef.exists) {
-                            setModalState(() { mensaje = 'ÃƒÂ¢Ã‚ÂÃ…â€™ CÃ³digo invÃ¡lido o inactivo.'; cargando = false; });
+                            setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
                             return;
                           }
                           final data = docRef.data()!;
                           if (data['activo'] != true) {
-                            setModalState(() { mensaje = 'ÃƒÂ¢Ã‚ÂÃ…â€™ CÃ³digo invÃ¡lido o inactivo.'; cargando = false; });
+                            setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
                             return;
                           }
                           final usosActuales = (data['usos_actuales'] as num?)?.toInt() ?? 0;
                           final usosMaximos = (data['usos_maximos'] as num?)?.toInt() ?? 0;
                           if (usosActuales >= usosMaximos) {
-                            setModalState(() { mensaje = 'ÃƒÂ¢Ã‚ÂÃ…â€™ CÃ³digo agotado.'; cargando = false; });
+                            setModalState(() { mensaje = '❌ Código agotado.'; cargando = false; });
                             return;
                           }
                           await FirebaseFirestore.instance.collection('codigos_cortesia').doc(codigo).update({
                             'usos_actuales': FieldValue.increment(1),
                           });
                           final meses = (data['meses_gratis'] as num?)?.toInt() ?? 1;
-                          setModalState(() { mensaje = 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Ãƒâ€šÃ‚Â¡CÃ³digo vÃ¡lido! TenÃ©s $meses mes${meses > 1 ? "es" : ""} gratis de HDF Stats Premium.'; cargando = false; });
+                          setModalState(() { mensaje = '✅ ¡Código válido! Tenés $meses mes${meses > 1 ? "es" : ""} gratis de HDF Stats Premium.'; cargando = false; });
                         } catch (e) {
-                          setModalState(() { mensaje = 'ÃƒÂ¢Ã‚ÂÃ…â€™ Error al validar el cÃ³digo. IntentÃ¡ de nuevo.'; cargando = false; });
+                          setModalState(() { mensaje = '❌ Error al validar el código. Intentá de nuevo.'; cargando = false; });
                         }
                       },
                       child: const Text('APLICAR', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -269,11 +269,11 @@ class _MainScreenState extends State<MainScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: mensaje!.startsWith('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦') ? const Color(0xFF00C853).withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                    color: mensaje!.startsWith('✅') ? const Color(0xFF00C853).withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: mensaje!.startsWith('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦') ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4)),
+                    border: Border.all(color: mensaje!.startsWith('✅') ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4)),
                   ),
-                  child: Text(mensaje!, style: TextStyle(color: mensaje!.startsWith('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦') ? const Color(0xFF00C853) : Colors.red, fontSize: 13)),
+                  child: Text(mensaje!, style: TextStyle(color: mensaje!.startsWith('✅') ? const Color(0xFF00C853) : Colors.red, fontSize: 13)),
                 ),
               ],
               const SizedBox(height: 16),
@@ -442,9 +442,9 @@ class _MainScreenState extends State<MainScreen> {
               Tab(text: 'ULTIMOS 5'),
               Tab(text: '1ER TIEMPO'),
               Tab(text: '2DO TIEMPO'),
-              Tab(text: 'ÃRBITROS'),
-              Tab(text: 'MORAL ÃƒÂ¢Ã…â€œÃ‚Â¨'),
-              Tab(text: 'CRUCES ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â '),
+              Tab(text: 'ÁRBITROS'),
+              Tab(text: 'MORAL ✨'),
+              Tab(text: 'CRUCES 🏆'),
             ],
           ),
         ),
@@ -525,7 +525,7 @@ class _MainScreenState extends State<MainScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('TABLA DE DTs ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â APERTURA 2026'),
+            _sectionTitle('TABLA DE DTs — APERTURA 2026'),
             const SizedBox(height: 12),
             ...dts.asMap().entries.map((e) => _dtCard(e.key + 1, e.value)),
           ],
@@ -587,15 +587,15 @@ class _MainScreenState extends State<MainScreen> {
               Text(equipo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 11)),
               if (edad > 0 || nacionalidad.isNotEmpty)
                 Text(
-                  [if (edad > 0) '$edad aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±os', if (nacionalidad.isNotEmpty) nacionalidad].join(' ÃƒÆ’Ã¢â‚¬Å¡Â· '),
+                  [if (edad > 0) '$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
                   style: const TextStyle(color: Colors.white54, fontSize: 10),
                 ),
               if (aniosExp > 0)
-                Text('$aniosExp aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±os de carrera', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                Text('$aniosExp años de carrera', style: const TextStyle(color: Colors.white38, fontSize: 10)),
             ])),
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text('$pct%', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 18)),
-              Text('$puntos pts ÃƒÆ’Ã¢â‚¬Å¡Â· $partidos PJ', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+              Text('$puntos pts · $partidos PJ', style: const TextStyle(color: Colors.white54, fontSize: 10)),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -645,17 +645,17 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(color: Color(0xFF00C853)),
             SizedBox(height: 12),
-            Text('Cargando Ã¡rbitros...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+            Text('Cargando árbitros...', style: TextStyle(color: Colors.white54, fontSize: 13)),
           ]),
         );
         if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(
-          child: Text('Sin datos de Ã¡rbitros', style: TextStyle(color: Colors.white54)),
+          child: Text('Sin datos de árbitros', style: TextStyle(color: Colors.white54)),
         );
         final arbitros = snapshot.data!;
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('TABLA DE ÃRBITROS â€” APERTURA 2026'),
+            _sectionTitle('TABLA DE ÁRBITROS — APERTURA 2026'),
             const SizedBox(height: 12),
             ...arbitros.map((a) => _arbitroCard(a)),
           ],
@@ -738,14 +738,14 @@ class _MainScreenState extends State<MainScreen> {
               const SizedBox(height: 4),
               // Mini stats row
               Row(children: [
-                _miniStatBadge('$amarillas', 'Ã¢Å¡Â¡', Colors.amber),
+                _miniStatBadge('$amarillas', 'âš¡', Colors.amber),
                 const SizedBox(width: 4),
-                _miniStatBadge('$rojas', 'Ã°Å¸Å¸Â¥', Colors.red),
+                _miniStatBadge('$rojas', '🟥', Colors.red),
                 const SizedBox(width: 4),
-                _miniStatBadge('$penales', 'Ã¢Å¡Â½', Colors.white70),
+                _miniStatBadge('$penales', 'âš½', Colors.white70),
                 if (golesCorner > 0) ...[
                   const SizedBox(width: 4),
-                  _miniStatBadge('$golesCorner', 'Ã°Å¸â€œÂ', const Color(0xFFFFD700)),
+                  _miniStatBadge('$golesCorner', '📐', const Color(0xFFFFD700)),
                 ],
               ]),
             ])),
@@ -766,7 +766,7 @@ class _MainScreenState extends State<MainScreen> {
           ]),
         ),
 
-        // Cuerpo con grÃƒÂ¡ficos
+        // Cuerpo con gráficos
         Container(
           padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
           child: Column(children: [
@@ -807,9 +807,9 @@ class _MainScreenState extends State<MainScreen> {
                 ),
                 const SizedBox(height: 6),
                 Row(children: [
-                  _leyenda('Ã°Å¸Å¸Â¢ Local', '${(pLocal*100).round()}%', const Color(0xFF00C853)),
-                  _leyenda('Ã¢Â¬Å“ Empate', '${(pEmpate*100).round()}%', Colors.white54),
-                  _leyenda('Ã°Å¸â€Âµ Visit.', '${(pVisit*100).round()}%', const Color(0xFF2196F3)),
+                  _leyenda('🟢 Local', '${(pLocal*100).round()}%', const Color(0xFF00C853)),
+                  _leyenda('⬜ Empate', '${(pEmpate*100).round()}%', Colors.white54),
+                  _leyenda('🔵 Visit.', '${(pVisit*100).round()}%', const Color(0xFF2196F3)),
                 ]),
               ]),
             ),
@@ -823,7 +823,7 @@ class _MainScreenState extends State<MainScreen> {
                 decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Text('Ã¢Å¡Â¡', style: TextStyle(fontSize: 11)),
+                    const Text('âš¡', style: TextStyle(fontSize: 11)),
                     const SizedBox(width: 4),
                     const Text('AMARILLAS', style: TextStyle(color: Colors.white38, fontSize: 8, letterSpacing: 1)),
                     const Spacer(),
@@ -862,7 +862,7 @@ class _MainScreenState extends State<MainScreen> {
                 decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const Row(children: [
-                    Text('Ã¢Å¡Â½', style: TextStyle(fontSize: 11)),
+                    Text('âš½', style: TextStyle(fontSize: 11)),
                     SizedBox(width: 4),
                     Text('PENALES', style: TextStyle(color: Colors.white38, fontSize: 8, letterSpacing: 1)),
                   ]),
@@ -943,19 +943,19 @@ class _MainScreenState extends State<MainScreen> {
                 ),
                 child: Column(children: [
                   Row(children: [
-                    const Text('Ã°Å¸â€œÂº', style: TextStyle(fontSize: 12)),
+                    const Text('📺', style: TextStyle(fontSize: 12)),
                     const SizedBox(width: 6),
                     const Text('VAR', style: TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                     const Spacer(),
-                    Text('$varTotal intervenciones Ã‚Â· $varIndice/p', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10)),
+                    Text('$varTotal intervenciones · $varIndice/p', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10)),
                   ]),
                   const SizedBox(height: 8),
                   Row(children: [
-                    _varChip('Ã¢â€ºâ€ Goles anul.', '${varGolesAnuladosLocal + varGolesAnuladosVisit}', 'L:$varGolesAnuladosLocal V:$varGolesAnuladosVisit'),
+                    _varChip('â›" Goles anul.', '${varGolesAnuladosLocal + varGolesAnuladosVisit}', 'L:$varGolesAnuladosLocal V:$varGolesAnuladosVisit'),
                     const SizedBox(width: 6),
-                    _varChip('Ã¢Å“â€¦ Pen. conf.', '$varPenalesConf', ''),
+                    _varChip('✅ Pen. conf.', '$varPenalesConf', ''),
                     const SizedBox(width: 6),
-                    _varChip('Ã¢ÂÅ’ Pen. anul.', '$varPenalesAnul', ''),
+                    _varChip('❌ Pen. anul.', '$varPenalesAnul', ''),
                   ]),
                 ]),
               ),
@@ -972,9 +972,9 @@ class _MainScreenState extends State<MainScreen> {
                   border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
                 ),
                 child: Row(children: [
-                  const Text('Ã°Å¸â€œÂ', style: TextStyle(fontSize: 13)),
+                  const Text('📐', style: TextStyle(fontSize: 13)),
                   const SizedBox(width: 8),
-                  const Expanded(child: Text('Goles de cÃƒÂ³rner (olÃƒÂ­mpico)', style: TextStyle(color: Colors.white70, fontSize: 11))),
+                  const Expanded(child: Text('Goles de córner (olímpico)', style: TextStyle(color: Colors.white70, fontSize: 11))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(color: const Color(0xFFFFD700).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
@@ -1346,7 +1346,7 @@ Widget _tabTiempo(String tipo) {
               final ref = snapshot.data!.isNotEmpty ? snapshot.data!.first : <String,dynamic>{};
               final min = ref['minimoRef'] ?? 0;
               final max = ref['maxRef'] ?? 0;
-              return _sectionTitle('EFICACIA ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â MIN $min PARTIDOS DE $max');
+              return _sectionTitle('EFICACIA — MIN $min PARTIDOS DE $max');
             }),
             const SizedBox(height: 12),
             ...snapshot.data!.asMap().entries.map((entry) {
@@ -1416,23 +1416,23 @@ Widget _tabTiempo(String tipo) {
           return (cA / pA).compareTo(cB / pB);
         });
 
-        // Tab 2: ordenado por mÃ¡s vallas invictas
+        // Tab 2: ordenado por más vallas invictas
         final porVallas = List<Map<String, dynamic>>.from(todos);
         porVallas.sort((a, b) {
           final iA = a['statistics'][0]['games']?['lineups'] as int? ?? 0;
           final iB = b['statistics'][0]['games']?['lineups'] as int? ?? 0;
           final cA = a['statistics'][0]['goals']?['conceded'] as int? ?? 0;
           final cB = b['statistics'][0]['goals']?['conceded'] as int? ?? 0;
-          // vallas invictas = partidos como titular - partidos donde recibiÃ³ al menos 1 gol
+          // vallas invictas = partidos como titular - partidos donde recibió al menos 1 gol
           final vallasA = (iA - cA).clamp(0, iA);
           final vallasB = (iB - cB).clamp(0, iB);
           // ordenar de mayor a menor vallas invictas
           if (vallasB != vallasA) return vallasB.compareTo(vallasA);
-          // desempate: mÃ¡s partidos jugados
+          // desempate: más partidos jugados
           return iB.compareTo(iA);
         });
 
-        // Tab 3: ordenado por mÃ¡s minutos sin goles (minutos/goles concedidos)
+        // Tab 3: ordenado por más minutos sin goles (minutos/goles concedidos)
         final porMinutos = List<Map<String, dynamic>>.from(todos);
         porMinutos.sort((a, b) {
           final mA = a['minutosSinGol'] as int? ?? 0;
@@ -1647,7 +1647,7 @@ Widget _tabTiempo(String tipo) {
         const SizedBox(height: 16),
         const Text('No hay partidos en vivo', style: TextStyle(color: Colors.white54, fontSize: 16)),
         const SizedBox(height: 8),
-        const Text('Se actualizarÃ¡ automÃ¡ticamente', style: TextStyle(color: Colors.white38, fontSize: 13)),
+        const Text('Se actualizará automáticamente', style: TextStyle(color: Colors.white38, fontSize: 13)),
         const SizedBox(height: 24),
         TextButton.icon(
           onPressed: _actualizarEnVivo,
@@ -1663,7 +1663,7 @@ Widget _tabTiempo(String tipo) {
         padding: const EdgeInsets.all(16),
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            _sectionTitle('EN VIVO ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â LIGA PROFESIONAL'),
+            _sectionTitle('EN VIVO — LIGA PROFESIONAL'),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
@@ -1722,7 +1722,7 @@ Widget _tabTiempo(String tipo) {
                     Expanded(child: Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
                   ]),
                 ),
-                // ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¡ltimos eventos
+                // Últimos eventos
                 if (eventos.isNotEmpty) ...[
                   const Divider(color: Colors.white12, height: 1),
                   Padding(
@@ -1732,7 +1732,7 @@ Widget _tabTiempo(String tipo) {
                       final min = e['time']?['elapsed']?.toString() ?? '';
                       final jugador = e['player']?['name'] as String? ?? '';
                       final equipo = e['team']?['name'] as String? ?? '';
-                      String icono = tipo == 'Goal' ? 'ÃƒÂ¢Ã…Â¡Ã‚Â½' : tipo == 'Card' ? (e['detail'] == 'Yellow Card' ? 'ÃƒÂ°Ã…Â¸Ã…Â¸Ã‚Â¡' : 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â´') : 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾';
+                      String icono = tipo == 'Goal' ? '⚽' : tipo == 'Card' ? (e['detail'] == 'Yellow Card' ? '🟡' : '🔴') : '🔄';
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(children: [
@@ -1878,10 +1878,10 @@ Widget _tabTiempo(String tipo) {
                         top[0],
                         if (top.length > 2) top[2],
                       ];
-                      const medallas = ['ÃƒÂ°Ã…Â¸Ã‚Â¥Ã‹â€ ', 'ÃƒÂ°Ã…Â¸Ã‚Â¥Ã¢â‚¬Â¡', 'ÃƒÂ°Ã…Â¸Ã‚Â¥Ã¢â‚¬Â°'];
+                      const medallas = ['🥈', '🥇', '🥉'];
                       const medallaColors = [Color(0xFFC0C0C0), Color(0xFFFFD700), Color(0xFFCD7F32)];
                       const alturas = [90.0, 120.0, 70.0];
-                      const posLabels = ['2Ãƒâ€šÃ‚Â°', '1Ãƒâ€šÃ‚Â°', '3Ãƒâ€šÃ‚Â°'];
+                      const posLabels = ['2°', '1°', '3°'];
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         child: Row(
@@ -1975,9 +1975,9 @@ Widget _tabTiempo(String tipo) {
                         })
                       : []),
                     const SizedBox(height: 16),
-                    // ALERTA IA ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â solo en partidos EN VIVO
+                    // ALERTA IA — solo en partidos EN VIVO
                     if (isLive) ...[ 
-                      _detalleSeccion('ÃƒÂ°Ã…Â¸Ã‚Â§Ã‚Â  ALERTA IA'),
+                      _detalleSeccion('🧠 ALERTA IA'),
                       FutureBuilder<String>(
                         future: ApiService.getAlertaIA(
                           local: local,
@@ -2004,7 +2004,7 @@ Widget _tabTiempo(String tipo) {
                               ]),
                             );
                           }
-                          final texto = snapIA.data ?? 'Sin anÃ¡lisis disponible.';
+                          final texto = snapIA.data ?? 'Sin análisis disponible.';
                           return Container(
                             margin: const EdgeInsets.only(bottom: 16),
                             padding: const EdgeInsets.all(14),
@@ -2042,7 +2042,7 @@ Widget _tabTiempo(String tipo) {
                         final sorted = puntos.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
                         final figura = jugadores.isNotEmpty ? MapEntry(jugadores.first['nombre'] as String, 0) : sorted.first;
 
-                        // Para quÃ© te traje: peor RATING entre los que jugaron al menos 30 min
+                        // Para qué te traje: peor RATING entre los que jugaron al menos 30 min
                         // Si no hay ratings, usar el de menor puntaje por eventos con puntos negativos
                         MapEntry<String, dynamic> peor;
                         final conRating = jugadores.where((j) => j['tieneRating'] == true && (j['minutos'] as int? ?? 0) >= 30).toList();
@@ -2062,7 +2062,7 @@ Widget _tabTiempo(String tipo) {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
                             child: Row(children: [
-                              const Text('ÃƒÂ¢Ã‚Â­Ã‚Â', style: TextStyle(fontSize: 20)),
+                              const Text('⭐', style: TextStyle(fontSize: 20)),
                               const SizedBox(width: 10),
                               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 const Text('FIGURA DEL PARTIDO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
@@ -2076,7 +2076,7 @@ Widget _tabTiempo(String tipo) {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.withValues(alpha: 0.3))),
                             child: Row(children: [
-                              const Text('ÃƒÂ°Ã…Â¸Ã‹Å“Ã‚Â¤', style: TextStyle(fontSize: 20)),
+                              const Text('😤', style: TextStyle(fontSize: 20)),
                               const SizedBox(width: 10),
                               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 const Text('PARA QUE TE TRAJE', style: TextStyle(color: Colors.red, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
@@ -2100,7 +2100,7 @@ Widget _tabTiempo(String tipo) {
                           Text(visitante, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                         ]),
                         const SizedBox(height: 8),
-                        Text('ÃƒÂ°Ã…Â¸Ã‚Â§Ã‚Â  $moralDesc', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
+                        Text('🧠 $moralDesc', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
                       ]),
                     ),
                     const SizedBox(height: 16),
@@ -2112,28 +2112,28 @@ Widget _tabTiempo(String tipo) {
                         final tipo = e['type'];
                         final minuto = "${e['time']['elapsed']}'";
                         final equipo = e['team']['name'] ?? '';
-                        String icono = 'ÃƒÂ¢Ã…Â¡Ã‚Â½';
+                        String icono = 'âš½';
                         String tipoText = 'Gol: ${e['player']['name'] ?? ''}';
                         if (tipo == 'Card') {
-                          icono = e['detail'] == 'Yellow Card' ? 'ÃƒÂ°Ã…Â¸Ã…Â¸Ã‚Â¡' : 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â´';
+                          icono = e['detail'] == 'Yellow Card' ? '🟡' : '🔴';
                           tipoText = '${e['detail'] == 'Yellow Card' ? 'Amarilla' : 'Roja'}: ${e['player']['name'] ?? ''}';
                         } else if (tipo == 'subst') {
-                          icono = 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾';
+                          icono = '🔄';
                           tipoText = 'Entra: ${e['player']['name'] ?? ''} / Sale: ${e['assist']['name'] ?? ''}';
                         } else if (tipo == 'Var') {
-                          icono = 'ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Âº';
+                          icono = '📺';
                           final detail = e['detail'] ?? '';
                           String varDesc = 'VAR';
-                          if (detail == 'Goal cancelled') varDesc = 'VAR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Gol anulado';
-                          else if (detail == 'Penalty confirmed') varDesc = 'VAR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Penal confirmado';
-                          else if (detail == 'Penalty cancelled') varDesc = 'VAR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Penal anulado';
-                          else if (detail == 'Card upgrade') varDesc = 'VAR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Tarjeta revisada';
-                          else if (detail.isNotEmpty) varDesc = 'VAR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â $detail';
+                          if (detail == 'Goal cancelled') varDesc = 'VAR — Gol anulado';
+                          else if (detail == 'Penalty confirmed') varDesc = 'VAR — Penal confirmado';
+                          else if (detail == 'Penalty cancelled') varDesc = 'VAR — Penal anulado';
+                          else if (detail == 'Card upgrade') varDesc = 'VAR — Tarjeta revisada';
+                          else if (detail.isNotEmpty) varDesc = 'VAR — $detail';
                           tipoText = varDesc;
                         } else if (tipo == 'Goal') {
                           final detail = e['detail'] ?? '';
                           if (detail == 'Own Goal') {
-                            icono = 'ÃƒÂ¢Ã…Â¡Ã‚Â½';
+                            icono = 'âš½';
                             tipoText = 'Gol en contra: ${e['player']['name'] ?? ''}';
                           } else if (detail == 'Penalty') {
                             tipoText = 'Penal: ${e['player']['name'] ?? ''}';
@@ -2149,7 +2149,7 @@ Widget _tabTiempo(String tipo) {
                       const SizedBox(height: 8),
                       Builder(builder: (ctx) {
                         final pd = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
-                        // Figura = jugador con mayor rating (mismo criterio que la secciÃ³n FIGURA)
+                        // Figura = jugador con mayor rating (mismo criterio que la sección FIGURA)
                         final conRating = pd.where((p) => p['tieneRating'] == true).toList();
                         final figuraId = conRating.isNotEmpty
                             ? conRating.reduce((a, b) => (a['rating'] as double) >= (b['rating'] as double) ? a : b)['id'] as int?
@@ -2263,7 +2263,7 @@ Widget _tabTiempo(String tipo) {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
         child: Row(children: [
-          const Text('ÃƒÂ¢Ã…Â¾Ã¢â‚¬â€œ', style: TextStyle(fontSize: 18)),
+          const Text('âž–', style: TextStyle(fontSize: 18)),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(nombreEquipo, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
@@ -2274,7 +2274,7 @@ Widget _tabTiempo(String tipo) {
       );
     }
 
-    // Filtrar partidos segÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºn condiciÃ³n (local o visitante)
+    // Filtrar partidos según condición (local o visitante)
     final condicion = esLocal ? 'local' : 'visitante';
     final filtrados = todosPartidos.where((p) {
       final hId = p['teams']['home']['id'] as int?;
@@ -2312,11 +2312,11 @@ Widget _tabTiempo(String tipo) {
       if (rgCond && gano) ganandoCond++; else rgCond = false;
     }
 
-    // LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea 1: racha como local/visitante
+    // Línea 1: racha como local/visitante
     String textoCond;
     Color colorCond;
     if (ganandoCond >= 2) {
-      textoCond = 'GanÃ³ sus ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimos $ganandoCond de $condicion';
+      textoCond = 'Ganó sus últimos $ganandoCond de $condicion';
       colorCond = const Color(0xFF00C853);
     } else if (sinPerderCond >= 3) {
       textoCond = 'Lleva $sinPerderCond sin perder de $condicion';
@@ -2334,21 +2334,21 @@ Widget _tabTiempo(String tipo) {
       final gh2 = ult['goals']['home'] as int? ?? 0;
       final ga2 = ult['goals']['away'] as int? ?? 0;
       if (esL2 ? gh2 > ga2 : ga2 > gh2) {
-        textoCond = 'GanÃ³ el ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo de $condicion';
+        textoCond = 'Ganó el último de $condicion';
         colorCond = const Color(0xFF00C853);
       } else if (gh2 == ga2) {
-        textoCond = 'EmpatÃ³ el ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo de $condicion';
+        textoCond = 'Empató el último de $condicion';
         colorCond = Colors.white54;
       } else {
-        textoCond = 'PerdiÃ³ el ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo de $condicion';
+        textoCond = 'Perdió el último de $condicion';
         colorCond = Colors.red;
       }
     } else {
-      textoCond = 'Sin partidos de $condicion aÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºn';
+      textoCond = 'Sin partidos de $condicion aún';
       colorCond = Colors.white38;
     }
 
-    // LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­nea 2: racha general
+    // Línea 2: racha general
     String textoGen;
     Color colorGen;
     if (ganandoGen >= 2) {
@@ -2370,13 +2370,13 @@ Widget _tabTiempo(String tipo) {
       final gh3 = ult['goals']['home'] as int? ?? 0;
       final ga3 = ult['goals']['away'] as int? ?? 0;
       if (esL3 ? gh3 > ga3 : ga3 > gh3) {
-        textoGen = 'GanÃ³ el ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo partido';
+        textoGen = 'Ganó el último partido';
         colorGen = const Color(0xFF00C853);
       } else if (gh3 == ga3) {
-        textoGen = 'EmpatÃ³ el ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo partido';
+        textoGen = 'Empató el último partido';
         colorGen = Colors.white54;
       } else {
-        textoGen = 'PerdiÃ³ el ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo partido';
+        textoGen = 'Perdió el último partido';
         colorGen = Colors.red;
       }
     } else {
@@ -2424,7 +2424,7 @@ Widget _tabTiempo(String tipo) {
     final coachLocal = teamLocal['coach']?['name'] as String? ?? '';
     final coachVisit = teamVisit['coach']?['name'] as String? ?? '';
 
-    // Mapa rÃ¡pido de stats por player id
+    // Mapa rápido de stats por player id
     final Map<int, Map<String, dynamic>> statsMap = {};
     for (var p in playersData) {
       final id = p['id'];
@@ -2480,13 +2480,13 @@ Widget _tabTiempo(String tipo) {
               ),
               child: foto == null ? Center(child: Text(number, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))) : null,
             ),
-            // ÃƒÂ¢Ã‚Â­Ã‚Â mejor jugador ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â arriba centro
+            // ⭐ mejor jugador — arriba centro
             if (esMejor)
               const Positioned(
                 top: -10, left: 0, right: 0,
-                child: Center(child: Text('ÃƒÂ¢Ã‚Â­Ã‚Â', style: TextStyle(fontSize: 10))),
+                child: Center(child: Text('⭐', style: TextStyle(fontSize: 10))),
               ),
-            // C capitÃ¡n ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â arriba derecha
+            // C capitán — arriba derecha
             if (esCap)
               Positioned(
                 top: -4, right: -4,
@@ -2496,7 +2496,7 @@ Widget _tabTiempo(String tipo) {
                   child: const Center(child: Text('C', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold))),
                 ),
               ),
-            // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero camiseta ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â abajo izquierda
+            // Número camiseta — abajo izquierda
             if (number.isNotEmpty)
               Positioned(
                 bottom: -2, left: -2,
@@ -2510,7 +2510,7 @@ Widget _tabTiempo(String tipo) {
                   child: Text(number, style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold)),
                 ),
               ),
-            // ÃƒÂ¢Ã…Â¡Ã‚Â½ goles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â arriba izquierda
+            // ⚽ goles — arriba izquierda
             if (goles > 0)
               Positioned(
                 top: -4, left: -4,
@@ -2521,10 +2521,10 @@ Widget _tabTiempo(String tipo) {
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.white24, width: 1),
                   ),
-                  child: Text(goles == 1 ? 'ÃƒÂ¢Ã…Â¡Ã‚Â½' : 'ÃƒÂ¢Ã…Â¡Ã‚Â½$goles', style: const TextStyle(fontSize: 8)),
+                  child: Text(goles == 1 ? 'âš½' : 'âš½$goles', style: const TextStyle(fontSize: 8)),
                 ),
               ),
-            // Tarjeta ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â abajo derecha (roja tiene prioridad sobre amarilla)
+            // Tarjeta — abajo derecha (roja tiene prioridad sobre amarilla)
             if (rojas > 0)
               Positioned(
                 bottom: -2, right: -2,
@@ -2586,7 +2586,7 @@ Widget _tabTiempo(String tipo) {
       }).toList());
     }
 
-    // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SOLAPA CANCHA ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+    // ── SOLAPA CANCHA ──────────────────────────────────────────────
     Widget tabCancha = SingleChildScrollView(
       child: Container(
         decoration: BoxDecoration(
@@ -2631,7 +2631,7 @@ Widget _tabTiempo(String tipo) {
       ),
     );
 
-    // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ HELPERS SOLAPAS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+    // ── HELPERS SOLAPAS ──────────────────────────────────────────────
     Widget headerTabla(List<String> cols) => Container(
       color: const Color(0xFF0D1B2A),
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -2697,7 +2697,7 @@ Widget _tabTiempo(String tipo) {
     List<Map<String, dynamic>> jugadoresPorEquipo(int? tId) =>
       playersData.where((p) => p['equipoId'] == tId && p['suplente'] == false).toList();
 
-    // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SOLAPA RENDIMIENTO ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+    // ── SOLAPA RENDIMIENTO ──────────────────────────────────────────────
     Widget tabRendimiento = playersData.isEmpty
       ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Sin datos de rendimiento', style: TextStyle(color: Colors.white38))))
       : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2738,7 +2738,7 @@ Widget _tabTiempo(String tipo) {
           const SizedBox(height: 8),
         ]));
 
-    // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SOLAPA GOLES ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+    // ── SOLAPA GOLES ──────────────────────────────────────────────
     Widget tabGoles = playersData.isEmpty
       ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Sin datos', style: TextStyle(color: Colors.white38))))
       : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2759,11 +2759,11 @@ Widget _tabTiempo(String tipo) {
           const SizedBox(height: 8),
         ]));
 
-    // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SOLAPA TARJETAS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+    // ── SOLAPA TARJETAS ──────────────────────────────────────────────
     Widget tabTarjetas = playersData.isEmpty
       ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Sin datos', style: TextStyle(color: Colors.white38))))
       : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          headerTabla(['ÃƒÂ°Ã…Â¸Ã…Â¸Ã‚Â¨', 'ÃƒÂ°Ã…Â¸Ã…Â¸Ã‚Â¥', 'FALTAS']),
+          headerTabla(['🟨', '🟥', 'FALTAS']),
           seccionEquipo(local, true),
           ...jugadoresPorEquipo(teamLocalId).map((p) => filaJugador(p, true, [
             celdaStat('${p['amarillas']}', color: (p['amarillas'] as int) > 0 ? const Color(0xFFFFD600) : Colors.white38),
@@ -2780,7 +2780,7 @@ Widget _tabTiempo(String tipo) {
           const SizedBox(height: 8),
         ]));
 
-    // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ WRAPPER CON TABS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+    // ── WRAPPER CON TABS ──────────────────────────────────────────────
     return DefaultTabController(
       length: 4,
       child: Column(
@@ -2827,7 +2827,7 @@ Widget _tabTiempo(String tipo) {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(color: Color(0xFF00C853)),
             SizedBox(height: 12),
-            Text('Analizando prÃ³xima fecha...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+            Text('Analizando próxima fecha...', style: TextStyle(color: Colors.white54, fontSize: 13)),
           ]),
         );
         if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(
@@ -2841,7 +2841,7 @@ Widget _tabTiempo(String tipo) {
             Row(children: [
               const Icon(Icons.auto_graph, color: Color(0xFF00C853), size: 18),
               const SizedBox(width: 8),
-              Text('PREDICCIONES ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â FECHA $fecha', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.5)),
+              Text('PREDICCIONES — FECHA $fecha', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.5)),
             ]),
             const SizedBox(height: 4),
             const Text('Basado en forma local/visitante e historial h2h', style: TextStyle(color: Colors.white38, fontSize: 11)),
@@ -3331,7 +3331,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Text(' STATS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28, letterSpacing: 2)),
               ]),
               const SizedBox(height: 32),
-              const Text('Ãƒâ€šÃ‚Â¿CuÃ¡l es tu equipo?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text('¿Cuál es tu equipo?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               const Text('Te destacamos sus partidos en la pantalla principal.', style: TextStyle(color: Colors.white54, fontSize: 14)),
               const SizedBox(height: 24),
@@ -3405,7 +3405,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     disabledBackgroundColor: Colors.white12,
                   ),
                   child: Text(
-                    _seleccionado != null ? 'LISTO, ENTRAR A HDF STATS' : 'SELECCIÃƒÆ’Ã¢â‚¬Å“N TU EQUIPO',
+                    _seleccionado != null ? 'LISTO, ENTRAR A HDF STATS' : 'SELECCIÓN TU EQUIPO',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1),
                   ),
                 ),

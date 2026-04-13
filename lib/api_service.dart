@@ -12,9 +12,9 @@ class ApiService {
     'x-apisports-key': _apiKey,
   };
 
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ CACHE GLOBAL ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
-  // Standings y fixtures se comparten entre todos los mÃƒÆ’Ã‚Â©todos.
-  // Solo se hace 1 request por sesiÃƒÆ’Ã‚Â³n, sin importar cuÃƒÆ’Ã‚Â¡ntos mÃƒÆ’Ã‚Â©todos lo pidan.
+  // ─── CACHE GLOBAL ────────────────────────────────────────────────
+  // Standings y fixtures se comparten entre todos los métodos.
+  // Solo se hace 1 request por sesión, sin importar cuántos métodos lo pidan.
   static Future<dynamic>? _standingsFuture;
   static Future<List>? _fixturesFuture;
 
@@ -40,7 +40,7 @@ class ApiService {
         : <dynamic>[]);
     return _fixturesFuture!;
   }
-  // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+  // ─────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
     final hoy = DateTime.now();
@@ -619,7 +619,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         fixturesConArbitro.add({'fixture': f, 'nombre': nombre});
       }
 
-      // Traer foto del ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rbitro (una sola vez por ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rbitro)
+      // Traer foto del árbitro (una sola vez por árbitro)
       final nombresUnicos = arbitros.keys.toList();
       await Future.wait(nombresUnicos.map((nombre) async {
         try {
@@ -672,7 +672,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
                 if (esLocal) { arbitros[nombre]!['penalesLocal'] += 1; equipoStats[homeId]?['penales'] += 1; }
                 else { arbitros[nombre]!['penalesVisitante'] += 1; equipoStats[awayId]?['penales'] += 1; }
               }
-              // Goles de corner (cÃƒÂ³rner directo / gol olÃƒÂ­mpico)
+              // Goles de corner (córner directo / gol olímpico)
               if (tipo == 'Goal' && detalle == 'Own Goal') {
                 arbitros[nombre]!['golesPropia'] = (arbitros[nombre]!['golesPropia'] as int? ?? 0) + 1;
               }
@@ -705,7 +705,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final favVisit = (a['penalesVisitante'] as int) - (a['amarillasVisitante'] as int) ~/ 3;
         final favorece = favLocal > favVisit ? 'Local' : favVisit > favLocal ? 'Visitante' : 'Neutro';
 
-        // Calcular equipo mÃƒÂ¡s beneficiado y perjudicado (deben ser DISTINTOS)
+        // Calcular equipo más beneficiado y perjudicado (deben ser DISTINTOS)
         final equipoStats = a['equipoStats'] as Map<int, Map<String, dynamic>>;
         String equipoBeneficiado = '-';
         String equipoPerjudicado = '-';
@@ -773,7 +773,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
       }
       final fechas = porFecha.keys.toList()..sort();
       int? proximaFecha;
-      // Encontrar la ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltima fecha jugada y tomar la siguiente
+      // Encontrar la última fecha jugada y tomar la siguiente
       int ultimaFechaJugada = 0;
       for (final f in fechas) {
         final partidos = porFecha[f]!;
@@ -783,7 +783,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         });
         if (tieneFT && f > ultimaFechaJugada) ultimaFechaJugada = f;
       }
-      // PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³xima = primera fecha con nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºmero mayor a la ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltima jugada que tenga NS
+      // Próxima = primera fecha con número mayor a la última jugada que tenga NS
       for (final f in fechas) {
         if (f <= ultimaFechaJugada) continue;
         final partidos = porFecha[f]!;
@@ -796,7 +796,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         return s == 'NS';
       }).toList();
 
-      // 3. Para cada partido calcular predicciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n
+      // 3. Para cada partido calcular predicción
       final resultados = await Future.wait(partidos.map((p) async {
         final homeId = p['teams']['home']['id'] as int;
         final awayId = p['teams']['away']['id'] as int;
@@ -819,9 +819,9 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final statsLocal = results[3] as Map<String, dynamic>;
         final statsVisit = results[4] as Map<String, dynamic>;
 
-        // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ALGORITMO v2: 40% FORMA CONDICIÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œN + 35% TORNEO + 25% H2H ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+        // ── ALGORITMO v2: 40% FORMA CONDICIÓN + 35% TORNEO + 25% H2H ──
 
-        // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â BLOQUE A: Forma reciente en CONDICIÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œN (local como local, visitante como visitante) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // — BLOQUE A: Forma reciente en CONDICIÓN (local como local, visitante como visitante) —
         double puntosFormaLocal = 0, puntosFormaVisit = 0;
         int partidosFormaLocal = 0, partidosFormaVisit = 0;
 
@@ -888,7 +888,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final formaLocalNorm = puntosFormaLocal / maxPtosL;
         final formaVisitNorm = puntosFormaVisit / maxPtosV;
 
-        // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â BLOQUE B: Stats torneo en condiciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // — BLOQUE B: Stats torneo en condición —
         final totalLocalFor = (statsLocal['goals']?['for']?['total']?['home'] as num?)?.toDouble() ?? 0.0;
         final totalVisitFor = (statsVisit['goals']?['for']?['total']?['away'] as num?)?.toDouble() ?? 0.0;
         final totalLocalAgainst = (statsLocal['goals']?['against']?['total']?['home'] as num?)?.toDouble() ?? 0.0;
@@ -909,7 +909,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final torneoLocalNorm = pjLocalHome > 0 ? (vLocal * 3 + eLocal) / (pjLocalHome * 3) : 0.33;
         final torneoVisitNorm = pjVisitAway > 0 ? (vVisit * 3 + eVisit) / (pjVisitAway * 3) : 0.33;
 
-        // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â BLOQUE C: H2H histÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³rico (ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimos 10) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // — BLOQUE C: H2H histórico (últimos 10) —
         int h2hLocal = 0, h2hVisit = 0, h2hEmpate = 0;
         double h2hGolesLocal = 0, h2hGolesVisit = 0;
         int h2hCount = 0;
@@ -935,7 +935,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final h2hLocalNorm = h2hCount > 0 ? h2hLocal / h2hCount.toDouble() : 0.35;
         final h2hVisitNorm = h2hCount > 0 ? h2hVisit / h2hCount.toDouble() : 0.28;
 
-        // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â MIX FINAL: 40% forma condiciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n + 35% torneo + 25% H2H ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // — MIX FINAL: 40% forma condición + 35% torneo + 25% H2H —
         const wForma = 0.40, wTorneo = 0.35, wH2h = 0.25;
 
         double scoreLocal = formaLocalNorm * wForma + torneoLocalNorm * wTorneo + h2hLocalNorm * wH2h + 0.05; // +5% ventaja local
@@ -952,7 +952,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         pctVisit = pctVisit / pctSum2 * 100;
         pctEmpate = pctEmpate / pctSum2 * 100;
 
-        // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â MARCADOR PREDICHO ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // — MARCADOR PREDICHO —
         final defVisitFactor = avgGolVisitContra / 1.2;
         final defLocalFactor = avgGolLocalContra / 1.0;
         double golesLocalEsp = avgGolLocalFavor * defVisitFactor;
@@ -966,7 +966,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
           golesVisitEsp = golesVisitEsp * 0.6 + avgH2hVisit * 0.4;
         }
 
-        // Ajuste por forma reciente (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±0.3 goles mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ximo)
+        // Ajuste por forma reciente (±0.3 goles máximo)
         final ajusteGolesL = ((formaLocalNorm - 0.5) * 0.6).clamp(-0.3, 0.3);
         final ajusteGolesV = ((formaVisitNorm - 0.5) * 0.6).clamp(-0.3, 0.3);
         golesLocalEsp = (golesLocalEsp + ajusteGolesL + 0.1).clamp(0.3, 3.5);
@@ -975,7 +975,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final golesLocalPred = golesLocalEsp.round().clamp(0, 4);
         final golesVisitPred = golesVisitEsp.round().clamp(0, 3);
 
-        // Forma reciente para display (bolitas W/D/L ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimos 5 general)
+        // Forma reciente para display (bolitas W/D/L — últimos 5 general)
         List<String> formaRecLocal = [], formaRecVisit = [];
         for (var f in ultLocal) {
           final st = f['fixture']['status']['short'] as String;
@@ -1020,7 +1020,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
   static Future<List<Map<String, dynamic>>> getTablaDTs() async {
     try {
-      // 1. Traer todos los fixtures y filtrar FT en cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³digo (status=FT no funciona en todos los planes)
+      // 1. Traer todos los fixtures y filtrar FT en código (status=FT no funciona en todos los planes)
       final todosFixturesList = await _getFixturesData();
       if (todosFixturesList.isEmpty) return [];
       final todosFixtures = todosFixturesList.cast<Map<String, dynamic>>();
@@ -1048,7 +1048,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         if (gano) { dts[id]!['victorias'] += 1; (dts[id]!['racha'] as List).add('W'); }
         else if (empato) { dts[id]!['empates'] += 1; (dts[id]!['racha'] as List).add('D'); }
         else { dts[id]!['derrotas'] += 1; (dts[id]!['racha'] as List).add('L'); }
-        // Actualizar equipo actual (ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo partido)
+        // Actualizar equipo actual (último partido)
         dts[id]!['equipo'] = equipoNombre;
         dts[id]!['equipoId'] = equipoId;
       }
@@ -1094,7 +1094,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final puntosMaximos = partidos * 3;
         final pctPuntos = puntosMaximos > 0 ? (puntos / puntosMaximos * 100) : 0.0;
         final rachaLista = (dt['racha'] as List).cast<String>();
-        // Racha actual: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimos resultados consecutivos iguales al ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºltimo
+        // Racha actual: últimos resultados consecutivos iguales al último
         String rachaActual = '';
         if (rachaLista.isNotEmpty) {
           final ultimo = rachaLista.last;
@@ -1126,13 +1126,13 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
           if (data.isEmpty) return;
           final coach = data[0];
           final career = (coach['career'] as List?) ?? [];
-          // AÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±os de experiencia: desde el primer club hasta hoy
+          // Años de experiencia: desde el primer club hasta hoy
           String primerAnio = '';
           String ultimoClubAnterior = '';
           if (career.isNotEmpty) {
-            final primero = career.last; // career viene de mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡s reciente a mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡s antiguo
+            final primero = career.last; // career viene de más reciente a más antiguo
             primerAnio = (primero['start'] as String? ?? '').substring(0, 4);
-            // ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¡ltimo club anterior al actual
+            // Último club anterior al actual
             if (career.length > 1) {
               ultimoClubAnterior = career[1]['team']?['name'] as String? ?? '';
             }
@@ -1218,7 +1218,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         return "$min' $tipo ($detalle) - $jugador ($equipo)";
       }).join('\n');
 
-      final prompt = 'Sos el analista de HDF Stats, una app argentina de fÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºtbol. AnalizÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ este partido EN VIVO con tono futbolero rioplatense, directo y apasionado. MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ximo 3 oraciones cortas.\n\nPartido: $local $resultado $visitante (min $minuto)\nPosesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n: $local $posLocal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â $visitante $posVisit\nTiros al arco: $local $tirosLocal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â $visitante $tirosVisit\nTarjetas: $local ${amarillasLocal}ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¡ ${rojasLocal}ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â´ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â $visitante ${amarillasVisit}ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¡ ${rojasVisit}ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â´\nÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¡ltimos eventos:\n$ultimosEventos\n\nDescribÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­ quÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ pasando: quiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©n domina, momentum, peligro o algo llamativo. UsÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ emojis de fÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âºtbol. Sin asteriscos ni markdown.';
+      final prompt = 'Sos el analista de HDF Stats, una app argentina de fútbol. Analizá este partido EN VIVO con tono futbolero rioplatense, directo y apasionado. Máximo 3 oraciones cortas.\n\nPartido: $local $resultado $visitante (min $minuto)\nPosesión: $local $posLocal — $visitante $posVisit\nTiros al arco: $local $tirosLocal — $visitante $tirosVisit\nTarjetas: $local ${amarillasLocal}🟡 ${rojasLocal}🔴 — $visitante ${amarillasVisit}🟡 ${rojasVisit}🔴\nÚltimos eventos:\n$ultimosEventos\n\nDescribí qué está pasando: quién domina, momentum, peligro o algo llamativo. Usá emojis de fútbol. Sin asteriscos ni markdown.';
 
       final response = await http.post(
         Uri.parse('https://api.anthropic.com/v1/messages'),
@@ -1236,11 +1236,11 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return (data['content'] as List?)?.first?['text'] as String? ?? 'Sin anÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lisis disponible.';
+        return (data['content'] as List?)?.first?['text'] as String? ?? 'Sin análisis disponible.';
       }
-      return 'Sin anÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lisis disponible.';
+      return 'Sin análisis disponible.';
     } catch (e) {
-      return 'Sin anÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lisis disponible.';
+      return 'Sin análisis disponible.';
     }
   }
   static const int _copaArgentina = 515;
@@ -1427,7 +1427,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
-      // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesiÃƒÆ’Ã‚Â³n)
+      // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
       final standData = await _getStandingsData();
       final allFixtures = await _getFixturesData();
 
@@ -1468,8 +1468,8 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         for (final d in firestoreSnap.docs) d.id: d.data()
       };
 
-      // PASO 3: Para fixtures que faltan en Firestore ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ calcular con GOLES ÃƒÆ’Ã…Â¡NICAMENTE
-      // (sin llamar a /fixtures/statistics ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â cero 429)
+      // PASO 3: Para fixtures que faltan en Firestore → calcular con GOLES ÚNICAMENTE
+      // (sin llamar a /fixtures/statistics — cero 429)
       if (jugados.isNotEmpty) {
         final batch = FirebaseFirestore.instance.batch();
         bool hayNuevos = false;
