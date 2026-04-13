@@ -652,7 +652,7 @@ class _MainScreenState extends State<MainScreen> {
                   final teamId = team['id'] as int;
                   final vivo = enVivoMap[teamId];
                   final nombre = vivo != null ? '${team['name']} ($vivo)' : team['name'];
-                  return _tablaRow(equipo['rank'].toString(), nombre, stats['played'].toString(), stats['win'].toString(), stats['draw'].toString(), stats['lose'].toString(), equipo['points'].toString(), enVivo: vivo != null, logo: team['logo'] as String?);
+                  return _tablaRow(equipo['rank'].toString(), nombre, stats['played'].toString(), stats['win'].toString(), stats['draw'].toString(), stats['lose'].toString(), equipo['points'].toString(), enVivo: vivo != null, logo: team['logo'] as String?, teamId: team['id'] as int?);
                 }),
                 const SizedBox(height: 16),
               ],
@@ -1277,6 +1277,8 @@ Widget _tabTiempo(String tipo) {
                     eq[e].toString(),
                     eq[p].toString(),
                     eq[pts].toString(),
+                    logo: eq['logo'] as String?,
+                    teamId: eq['id'] as int?,
                   );
                 }),
                 const SizedBox(height: 16),
