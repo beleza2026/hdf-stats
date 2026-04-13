@@ -125,18 +125,36 @@ class _MainScreenState extends State<MainScreen> {
 
   // â”€â”€ PERFIL DE CLUB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static const Map<int, Map<String, dynamic>> _clubInfo = {
-    499: {'presidente': 'Juan Roman Riquelme', 'estadio': 'Estadio Alberto J. Armando (La Bombonera)', 'capacidad': '54.000', 'fundacion': '1905', 'socios': '70.000', 'titulosLocales': ['Liga 2022','Liga 2020','Clausura 2015','Clausura 2011','Clausura 2008','Clausura 2006'], 'titulosInternacionales': ['Copa Libertadores 2007','Copa Libertadores 2003','Copa Libertadores 2001','Copa Libertadores 2000','Copa Libertadores 1978','Copa Libertadores 1977'], 'ultimoTituloLocal': 'Liga Profesional 2022', 'ultimoTituloInternacional': 'Copa Libertadores 2007', 'dt': 'Fernando Gago'},
-    341: {'presidente': 'Maximiliano Abad', 'estadio': 'Estadio Monumental Antonio Vespucio Liberti', 'capacidad': '84.567', 'fundacion': '1901', 'socios': '120.000', 'titulosLocales': ['Liga 2023','Liga 2021','Liga 2019','Liga 2018','Clausura 2014','Clausura 2012'], 'titulosInternacionales': ['Copa Libertadores 2018','Copa Libertadores 2015','Copa Libertadores 1996','Copa Libertadores 1986'], 'ultimoTituloLocal': 'Liga Profesional 2023', 'ultimoTituloInternacional': 'Copa Libertadores 2018', 'dt': 'Marcelo Gallardo'},
-    435: {'presidente': 'Victor Blanco', 'estadio': 'Estadio Presidente Peron (El Cilindro)', 'capacidad': '51.389', 'fundacion': '1903', 'socios': '55.000', 'titulosLocales': ['Liga 2024','Apertura 2014','Clausura 2010','Apertura 2010'], 'titulosInternacionales': ['Copa Sudamericana 2018','Intercontinental 1967'], 'ultimoTituloLocal': 'Liga Profesional 2024', 'ultimoTituloInternacional': 'Copa Sudamericana 2018', 'dt': 'Gustavo Costas'},
-    452: {'presidente': 'Marcelo Moretti', 'estadio': 'Estadio Pedro Bidegain (El Nuevo Gasometro)', 'capacidad': '48.916', 'fundacion': '1908', 'socios': '45.000', 'titulosLocales': ['Apertura 2007','Clausura 2007','Clausura 2004'], 'titulosInternacionales': ['Copa Libertadores 1986'], 'ultimoTituloLocal': 'Clausura 2007', 'ultimoTituloInternacional': 'Copa Libertadores 1986', 'dt': 'Miguel Angel Russo'},
-    453: {'presidente': 'Alejandro Nadur', 'estadio': 'Estadio Tomas Adolfo Duco (El Palacio)', 'capacidad': '48.314', 'fundacion': '1908', 'socios': '28.000', 'titulosLocales': ['Clausura 2009'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2009', 'ultimoTituloInternacional': '-', 'dt': 'Frank Dario Kudelka'},
-    454: {'presidente': 'Juan Sebastian Veron', 'estadio': 'Estadio Jorge Luis Hirschi', 'capacidad': '30.518', 'fundacion': '1905', 'socios': '40.000', 'titulosLocales': ['Liga 2023','Apertura 2010','Clausura 2010'], 'titulosInternacionales': ['Copa Libertadores 2009'], 'ultimoTituloLocal': 'Liga Profesional 2023', 'ultimoTituloInternacional': 'Copa Libertadores 2009', 'dt': 'Eduardo Dominguez'},
-    455: {'presidente': 'Fabian Gardinetti', 'estadio': 'Estadio Jose Amalfitani', 'capacidad': '49.540', 'fundacion': '1910', 'socios': '38.000', 'titulosLocales': ['Clausura 2012','Clausura 2011'], 'titulosInternacionales': ['Copa Sudamericana 2023'], 'ultimoTituloLocal': 'Clausura 2012', 'ultimoTituloInternacional': 'Copa Sudamericana 2023', 'dt': 'Gustavo Quinteros'},
-    456: {'presidente': 'Cristian Malaspina', 'estadio': 'Estadio Diego Armando Maradona', 'capacidad': '26.000', 'fundacion': '1904', 'socios': '18.000', 'titulosLocales': ['Clausura 2010'], 'titulosInternacionales': ['Copa Sudamericana 2014'], 'ultimoTituloLocal': 'Clausura 2010', 'ultimoTituloInternacional': 'Copa Sudamericana 2014', 'dt': 'Leandro Stillitano'},
-    457: {'presidente': 'Andres Fassi', 'estadio': 'Estadio Mario Alberto Kempes', 'capacidad': '57.000', 'fundacion': '1913', 'socios': '42.000', 'titulosLocales': ['Copa de la Liga 2022'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Copa de la Liga 2022', 'ultimoTituloInternacional': '-', 'dt': 'Alexander Medina'},
-    442: {'presidente': 'Sebastian Peratta', 'estadio': 'Estadio Marcelo Bielsa', 'capacidad': '42.000', 'fundacion': '1903', 'socios': '35.000', 'titulosLocales': ['Apertura 2004','Clausura 2004'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2004', 'ultimoTituloInternacional': '-', 'dt': 'Mariano Soso'},
-    441: {'presidente': 'Gonzalo Belloso', 'estadio': 'Estadio Gigante de Arroyito', 'capacidad': '42.000', 'fundacion': '1889', 'socios': '50.000', 'titulosLocales': ['Apertura 2012','Clausura 2008'], 'titulosInternacionales': ['Copa Libertadores 2000'], 'ultimoTituloLocal': 'Apertura 2012', 'ultimoTituloInternacional': 'Copa Libertadores 2000', 'dt': 'Facundo Sava'},
-    501: {'presidente': 'Nestor Ortega', 'estadio': 'Estadio Jose Dellagiovanna', 'capacidad': '27.000', 'fundacion': '1902', 'socios': '20.000', 'titulosLocales': ['Clausura 2012'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2012', 'ultimoTituloInternacional': '-', 'dt': 'Gustavo Alvarez'},
+    451: {'presidente': 'Juan Roman Riquelme', 'estadio': 'Estadio Alberto J. Armando (La Bombonera)', 'capacidad': '54.000', 'fundacion': '1905', 'socios': '70.000', 'titulosLocales': ['Liga 2022','Liga 2020','Clausura 2015','Clausura 2011','Clausura 2008','Clausura 2006','Clausura 2005','Clausura 2003'], 'titulosInternacionales': ['Copa Libertadores 2007','Copa Libertadores 2003','Copa Libertadores 2001','Copa Libertadores 2000','Copa Libertadores 1978','Copa Libertadores 1977'], 'ultimoTituloLocal': 'Liga Profesional 2022', 'ultimoTituloInternacional': 'Copa Libertadores 2007', 'dt': 'Fernando Gago'},
+    450: {'presidente': 'Juan Sebastian Veron', 'estadio': 'Estadio Jorge Luis Hirschi', 'capacidad': '30.518', 'fundacion': '1905', 'socios': '40.000', 'titulosLocales': ['Liga 2023','Apertura 2010','Clausura 2010','Clausura 2006','Clausura 1983'], 'titulosInternacionales': ['Copa Libertadores 2009'], 'ultimoTituloLocal': 'Liga Profesional 2023', 'ultimoTituloInternacional': 'Copa Libertadores 2009', 'dt': 'Eduardo Dominguez'},
+    438: {'presidente': 'Fabian Gardinetti', 'estadio': 'Estadio Jose Amalfitani', 'capacidad': '49.540', 'fundacion': '1910', 'socios': '38.000', 'titulosLocales': ['Clausura 2012','Clausura 2011','Apertura 2009','Clausura 2005','Apertura 2004'], 'titulosInternacionales': ['Copa Sudamericana 2023'], 'ultimoTituloLocal': 'Clausura 2012', 'ultimoTituloInternacional': 'Copa Sudamericana 2023', 'dt': 'Gustavo Quinteros'},
+    441: {'presidente': 'Luis Spahn', 'estadio': 'Estadio 15 de Abril', 'capacidad': '23.054', 'fundacion': '1907', 'socios': '22.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Gustavo Munua'},
+    442: {'presidente': 'Hugo Moyano', 'estadio': 'Estadio Norberto Tomaghello', 'capacidad': '14.000', 'fundacion': '1935', 'socios': '12.000', 'titulosLocales': ['Copa Argentina 2023'], 'titulosInternacionales': ['Copa Sudamericana 2018'], 'ultimoTituloLocal': 'Copa Argentina 2023', 'ultimoTituloInternacional': 'Copa Sudamericana 2018', 'dt': 'Julio Vaccari'},
+    446: {'presidente': 'Nicolas Russo', 'estadio': 'Estadio Ciudad de Lanus (La Fortaleza)', 'capacidad': '47.028', 'fundacion': '1915', 'socios': '30.000', 'titulosLocales': ['Clausura 2007','Clausura 2013'], 'titulosInternacionales': ['Copa Sudamericana 2013'], 'ultimoTituloLocal': 'Clausura 2013', 'ultimoTituloInternacional': 'Copa Sudamericana 2013', 'dt': 'Ricardo Zielinski'},
+    453: {'presidente': 'Hugo Moyano', 'estadio': 'Estadio Libertadores de America', 'capacidad': '52.697', 'fundacion': '1905', 'socios': '55.000', 'titulosLocales': ['Apertura 2010','Clausura 2010','Apertura 2002','Clausura 1999','Clausura 1994'], 'titulosInternacionales': ['Copa Libertadores 1984','Copa Libertadores 1975','Copa Libertadores 1974','Copa Libertadores 1965','Copa Sudamericana 2010'], 'ultimoTituloLocal': 'Apertura 2010', 'ultimoTituloInternacional': 'Copa Sudamericana 2010', 'dt': 'Diego Dabove'},
+    456: {'presidente': 'Andres Fassi', 'estadio': 'Estadio Mario Alberto Kempes', 'capacidad': '57.000', 'fundacion': '1913', 'socios': '42.000', 'titulosLocales': ['Copa de la Liga 2022'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Copa de la Liga 2022', 'ultimoTituloInternacional': '-', 'dt': 'Alexander Medina'},
+    460: {'presidente': 'Marcelo Moretti', 'estadio': 'Estadio Pedro Bidegain (El Nuevo Gasometro)', 'capacidad': '48.916', 'fundacion': '1908', 'socios': '45.000', 'titulosLocales': ['Apertura 2007','Clausura 2007','Clausura 2004','Clausura 2001','Apertura 1995'], 'titulosInternacionales': ['Copa Libertadores 1986','Copa Interamericana 1969'], 'ultimoTituloLocal': 'Clausura 2007', 'ultimoTituloInternacional': 'Copa Libertadores 1986', 'dt': 'Miguel Angel Russo'},
+    478: {'presidente': 'Pablo Zuluaga', 'estadio': 'Estadio Juan Domingo Peron', 'capacidad': '30.000', 'fundacion': '1918', 'socios': '15.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Diego Dabove'},
+    1064: {'presidente': 'Pablo Vidal', 'estadio': 'Estadio Ciudad de Vicente Lopez', 'capacidad': '13.300', 'fundacion': '1905', 'socios': '18.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Martin Palermo'},
+    1066: {'presidente': 'Gabriel Pellegrino', 'estadio': 'Estadio Juan Carmelo Zerillo', 'capacidad': '31.500', 'fundacion': '1887', 'socios': '25.000', 'titulosLocales': ['Nacional 1929'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Nacional 1929', 'ultimoTituloInternacional': '-', 'dt': 'Nestor Gorosito'},
+    1065: {'presidente': 'Fernando Quiroga', 'estadio': 'Estadio Madre de Ciudades', 'capacidad': '30.000', 'fundacion': '1971', 'socios': '10.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Omar De Felippe'},
+    457: {'presidente': 'Sebastian Peratta', 'estadio': 'Estadio Marcelo Bielsa', 'capacidad': '42.000', 'fundacion': '1903', 'socios': '35.000', 'titulosLocales': ['Apertura 2004','Clausura 2004','Clausura 1998','Clausura 1992','Nacional 1988'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2004', 'ultimoTituloInternacional': '-', 'dt': 'Mariano Soso'},
+    476: {'presidente': 'Sergio Palazzo', 'estadio': 'Estadio Ramon Tarruela', 'capacidad': '16.000', 'fundacion': '1906', 'socios': '8.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Marcelo Franchini'},
+    435: {'presidente': 'Maximiliano Abad', 'estadio': 'Estadio Monumental Antonio Vespucio Liberti', 'capacidad': '84.567', 'fundacion': '1901', 'socios': '120.000', 'titulosLocales': ['Liga 2023','Liga 2021','Liga 2019','Liga 2018','Clausura 2014','Clausura 2012','Apertura 2009'], 'titulosInternacionales': ['Copa Libertadores 2018','Copa Libertadores 2015','Copa Libertadores 1996','Copa Libertadores 1986'], 'ultimoTituloLocal': 'Liga Profesional 2023', 'ultimoTituloInternacional': 'Copa Libertadores 2018', 'dt': 'Marcelo Gallardo'},
+    458: {'presidente': 'Cristian Malaspina', 'estadio': 'Estadio Diego Armando Maradona', 'capacidad': '26.000', 'fundacion': '1904', 'socios': '18.000', 'titulosLocales': ['Clausura 2010'], 'titulosInternacionales': ['Copa Sudamericana 2014'], 'ultimoTituloLocal': 'Clausura 2010', 'ultimoTituloInternacional': 'Copa Sudamericana 2014', 'dt': 'Leandro Stillitano'},
+    440: {'presidente': 'Gustavo Menendez', 'estadio': 'Estadio Gigante de Alberdi', 'capacidad': '30.000', 'fundacion': '1905', 'socios': '28.000', 'titulosLocales': ['Nacional 1979','Nacional 1980'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Nacional 1980', 'ultimoTituloInternacional': '-', 'dt': 'Diego Dabove'},
+    437: {'presidente': 'Gonzalo Belloso', 'estadio': 'Estadio Gigante de Arroyito', 'capacidad': '42.000', 'fundacion': '1889', 'socios': '50.000', 'titulosLocales': ['Apertura 2012','Clausura 2008','Apertura 2006','Clausura 1997','Apertura 1995'], 'titulosInternacionales': ['Copa Libertadores 2000'], 'ultimoTituloLocal': 'Apertura 2012', 'ultimoTituloInternacional': 'Copa Libertadores 2000', 'dt': 'Facundo Sava'},
+    445: {'presidente': 'Alejandro Nadur', 'estadio': 'Estadio Tomas Adolfo Duco (El Palacio)', 'capacidad': '48.314', 'fundacion': '1908', 'socios': '28.000', 'titulosLocales': ['Clausura 2009','Clausura 2000','Apertura 1991'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2009', 'ultimoTituloInternacional': '-', 'dt': 'Frank Dario Kudelka'},
+    2432: {'presidente': 'Rodolfo De Paoli', 'estadio': 'Estadio Claudio Cueto', 'capacidad': '7.000', 'fundacion': '1904', 'socios': '5.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Rodolfo De Paoli'},
+    452: {'presidente': 'Nestor Ortega', 'estadio': 'Estadio Jose Dellagiovanna', 'capacidad': '27.000', 'fundacion': '1902', 'socios': '20.000', 'titulosLocales': ['Clausura 2012'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2012', 'ultimoTituloInternacional': '-', 'dt': 'Gustavo Alvarez'},
+    436: {'presidente': 'Victor Blanco', 'estadio': 'Estadio Presidente Peron (El Cilindro)', 'capacidad': '51.389', 'fundacion': '1903', 'socios': '55.000', 'titulosLocales': ['Liga 2024','Apertura 2014','Clausura 2010','Apertura 2010'], 'titulosInternacionales': ['Copa Sudamericana 2018','Intercontinental 1967'], 'ultimoTituloLocal': 'Liga Profesional 2024', 'ultimoTituloInternacional': 'Copa Sudamericana 2018', 'dt': 'Gustavo Costas'},
+    474: {'presidente': 'Ariel Cozzoni', 'estadio': 'Estadio Eva Peron', 'capacidad': '20.000', 'fundacion': '1911', 'socios': '12.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Arnaldo Llinas'},
+    434: {'presidente': 'Gabriel Pellegrino', 'estadio': 'Estadio Juan Carmelo Zerillo', 'capacidad': '31.500', 'fundacion': '1887', 'socios': '25.000', 'titulosLocales': ['Nacional 1929'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Nacional 1929', 'ultimoTituloInternacional': '-', 'dt': 'Nestor Gorosito'},
+    449: {'presidente': 'Ramon Jerez', 'estadio': 'Estadio Florencio Sola', 'capacidad': '34.000', 'fundacion': '1896', 'socios': '20.000', 'titulosLocales': ['Clausura 2009'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Clausura 2009', 'ultimoTituloInternacional': '-', 'dt': 'Julio Cesar Falcioni'},
+    455: {'presidente': 'Osvaldo Beligoy', 'estadio': 'Estadio Monumental Jose Fierro', 'capacidad': '23.000', 'fundacion': '1902', 'socios': '22.000', 'titulosLocales': ['Nacional 2015','Copa Argentina 2015'], 'titulosInternacionales': [], 'ultimoTituloLocal': 'Nacional 2015', 'ultimoTituloInternacional': '-', 'dt': 'Carlos Tevez'},
+    473: {'presidente': 'Adrian Uriarte', 'estadio': 'Estadio Ciudad de Rivadavia', 'capacidad': '18.000', 'fundacion': '1932', 'socios': '8.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Diego Pozo'},
+    463: {'presidente': 'Rodolfo Caro', 'estadio': 'Estadio El Gigante del Sur', 'capacidad': '24.000', 'fundacion': '1908', 'socios': '15.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Gaston Coyette'},
+    2424: {'presidente': 'Marcelo Sanchez', 'estadio': 'Estadio Ciudad de Rio Cuarto', 'capacidad': '18.000', 'fundacion': '1915', 'socios': '10.000', 'titulosLocales': [], 'titulosInternacionales': [], 'ultimoTituloLocal': '-', 'ultimoTituloInternacional': '-', 'dt': 'Rodrigo Lugones'},
   };
 
   void _mostrarPerfilClub(BuildContext context, int teamId, String nombre, String? logo) {
@@ -579,9 +597,230 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+
+  // â”€â”€ TABLA ANUAL Y PROMEDIOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Widget _tabAnual() {
+    return FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+      future: ApiService.getTablasAnualYPromedios(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+        final data = snapshot.data ?? {};
+        final equipos = data['Anual'] ?? [];
+        if (equipos.isEmpty) return const Center(child: Text('Sin datos anuales', style: TextStyle(color: Colors.white54)));
+        return ListView(padding: const EdgeInsets.all(16), children: [
+          _sectionTitle('TABLA ANUAL 2026 â€” APERTURA + CLAUSURA'),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+            child: const Text(
+              'Los campeones del Apertura, Clausura y Copa Argentina clasifican directamente a la Copa Libertadores. Los puestos de la tabla anual se recalculan excluyendo a dichos campeones.',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            _leyendaChip('ðŸŸ¢ Libertadores (grupos) â€” 1Â° y 2Â°', const Color(0xFF00C853)),
+            _leyendaChip('ðŸŸ  Sudamericana â€” 3Â° al 8Â°', const Color(0xFFFF6F00)),
+            _leyendaChip('ðŸ”µ Libertadores Fase 2 â€” 9Â°', const Color(0xFF2196F3)),
+            _leyendaChip('ðŸ”´ Descenso â€” 30Â°', const Color(0xFFFF3B30)),
+          ]),
+          const SizedBox(height: 8),
+          _tablaHeader(),
+          ...equipos.asMap().entries.map((entry) {
+            final i = entry.key + 1;
+            final eq = entry.value;
+            final team = eq['team'] as Map<String, dynamic>;
+            final stats = eq['all'] as Map<String, dynamic>;
+            final pts = eq['points'] as int? ?? 0;
+            final pj = stats['played'] as int? ?? 0;
+            // Color coding segun reglamento LPF 2026
+            // Pos 1-2: Copa Libertadores grupos (excl. campeones Apertura/Clausura/Copa Arg)
+            // Pos 3-8: Copa Sudamericana
+            // Pos 9: Copa Libertadores Fase 2
+            // Pos 30: Descenso directo
+            Color? borderColor;
+            if (i <= 2) borderColor = const Color(0xFF00C853);         // Copa Libertadores grupos
+            else if (i == 9) borderColor = const Color(0xFF2196F3);    // Copa Libertadores Fase 2
+            else if (i <= 8) borderColor = const Color(0xFFFF6F00);    // Copa Sudamericana
+            else if (i == equipos.length) borderColor = const Color(0xFFFF3B30); // Descenso
+            return _tablaRowAnual(
+              i.toString(),
+              team['name'] as String,
+              pj.toString(),
+              stats['win'].toString(),
+              stats['draw'].toString(),
+              stats['lose'].toString(),
+              pts.toString(),
+              logo: team['logo'] as String?,
+              teamId: team['id'] as int?,
+              borderColor: borderColor,
+            );
+          }),
+        ]);
+      },
+    );
+  }
+
+  Widget _tabPromedios() {
+    return FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+      future: ApiService.getTablasAnualYPromedios(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+        final data = snapshot.data ?? {};
+        final equipos = data['Promedios'] ?? [];
+        if (equipos.isEmpty) return const Center(child: Text('Sin datos de promedios', style: TextStyle(color: Colors.white54)));
+        return ListView(padding: const EdgeInsets.all(16), children: [
+          _sectionTitle('TABLA DE PROMEDIOS 2026'),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+            child: const Text(
+              'El equipo con menor promedio al final de la temporada desciende a la Primera Nacional.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          _leyendaChip('ðŸ”´ Zona de descenso', const Color(0xFFFF3B30)),
+          const SizedBox(height: 8),
+          _tablaHeaderPromedios(),
+          ...equipos.asMap().entries.map((entry) {
+            final i = entry.key + 1;
+            final eq = entry.value;
+            final team = eq['team'] as Map<String, dynamic>;
+            final stats = eq['all'] as Map<String, dynamic>;
+            final pts = eq['points'] as int? ?? 0;
+            final pj = stats['played'] as int? ?? 0;
+            final promedio = pj > 0 ? (pts / pj) : 0.0;
+            final isLast = i == equipos.length;
+            return _tablaRowPromedios(
+              i.toString(),
+              team['name'] as String,
+              pj.toString(),
+              pts.toString(),
+              promedio.toStringAsFixed(2),
+              logo: team['logo'] as String?,
+              teamId: team['id'] as int?,
+              descenso: isLast,
+            );
+          }),
+        ]);
+      },
+    );
+  }
+
+  Widget _leyendaChip(String label, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    margin: const EdgeInsets.only(bottom: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(color: color.withValues(alpha: 0.4)),
+    ),
+    child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+  );
+
+  Widget _tablaHeaderPromedios() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    child: Row(children: [
+      const SizedBox(width: 24),
+      const SizedBox(width: 30),
+      const Expanded(child: Text('EQUIPO', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold))),
+      const SizedBox(width: 40, child: Text('PJ', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+      const SizedBox(width: 40, child: Text('PTS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+      const SizedBox(width: 48, child: Text('PROM', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+    ]),
+  );
+
+  Widget _tablaRowAnual(String pos, String equipo, String pj, String g, String e, String p, String pts,
+      {String? logo, int? teamId, Color? borderColor}) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: borderColor != null ? borderColor.withValues(alpha: 0.05) : const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(8),
+        border: borderColor != null ? Border(left: BorderSide(color: borderColor, width: 3)) : null,
+      ),
+      child: Row(children: [
+        SizedBox(width: 24, child: Text(pos, style: const TextStyle(color: Colors.white54, fontSize: 13))),
+        const SizedBox(width: 4),
+        _logoConTap(logo, 20, teamId, equipo),
+        const SizedBox(width: 6),
+        Expanded(child: Text(equipo, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
+        SizedBox(width: 28, child: Text(pj, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 28, child: Text(g, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 28, child: Text(e, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 28, child: Text(p, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 32, child: Text(pts, style: const TextStyle(color: Color(0xFF00C853), fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+      ]),
+    );
+  }
+
+  Widget _tablaRowPromedios(String pos, String equipo, String pj, String pts, String prom,
+      {String? logo, int? teamId, bool descenso = false}) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: descenso ? const Color(0xFFFF3B30).withValues(alpha: 0.08) : const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(8),
+        border: descenso ? Border.all(color: const Color(0xFFFF3B30).withValues(alpha: 0.4)) : null,
+      ),
+      child: Row(children: [
+        SizedBox(width: 24, child: Text(pos, style: TextStyle(color: descenso ? const Color(0xFFFF3B30) : Colors.white54, fontSize: 13, fontWeight: descenso ? FontWeight.bold : FontWeight.normal))),
+        const SizedBox(width: 4),
+        _logoConTap(logo, 20, teamId, equipo),
+        const SizedBox(width: 6),
+        Expanded(child: Text(equipo, style: TextStyle(color: descenso ? const Color(0xFFFF3B30) : Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
+        SizedBox(width: 40, child: Text(pj, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 40, child: Text(pts, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 48, child: Text(prom, style: const TextStyle(color: Color(0xFF00C853), fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+      ]),
+    );
+  }
+
+  Widget _tablaRowConClasif(String pos, String equipo, String pj, String g, String e, String p, String pts,
+      {bool enVivo = false, String? logo, int? teamId, bool clasifica = false}) {
+    final posColor = clasifica ? const Color(0xFF00C853) : Colors.white54;
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: enVivo ? const Color(0xFF00C853).withValues(alpha: 0.08) : const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(
+            color: clasifica ? const Color(0xFF00C853) : Colors.transparent,
+            width: 3,
+          ),
+          top: enVivo ? BorderSide(color: const Color(0xFF00C853).withValues(alpha: 0.4)) : BorderSide.none,
+          bottom: enVivo ? BorderSide(color: const Color(0xFF00C853).withValues(alpha: 0.4)) : BorderSide.none,
+          right: enVivo ? BorderSide(color: const Color(0xFF00C853).withValues(alpha: 0.4)) : BorderSide.none,
+        ),
+      ),
+      child: Row(children: [
+        SizedBox(width: 24, child: Text(pos, style: TextStyle(color: posColor, fontSize: 13, fontWeight: clasifica ? FontWeight.bold : FontWeight.normal))),
+        const SizedBox(width: 4),
+        _logoConTap(logo, 20, teamId, equipo),
+        const SizedBox(width: 6),
+        Expanded(child: Text(equipo, style: TextStyle(color: enVivo ? const Color(0xFF00C853) : Colors.white, fontSize: enVivo ? 12 : 13, fontWeight: FontWeight.w500))),
+        SizedBox(width: 28, child: Text(pj, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 28, child: Text(g, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 28, child: Text(e, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 28, child: Text(p, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center)),
+        SizedBox(width: 32, child: Text(pts, style: const TextStyle(color: Color(0xFF00C853), fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+      ]),
+    );
+  }
+  // â”€â”€ FIN TABLA ANUAL Y PROMEDIOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
   Widget _buildTablas() {
     return DefaultTabController(
-      length: 9,
+      length: 11,
       child: Column(children: [
         Container(
           color: const Color(0xFF1B2A3B),
@@ -601,6 +840,8 @@ class _MainScreenState extends State<MainScreen> {
               Tab(text: 'ÃRBITROS'),
               Tab(text: 'MORAL âœ¨'),
               Tab(text: 'CRUCES ðŸ†'),
+              Tab(text: 'ANUAL ðŸ“…'),
+              Tab(text: 'PROMEDIOS ðŸ“‰'),
             ],
           ),
         ),
@@ -614,6 +855,8 @@ class _MainScreenState extends State<MainScreen> {
           _tabArbitros(),
           _buildTablaMoral(),
           _buildCruces(),
+          _tabAnual(),
+          _tabPromedios(),
         ])),
       ]),
     );
@@ -652,7 +895,8 @@ class _MainScreenState extends State<MainScreen> {
                   final teamId = team['id'] as int;
                   final vivo = enVivoMap[teamId];
                   final nombre = vivo != null ? '${team['name']} ($vivo)' : team['name'];
-                  return _tablaRow(equipo['rank'].toString(), nombre, stats['played'].toString(), stats['win'].toString(), stats['draw'].toString(), stats['lose'].toString(), equipo['points'].toString(), enVivo: vivo != null, logo: team['logo'] as String?, teamId: team['id'] as int?);
+                  final rank = equipo['rank'] as int? ?? 0;
+                  return _tablaRowConClasif(equipo['rank'].toString(), nombre, stats['played'].toString(), stats['win'].toString(), stats['draw'].toString(), stats['lose'].toString(), equipo['points'].toString(), enVivo: vivo != null, logo: team['logo'] as String?, teamId: team['id'] as int?, clasifica: rank <= 8);
                 }),
                 const SizedBox(height: 16),
               ],
