@@ -1,4 +1,4 @@
-package com.example.hdf_stats
+package com.hdfstats.app
 
 import io.flutter.embedding.android.FlutterActivity
 

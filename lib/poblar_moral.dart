@@ -13,8 +13,15 @@ const String _projectId = 'hdf-stats';
 
 Map<String, String> get _apiHeaders => {'x-apisports-key': _apiKey};
 
-void main() async {
-  print('=== POBLAR TABLA MORAL - SCRIPT DEFINITIVO ===\n');
+void main(List<String> args) async {
+  final soloUltima = args.contains('--ultima');
+
+  if (soloUltima) {
+    print('=== POBLAR TABLA MORAL - ÚLTIMA FECHA ===\n');
+  } else {
+    print('=== POBLAR TABLA MORAL - COMPLETO ===\n');
+    print('TIP: usá --ultima para correr solo la última fecha (más rápido)\n');
+  }
 
   // 1. Traer fixtures
   print('Trayendo fixtures...');
@@ -28,12 +35,32 @@ void main() async {
   }
 
   final allFixtures = jsonDecode(fixtureResp.body)['response'] as List;
-  final jugados = allFixtures.where((f) {
+  final todosJugados = allFixtures.where((f) {
     final s = f['fixture']['status']['short'];
     return s == 'FT' || s == 'AET' || s == 'PEN';
   }).toList();
 
-  print('${jugados.length} partidos jugados encontrados');
+  List jugados;
+  if (soloUltima) {
+    int maxRound = 0;
+    for (var f in todosJugados) {
+      final round = f['league']['round'] as String? ?? '';
+      if (round.contains('Regular Season')) {
+        final parts = round.split('- ');
+        if (parts.length == 2) {
+          final n = int.tryParse(parts[1].trim()) ?? 0;
+          if (n > maxRound) maxRound = n;
+        }
+      }
+    }
+    final roundStr = 'Regular Season - $maxRound';
+    jugados = todosJugados.where((f) => f['league']['round'] == roundStr).toList();
+    print('Última fecha: Fecha $maxRound — ${jugados.length} partidos\n');
+  } else {
+    jugados = todosJugados;
+  }
+
+  print('${jugados.length} partidos a procesar');
   print('Procesando con algoritmo moral completo...\n');
 
   int ok = 0;

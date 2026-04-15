@@ -125,7 +125,7 @@ class _MainScreenState extends State<MainScreen> {
 
   // ── PERFIL DE CLUB ────────────────────────────────────────────────────────
   static const Map<int, Map<String, dynamic>> _clubInfo = {
-    // ══ ZONA A ══════════════════════════════════════════════════════════════
+    // â•â• ZONA A â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     451: { // Boca Juniors
       'nombre': 'Boca Juniors',
       'presidente': 'Juan Roman Riquelme',
@@ -351,7 +351,7 @@ class _MainScreenState extends State<MainScreen> {
       'ultimoTituloInternacional': 'Sin titulos internacionales',
       'dt': 'A confirmar',
     },
-    // ══ ZONA B ══════════════════════════════════════════════════════════════
+    // â•â• ZONA B â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     435: { // River Plate
       'nombre': 'River Plate',
       'presidente': 'Maximiliano Abad',
@@ -696,6 +696,8 @@ class _MainScreenState extends State<MainScreen> {
     {'icon': Icons.calendar_month, 'label': 'Fixture'},
     {'icon': Icons.live_tv, 'label': 'En Vivo'},
     {'icon': Icons.auto_graph, 'label': 'Predicción'},
+    {'icon': Icons.public, 'label': 'Mundial'},
+    {'icon': Icons.newspaper, 'label': 'Noticias'},
   ];
 
   @override
@@ -764,6 +766,8 @@ class _MainScreenState extends State<MainScreen> {
       case 4: return _buildFixture();
       case 5: return _buildEnVivo();
       case 6: return _buildPredicciones();
+      case 7: return _buildMundial();
+      case 8: return _buildNoticias();
       default: return _buildResultados();
     }
   }
@@ -794,7 +798,7 @@ class _MainScreenState extends State<MainScreen> {
               ]),
               const Divider(color: Colors.white12),
               const SizedBox(height: 12),
-              const Text('CÓDIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const Text('CÃ“DIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 8),
               const Text('Ingresá tu código para acceder a HDF Stats Premium gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
               const SizedBox(height: 12),
@@ -835,18 +839,18 @@ class _MainScreenState extends State<MainScreen> {
                             .doc(codigo)
                             .get();
                           if (!docRef.exists) {
-                            setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
+                            setModalState(() { mensaje = 'âŒ Código inválido o inactivo.'; cargando = false; });
                             return;
                           }
                           final data = docRef.data()!;
                           if (data['activo'] != true) {
-                            setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
+                            setModalState(() { mensaje = 'âŒ Código inválido o inactivo.'; cargando = false; });
                             return;
                           }
                           final usosActuales = (data['usos_actuales'] as num?)?.toInt() ?? 0;
                           final usosMaximos = (data['usos_maximos'] as num?)?.toInt() ?? 0;
                           if (usosActuales >= usosMaximos) {
-                            setModalState(() { mensaje = '❌ Código agotado.'; cargando = false; });
+                            setModalState(() { mensaje = 'âŒ Código agotado.'; cargando = false; });
                             return;
                           }
                           await FirebaseFirestore.instance.collection('codigos_cortesia').doc(codigo).update({
@@ -855,7 +859,7 @@ class _MainScreenState extends State<MainScreen> {
                           final meses = (data['meses_gratis'] as num?)?.toInt() ?? 1;
                           setModalState(() { mensaje = '✅ ¡Código válido! Tenés $meses mes${meses > 1 ? "es" : ""} gratis de HDF Stats Premium.'; cargando = false; });
                         } catch (e) {
-                          setModalState(() { mensaje = '❌ Error al validar el código. Intentá de nuevo.'; cargando = false; });
+                          setModalState(() { mensaje = 'âŒ Error al validar el código. Intentá de nuevo.'; cargando = false; });
                         }
                       },
                       child: const Text('APLICAR', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1241,9 +1245,796 @@ class _MainScreenState extends State<MainScreen> {
   }
   // ── FIN TABLA ANUAL Y PROMEDIOS ───────────────────────────────────────────
 
+
+  // â•â• SECCIÃ“N MUNDIAL 2026 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  Widget _buildMundial() {
+    return DefaultTabController(
+      length: 5,
+      child: Column(children: [
+        Container(
+          color: const Color(0xFF1B2A3B),
+          child: const TabBar(
+            isScrollable: true,
+            indicatorColor: Color(0xFFFFD700),
+            labelColor: Color(0xFFFFD700),
+            unselectedLabelColor: Colors.white38,
+            labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+            tabs: [
+              Tab(text: 'GRUPOS'),
+              Tab(text: 'FIXTURE'),
+              Tab(text: 'GOLEADORES'),
+              Tab(text: 'CRUCES 32'),
+              Tab(text: 'SIMULADOR'),
+            ],
+          ),
+        ),
+        Expanded(child: TabBarView(children: [
+          _tabMundialGrupos(),
+          _tabMundialFixture(),
+          _tabMundialGoleadores(),
+          _tabMundialCruces(),
+          _tabMundialSimulador(),
+        ])),
+      ]),
+    );
+  }
+
+
+  // â•â• CRUCES 32AVOS MUNDIAL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  Widget _tabMundialCruces() {
+    return FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+      future: ApiService.getMundialGrupos(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+        final grupos = snapshot.data ?? {};
+        if (grupos.isEmpty)
+          return const Center(child: Text('Sin datos de grupos', style: TextStyle(color: Colors.white54)));
+
+        // Build classified teams
+        final List<Map<String, dynamic>> primeros = [];
+        final List<Map<String, dynamic>> segundos = [];
+        final List<Map<String, dynamic>> terceros = [];
+
+        grupos.forEach((grupo, teams) {
+          if (teams.length >= 1) primeros.add({...teams[0], 'grupo': grupo});
+          if (teams.length >= 2) segundos.add({...teams[1], 'grupo': grupo});
+          if (teams.length >= 3) terceros.add({...teams[2], 'grupo': grupo});
+        });
+
+        // Sort terceros by pts, gd, gf
+        terceros.sort((a, b) {
+          final pA = a['points'] as int? ?? 0;
+          final pB = b['points'] as int? ?? 0;
+          if (pA != pB) return pB.compareTo(pA);
+          final gdA = a['goalsDiff'] as int? ?? 0;
+          final gdB = b['goalsDiff'] as int? ?? 0;
+          if (gdA != gdB) return gdB.compareTo(gdA);
+          final gfA = (a['all'] as Map)['goals']['for'] as int? ?? 0;
+          final gfB = (b['all'] as Map)['goals']['for'] as int? ?? 0;
+          return gfB.compareTo(gfA);
+        });
+        final mejoresTerceros = terceros.take(8).toList();
+        final eliminados = terceros.skip(8).toList();
+
+        // Build Round of 32 matchups (simplified - group winners vs runners-up/thirds)
+        // Real FIFA has 495 scenarios - we show projected matchups based on current standings
+        final List<Map<String, dynamic>> cruces = [];
+        for (int i = 0; i < primeros.length && i < segundos.length; i++) {
+          cruces.add({'local': primeros[i], 'visita': segundos[(i + 6) % segundos.length], 'tipo': '1° vs 2°'});
+        }
+
+        return ListView(padding: const EdgeInsets.all(12), children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B2A3B),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
+            ),
+            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('ROUND OF 32 — PROYECCION ACTUAL', style: TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              SizedBox(height: 4),
+              Text('Basado en la tabla actual. Los cruces finales se definen el 27/06 con los 495 escenarios FIFA.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+            ]),
+          ),
+
+          // Clasificados
+          _sectionTitle('CLASIFICADOS DIRECTOS (24)'),
+          const SizedBox(height: 4),
+          const Text('PRIMEROS DE GRUPO (12)', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 4),
+          ...primeros.map((t) => _mundialTeamRow(t, const Color(0xFF00C853))),
+          const SizedBox(height: 8),
+          const Text('SEGUNDOS DE GRUPO (12)', style: TextStyle(color: Color(0xFF2196F3), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 4),
+          ...segundos.map((t) => _mundialTeamRow(t, const Color(0xFF2196F3))),
+          const SizedBox(height: 12),
+
+          // Mejores terceros
+          _sectionTitle('MEJORES TERCEROS (8 clasifican)'),
+          const SizedBox(height: 4),
+          ...terceros.asMap().entries.map((entry) {
+            final i = entry.key;
+            final t = entry.value;
+            final clasifica = i < 8;
+            return _mundialTeamRow(t, clasifica ? const Color(0xFFFF6F00) : Colors.white24,
+                extra: clasifica ? '✓ CLASIFICA' : '✗ ELIMINADO');
+          }),
+          const SizedBox(height: 12),
+
+          // Cruces proyectados
+          _sectionTitle('CRUCES PROYECTADOS — ROUND OF 32'),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+            child: const Text('🌟 1° de grupo vs 2° de grupo (cruzado) + Mejores 3° vs 1° de grupo\nLos cruces exactos dependen de los 495 escenarios FIFA pre-definidos.',
+              style: TextStyle(color: Colors.white54, fontSize: 11)),
+          ),
+          // Show projected bracket
+          ...primeros.asMap().entries.map((entry) {
+            final i = entry.key;
+            final primer = entry.value;
+            // Simplified: 1st of group X vs 2nd of group Y (crossing)
+            final rival = i < mejoresTerceros.length
+                ? mejoresTerceros[i]
+                : (segundos.isNotEmpty ? segundos[(i + 6) % segundos.length] : null);
+            if (rival == null) return const SizedBox.shrink();
+            return _mundialCruceRow(primer, rival);
+          }),
+        ]);
+      },
+    );
+  }
+
+  Widget _mundialTeamRow(Map<String, dynamic> team, Color color, {String? extra}) {
+    final t = team['team'] as Map<String, dynamic>? ?? team;
+    final nombre = t['name'] as String? ?? team['nombre'] as String? ?? '';
+    final logo = t['logo'] as String?;
+    final grupo = team['grupo'] as String? ?? '';
+    final pts = team['points'] as int? ?? 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(7),
+        border: Border(left: BorderSide(color: color, width: 3)),
+      ),
+      child: Row(children: [
+        if (logo != null) Image.network(logo, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
+        if (grupo.isNotEmpty) Text(grupo.replaceAll('Group ', 'Gr.'), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+        const SizedBox(width: 8),
+        Text('$pts pts', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+        if (extra != null) ...[const SizedBox(width: 8), Text(extra, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold))],
+      ]),
+    );
+  }
+
+  Widget _mundialCruceRow(Map<String, dynamic> local, Map<String, dynamic> visita) {
+    final tL = local['team'] as Map<String, dynamic>? ?? local;
+    final tV = visita['team'] as Map<String, dynamic>? ?? visita;
+    final nombreL = tL['name'] as String? ?? '';
+    final nombreV = tV['name'] as String? ?? '';
+    final logoL = tL['logo'] as String?;
+    final logoV = tV['logo'] as String?;
+    final grupoL = local['grupo'] as String? ?? '';
+    final grupoV = visita['grupo'] as String? ?? '';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            if (logoL != null) Image.network(logoL, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+            const SizedBox(width: 6),
+            Expanded(child: Text(nombreL, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
+            Text(grupoL.replaceAll('Group ', '1° Gr.'), style: const TextStyle(color: Color(0xFF00C853), fontSize: 10)),
+          ]),
+        ])),
+        Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(4)),
+          child: const Text('VS', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            Text(grupoV.replaceAll('Group ', '3° Gr.'), style: const TextStyle(color: Color(0xFFFF6F00), fontSize: 10)),
+            const SizedBox(width: 6),
+            Expanded(child: Text(nombreV, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
+            const SizedBox(width: 6),
+            if (logoV != null) Image.network(logoV, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+          ]),
+        ])),
+      ]),
+    );
+  }
+
+  // â•â• SIMULADOR â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  Widget _tabMundialSimulador() {
+    return _MundialSimuladorWidget(key: ValueKey('simulador'));
+  }
+  // â•â• FIN CRUCES MUNDIAL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+  Widget _tabMundialGrupos() {
+    return FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+      future: ApiService.getMundialGrupos(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            CircularProgressIndicator(color: Color(0xFFFFD700)),
+            SizedBox(height: 12),
+            Text('Cargando grupos...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+          ]));
+        }
+        final grupos = snapshot.data ?? {};
+        if (grupos.isEmpty) {
+          return const Center(child: Text('Sin datos de grupos', style: TextStyle(color: Colors.white54)));
+        }
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            // Header Mundial
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF1B2A3B), Color(0xFF0D1B2A)]),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
+              ),
+              child: Row(children: [
+                const Text('🌎', style: TextStyle(fontSize: 28)),
+                const SizedBox(width: 12),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('COPA MUNDIAL FIFA 2026', style: TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  const Text('Canadá • México • Estados Unidos', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  const Text('11 junio — 19 julio 2026', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                ]),
+              ]),
+            ),
+            // Grupos
+            ...grupos.entries.map((entry) {
+              final groupName = entry.key;
+              final teams = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(10)),
+                child: Column(children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                    ),
+                    child: Text(groupName.toUpperCase(), style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: Row(children: [
+                      const Expanded(child: Text('SELECCION', style: TextStyle(color: Colors.white38, fontSize: 10))),
+                      const SizedBox(width: 28, child: Text('PJ', style: TextStyle(color: Colors.white38, fontSize: 10), textAlign: TextAlign.center)),
+                      const SizedBox(width: 28, child: Text('G', style: TextStyle(color: Colors.white38, fontSize: 10), textAlign: TextAlign.center)),
+                      const SizedBox(width: 28, child: Text('E', style: TextStyle(color: Colors.white38, fontSize: 10), textAlign: TextAlign.center)),
+                      const SizedBox(width: 28, child: Text('P', style: TextStyle(color: Colors.white38, fontSize: 10), textAlign: TextAlign.center)),
+                      const SizedBox(width: 28, child: Text('DG', style: TextStyle(color: Colors.white38, fontSize: 10), textAlign: TextAlign.center)),
+                      const SizedBox(width: 32, child: Text('PTS', style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                    ]),
+                  ),
+                  ...teams.asMap().entries.map((te) {
+                    final i = te.key;
+                    final team = te.value;
+                    final t = team['team'] as Map<String, dynamic>;
+                    final s = team['all'] as Map<String, dynamic>;
+                    final pts = team['points'] as int? ?? 0;
+                    final gd = (team['goalsDiff'] as int? ?? 0);
+                    final gdStr = gd > 0 ? '+$gd' : gd.toString();
+                    final isTop2 = i < 2;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isTop2 ? const Color(0xFFFFD700).withValues(alpha: 0.05) : Colors.transparent,
+                        border: Border(
+                          left: BorderSide(color: isTop2 ? const Color(0xFFFFD700) : Colors.transparent, width: 3),
+                        ),
+                      ),
+                      child: GestureDetector(
+                      onTap: () => _mostrarPerfilSeleccion(context, t['id'] as int, t['name'] as String? ?? '', t['logo'] as String?),
+                      child: Row(children: [
+                        SizedBox(width: 18, child: Text('${i+1}', style: TextStyle(color: isTop2 ? const Color(0xFFFFD700) : Colors.white54, fontSize: 12, fontWeight: isTop2 ? FontWeight.bold : FontWeight.normal))),
+                        const SizedBox(width: 4),
+                        if (t['logo'] != null)
+                          Image.network(t['logo'] as String, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
+                        SizedBox(width: 28, child: Text((s['played'] as int? ?? 0).toString(), style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
+                        SizedBox(width: 28, child: Text((s['win'] as int? ?? 0).toString(), style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
+                        SizedBox(width: 28, child: Text((s['draw'] as int? ?? 0).toString(), style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
+                        SizedBox(width: 28, child: Text((s['lose'] as int? ?? 0).toString(), style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
+                        SizedBox(width: 28, child: Text(gdStr, style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
+                        SizedBox(width: 32, child: Text(pts.toString(), style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                      ])),
+                    );
+                  }),
+                  const SizedBox(height: 4),
+                ]),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _tabMundialFixture() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: ApiService.getMundialFixture(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+        }
+        final partidos = snapshot.data ?? [];
+        if (partidos.isEmpty) return const Center(child: Text('Sin partidos disponibles', style: TextStyle(color: Colors.white54)));
+        // Agrupar por fecha
+        final Map<String, List<Map<String, dynamic>>> porFecha = {};
+        for (final p in partidos) {
+          final dateStr = p['fixture']['date'] as String? ?? '';
+          final dt = DateTime.tryParse(dateStr)?.toLocal();
+          if (dt == null) continue;
+          final key = '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')}/${dt.year}';
+          porFecha[key] = [...(porFecha[key] ?? []), p];
+        }
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: porFecha.entries.map((entry) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(entry.key, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
+              ...entry.value.map((p) {
+                final fixture = p['fixture'] as Map<String, dynamic>;
+                final teams = p['teams'] as Map<String, dynamic>;
+                final goals = p['goals'] as Map<String, dynamic>;
+                final home = teams['home'] as Map<String, dynamic>;
+                final away = teams['away'] as Map<String, dynamic>;
+                final status = fixture['status']['short'] as String? ?? '';
+                final dt = DateTime.tryParse(fixture['date'] as String? ?? '')?.toLocal();
+                final hora = dt != null ? '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}' : '--:--';
+                final jugado = status == 'FT' || status == 'AET' || status == 'PEN';
+                final gH = goals['home']?.toString() ?? '-';
+                final gA = goals['away']?.toString() ?? '-';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+                  child: Row(children: [
+                    Expanded(child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                      Text(home['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), textAlign: TextAlign.right),
+                      const SizedBox(width: 6),
+                      if (home['logo'] != null)
+                        Image.network(home['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                    ])),
+                    Container(
+                      width: 70,
+                      alignment: Alignment.center,
+                      child: jugado
+                          ? Text('$gH - $gA', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold))
+                          : Text(hora, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    ),
+                    Expanded(child: Row(children: [
+                      if (away['logo'] != null)
+                        Image.network(away['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                      const SizedBox(width: 6),
+                      Text(away['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
+                    ])),
+                  ]),
+                );
+              }),
+            ]);
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _tabMundialGoleadores() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: ApiService.getMundialGoleadores(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+        }
+        final goleadores = snapshot.data ?? [];
+        if (goleadores.isEmpty) {
+          return const Center(child: Text('Sin datos de goleadores', style: TextStyle(color: Colors.white54)));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: goleadores.length,
+          itemBuilder: (context, i) {
+            final item = goleadores[i];
+            final player = item['player'] as Map<String, dynamic>;
+            final stats = (item['statistics'] as List).first as Map<String, dynamic>;
+            final team = stats['team'] as Map<String, dynamic>;
+            final goals = stats['goals']['total'] as int? ?? 0;
+            final assists = stats['goals']['assists'] as int? ?? 0;
+            final foto = player['photo'] as String?;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: i < 3 ? const Color(0xFFFFD700).withValues(alpha: 0.08) : const Color(0xFF1B2A3B),
+                borderRadius: BorderRadius.circular(8),
+                border: i < 3 ? Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)) : null,
+              ),
+              child: Row(children: [
+                SizedBox(width: 24, child: Text('${i+1}', style: TextStyle(
+                  color: i == 0 ? const Color(0xFFFFD700) : i == 1 ? Colors.white54 : i == 2 ? const Color(0xFFCD7F32) : Colors.white38,
+                  fontSize: 13, fontWeight: FontWeight.bold))),
+                if (foto != null)
+                  CircleAvatar(backgroundImage: NetworkImage(foto), radius: 16, backgroundColor: Colors.transparent)
+                else
+                  const CircleAvatar(radius: 16, backgroundColor: Color(0xFF1B2A3B), child: Icon(Icons.person, color: Colors.white38, size: 16)),
+                const SizedBox(width: 8),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(player['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                  Row(children: [
+                    if (team['logo'] != null)
+                      Image.network(team['logo'] as String, width: 14, height: 14, errorBuilder: (_, __, ___) => const SizedBox()),
+                    const SizedBox(width: 4),
+                    Text(team['name'] as String? ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  ]),
+                ])),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('⚽ $goals', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold)),
+                  if (assists > 0) Text('🎯 $assists', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                ]),
+              ]),
+            );
+          },
+        );
+      },
+    );
+  }
+  // â•â• FIN MUNDIAL 2026 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+
+  // â•â• PERFIL DE SELECCIÃ“N â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+  // == SECCION NOTICIAS ====================================================
+  Widget _buildNoticias() {
+    final teamId = _equipoFavoritoId;
+    final teamName = _equipoFavoritoNombre;
+    final bool tieneFavorito = teamId != null && teamId != -1;
+
+    return Column(children: [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        color: const Color(0xFF0D1B2A),
+        child: Row(children: [
+          const Icon(Icons.newspaper, color: Color(0xFF00C853), size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('NOTICIAS', style: TextStyle(color: Color(0xFF00C853), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Text(
+              tieneFavorito ? 'Filtrando por $teamName' : 'Configura tu equipo favorito en MI CUENTA',
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ])),
+          if (tieneFavorito)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00C853).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4)),
+              ),
+              child: Text(teamName!, style: const TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+        ]),
+      ),
+      Expanded(
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: ApiService.getNoticias(teamId: teamId, teamName: teamName),
+          builder: (ctx, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                CircularProgressIndicator(color: Color(0xFF00C853)),
+                SizedBox(height: 12),
+                Text('Buscando noticias...', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              ]));
+            }
+            if (!snap.hasData || snap.data!.isEmpty) {
+              return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.newspaper_outlined, color: Colors.white24, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  tieneFavorito
+                    ? 'No hay noticias recientes de $teamName'
+                    : 'Configura tu equipo favorito en MI CUENTA para ver noticias',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ]));
+            }
+            final noticias = snap.data!;
+            return RefreshIndicator(
+              color: const Color(0xFF00C853),
+              onRefresh: () async => setState(() {}),
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: noticias.length,
+                itemBuilder: (ctx, i) => _buildNoticiaCard(noticias[i]),
+              ),
+            );
+          },
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildNoticiaCard(Map<String, dynamic> noticia) {
+    final titulo = noticia['titulo'] as String? ?? '';
+    final descripcion = noticia['descripcion'] as String? ?? '';
+    final fecha = noticia['fecha'] as String? ?? '';
+    final imagen = noticia['imagen'] as String? ?? '';
+    final descCorta = descripcion.length > 140 ? descripcion.substring(0, 140) + '...' : descripcion;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(10)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (imagen.isNotEmpty)
+          ClipRRect(
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
+            child: Image.network(imagen, width: 90, height: 90, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox(width: 0)),
+          ),
+        Expanded(child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(titulo,
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, height: 1.35),
+              maxLines: 3, overflow: TextOverflow.ellipsis),
+            if (descCorta.isNotEmpty) ...[
+              const SizedBox(height: 5),
+              Text(descCorta,
+                style: const TextStyle(color: Colors.white60, fontSize: 10, height: 1.3),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            ],
+            if (fecha.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(fecha, style: const TextStyle(color: Colors.white30, fontSize: 9)),
+            ],
+          ]),
+        )),
+      ]),
+    );
+  }
+  // == FIN SECCION NOTICIAS ================================================
+
+  void _mostrarPerfilSeleccion(BuildContext context, int teamId, String nombre, String? logo) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0D1B2A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (_, sc) => DefaultTabController(
+          length: 3,
+          child: Column(children: [
+            Container(margin: const EdgeInsets.only(top: 10, bottom: 6), width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(children: [
+                if (logo != null) Image.network(logo, width: 52, height: 52,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.flag, color: Colors.white38, size: 52)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold))),
+              ]),
+            ),
+            const TabBar(
+              indicatorColor: Color(0xFFFFD700),
+              labelColor: Color(0xFFFFD700),
+              unselectedLabelColor: Colors.white54,
+              tabs: [Tab(text: 'PLANTEL'), Tab(text: 'STATS COPA'), Tab(text: 'CARRERA')],
+            ),
+            Expanded(child: TabBarView(children: [
+              // Tab 1: PLANTEL
+              FutureBuilder<List<dynamic>>(
+                future: _getPlantelSeleccion(teamId),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting)
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+                  final players = snap.data ?? [];
+                  if (players.isEmpty)
+                    return const Center(child: Text('Sin datos de plantel', style: TextStyle(color: Colors.white54)));
+                  // Group by position
+                  final Map<String, List> byPos = {'Goalkeeper': [], 'Defender': [], 'Midfielder': [], 'Forward': []};
+                  for (final p in players) {
+                    final pos = p['position'] as String? ?? 'Midfielder';
+                    byPos[pos]?.add(p);
+                  }
+                  final posLabels = {'Goalkeeper': '🧤 ARQUEROS', 'Defender': '🛡️ DEFENSORES', 'Midfielder': '⚙️ MEDIOCAMPISTAS', 'Forward': '⚡ DELANTEROS'};
+                  return ListView(controller: sc, padding: const EdgeInsets.all(12), children: [
+                    ...byPos.entries.where((e) => e.value.isNotEmpty).map((e) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(posLabels[e.key] ?? e.key, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1))),
+                        ...e.value.map((p) => Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+                          child: Row(children: [
+                            Container(width: 28, height: 28, alignment: Alignment.center,
+                              decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(6)),
+                              child: Text('${p['number'] ?? ''}', style: const TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold))),
+                            const SizedBox(width: 10),
+                            if (p['photo'] != null)
+                              CircleAvatar(backgroundImage: NetworkImage(p['photo'] as String), radius: 18, backgroundColor: const Color(0xFF0D1B2A))
+                            else
+                              const CircleAvatar(radius: 18, backgroundColor: Color(0xFF0D1B2A), child: Icon(Icons.person, color: Colors.white38, size: 16)),
+                            const SizedBox(width: 10),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(p['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text('${p['age']} años', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                            ])),
+                          ]),
+                        )),
+                      ],
+                    )),
+                  ]);
+                },
+              ),
+              // Tab 2: STATS COPA
+              FutureBuilder<List<dynamic>>(
+                future: _getStatsCopa(teamId),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting)
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+                  final players = snap.data ?? [];
+                  if (players.isEmpty)
+                    return const Center(child: Padding(padding: EdgeInsets.all(24),
+                      child: Text('Sin estadisticas aun. El Mundial arranca el 11/06/2026.',
+                        style: TextStyle(color: Colors.white54, fontSize: 13), textAlign: TextAlign.center)));
+                  return ListView.builder(
+                    controller: sc,
+                    padding: const EdgeInsets.all(12),
+                    itemCount: players.length,
+                    itemBuilder: (ctx, i) {
+                      final item = players[i];
+                      final p = item['player'] as Map<String, dynamic>;
+                      final stats = (item['statistics'] as List).first as Map<String, dynamic>;
+                      final goals = stats['goals']['total'] as int? ?? 0;
+                      final assists = stats['goals']['assists'] as int? ?? 0;
+                      final games = stats['games']['appearences'] as int? ?? 0;
+                      final rating = double.tryParse(stats['games']['rating']?.toString() ?? '') ?? 0.0;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+                        child: Row(children: [
+                          if (p['photo'] != null)
+                            CircleAvatar(backgroundImage: NetworkImage(p['photo'] as String), radius: 16)
+                          else
+                            const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 14)),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(p['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                          Text('⚽$goals', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Text('🎯$assists', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          const SizedBox(width: 8),
+                          Text('${games}PJ', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                          if (rating > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+                              child: Text(rating.toStringAsFixed(1), style: const TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold))),
+                          ],
+                        ]),
+                      );
+                    },
+                  );
+                },
+              ),
+              // Tab 3: CARRERA en selección
+              FutureBuilder<List<dynamic>>(
+                future: _getCarreraSeleccion(teamId),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting)
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+                  final players = snap.data ?? [];
+                  if (players.isEmpty)
+                    return const Center(child: Text('Sin datos históricos', style: TextStyle(color: Colors.white54)));
+                  return ListView.builder(
+                    controller: sc,
+                    padding: const EdgeInsets.all(12),
+                    itemCount: players.length,
+                    itemBuilder: (ctx, i) {
+                      final item = players[i];
+                      final p = item['player'] as Map<String, dynamic>;
+                      final statsList = item['statistics'] as List;
+                      // Filter only national team competitions
+                      final natStats = statsList.where((s) {
+                        final ln = (s['league']['name'] as String? ?? '').toLowerCase();
+                        return ln.contains('world cup') || ln.contains('copa america') ||
+                               ln.contains('friendly') || ln.contains('qualif') || ln.contains('nations');
+                      }).toList();
+                      if (natStats.isEmpty) return const SizedBox.shrink();
+                      int totalPJ = 0, totalGoles = 0, totalAsist = 0;
+                      for (final s in natStats) {
+                        totalPJ += (s['games']['appearences'] as int? ?? 0);
+                        totalGoles += (s['goals']['total'] as int? ?? 0);
+                        totalAsist += (s['goals']['assists'] as int? ?? 0);
+                      }
+                      if (totalPJ == 0) return const SizedBox.shrink();
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+                        child: Row(children: [
+                          if (p['photo'] != null)
+                            CircleAvatar(backgroundImage: NetworkImage(p['photo'] as String), radius: 16)
+                          else
+                            const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 14)),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(p['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                          Text('${totalPJ}PJ', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                          const SizedBox(width: 8),
+                          Text('⚽$totalGoles', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Text('🎯$totalAsist', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ]),
+                      );
+                    },
+                  );
+                },
+              ),
+            ])),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<List<dynamic>> _getPlantelSeleccion(int teamId) async {
+    try {
+      final data = await ApiService.getPlantelSeleccion(teamId);
+      return data;
+    } catch (e) { return []; }
+  }
+
+  Future<List<dynamic>> _getStatsCopa(int teamId) async {
+    try {
+      return await ApiService.getStatsCopaJugadores(teamId);
+    } catch (e) { return []; }
+  }
+
+  Future<List<dynamic>> _getCarreraSeleccion(int teamId) async {
+    try {
+      return await ApiService.getCarreraJugadoresSeleccion(teamId);
+    } catch (e) { return []; }
+  }
+  // â•â• FIN PERFIL DE SELECCIÃ“N â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
   Widget _buildTablas() {
     return DefaultTabController(
-      length: 11,
+      length: 12,
       child: Column(children: [
         Container(
           color: const Color(0xFF1B2A3B),
@@ -1265,6 +2056,7 @@ class _MainScreenState extends State<MainScreen> {
               Tab(text: 'CRUCES 🏆'),
               Tab(text: 'ANUAL 📅'),
               Tab(text: 'PROMEDIOS 📉'),
+              Tab(text: 'FECHA ⭐'),
             ],
           ),
         ),
@@ -1280,8 +2072,246 @@ class _MainScreenState extends State<MainScreen> {
           _buildCruces(),
           _tabAnual(),
           _tabPromedios(),
+          _tabEquipoDeFecha(),
         ])),
       ]),
+    );
+  }
+
+  Widget _tabEquipoDeFecha() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: ApiService.getEquipoDeFecha(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('Sin datos de la última fecha',
+              style: TextStyle(color: Colors.white54, fontSize: 13)));
+        }
+        final todos  = snapshot.data!;
+        final figura = todos.first;
+        final figuraId = figura['id'] as int;
+        final arqueros   = todos.where((p) => (p['posicion'] as String).toUpperCase() == 'G').take(1).toList();
+        final defensores = todos.where((p) => (p['posicion'] as String).toUpperCase() == 'D').take(4).toList();
+        final medios     = todos.where((p) => (p['posicion'] as String).toUpperCase() == 'M').take(3).toList();
+        final delanteros = todos.where((p) => (p['posicion'] as String).toUpperCase() == 'F').take(3).toList();
+        final top20      = todos.take(20).toList();
+        final enFormacion = <int>{
+          ...arqueros.map((p) => p['id'] as int),
+          ...defensores.map((p) => p['id'] as int),
+          ...medios.map((p) => p['id'] as int),
+          ...delanteros.map((p) => p['id'] as int),
+        };
+        final restantes = todos.where((p) => !enFormacion.contains(p['id'] as int)).toList();
+        final arq = List<Map<String, dynamic>>.from(arqueros);
+        final def = List<Map<String, dynamic>>.from(defensores);
+        final med = List<Map<String, dynamic>>.from(medios);
+        final del = List<Map<String, dynamic>>.from(delanteros);
+        for (var p in restantes) {
+          if (arq.isEmpty)    { arq.add(p); continue; }
+          if (def.length < 4) { def.add(p); continue; }
+          if (med.length < 3) { med.add(p); continue; }
+          if (del.length < 3) { del.add(p); break; }
+        }
+        Widget jugadorCancha(Map<String, dynamic> p) {
+          final esFigura   = (p['id'] as int) == figuraId;
+          final foto       = p['foto'] as String? ?? '';
+          final nombre     = p['nombre'] as String? ?? '';
+          final apellido   = nombre.contains(' ') ? nombre.split(' ').last : nombre;
+          final rating     = p['rating'] as double;
+          final logoEquipo = p['equipoLogo'] as String? ?? '';
+          final col = esFigura ? const Color(0xFFFFD700)
+              : rating >= 8.0 ? const Color(0xFF00C853)
+              : rating >= 7.0 ? const Color(0xFFFF9800)
+              : const Color(0xFF2196F3);
+          final r = esFigura ? 24.0 : 20.0;
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            Stack(clipBehavior: Clip.none, children: [
+              Container(
+                width: r * 2, height: r * 2,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: col, width: esFigura ? 3 : 2),
+                  boxShadow: [BoxShadow(color: col.withValues(alpha: esFigura ? 0.6 : 0.3), blurRadius: esFigura ? 10 : 5)],
+                  image: foto.isNotEmpty ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover) : null,
+                  color: const Color(0xFF1B2A3B),
+                ),
+                child: foto.isEmpty ? Icon(Icons.person, color: Colors.white38, size: r * 0.9) : null,
+              ),
+              if (esFigura) const Positioned(top: -10, left: 0, right: 0,
+                child: Center(child: Text('⭐', style: TextStyle(fontSize: 11)))),
+              if (logoEquipo.isNotEmpty)
+                Positioned(bottom: -4, right: -4,
+                  child: Container(
+                    width: 18, height: 18,
+                    decoration: BoxDecoration(color: const Color(0xFF0D1B2A), shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white24, width: 1)),
+                    child: ClipOval(child: Image.network(logoEquipo, fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white24, size: 12))),
+                  )),
+            ]),
+            const SizedBox(height: 4),
+            SizedBox(width: 52, child: Text(apellido,
+                style: TextStyle(color: esFigura ? const Color(0xFFFFD700) : Colors.white,
+                    fontSize: esFigura ? 9 : 8, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center, overflow: TextOverflow.ellipsis)),
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(3)),
+              child: Text(rating.toStringAsFixed(1),
+                  style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold)),
+            ),
+          ]);
+        }
+        Widget fila(List<Map<String, dynamic>> players) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: players.map(jugadorCancha).toList()));
+        final figuraFoto   = figura['foto'] as String? ?? '';
+        final figuraLogo   = figura['equipoLogo'] as String? ?? '';
+        final figuraEquipo = figura['equipo'] as String? ?? '';
+        final figuraRating = figura['rating'] as double;
+        final figuraNombre = figura['nombre'] as String? ?? '';
+        return SingleChildScrollView(child: Column(children: [
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF2A1F00), Color(0xFF1B2A3B)],
+                  begin: Alignment.centerLeft, end: Alignment.centerRight),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFFD700), width: 1.5),
+              boxShadow: [BoxShadow(color: const Color(0xFFFFD700).withValues(alpha: 0.2), blurRadius: 12)],
+            ),
+            child: Row(children: [
+              Container(
+                width: 70, height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFFFD700), width: 3),
+                  boxShadow: [BoxShadow(color: const Color(0xFFFFD700).withValues(alpha: 0.4), blurRadius: 12)],
+                  image: figuraFoto.isNotEmpty ? DecorationImage(image: NetworkImage(figuraFoto), fit: BoxFit.cover) : null,
+                  color: const Color(0xFF1B2A3B),
+                ),
+                child: figuraFoto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 34) : null,
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('⭐ FIGURA DE LA FECHA',
+                    style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const SizedBox(height: 4),
+                Text(figuraNombre, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Row(children: [
+                  if (figuraLogo.isNotEmpty) ...[
+                    Image.network(figuraLogo, width: 20, height: 20,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 16)),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(child: Text(figuraEquipo,
+                      style: const TextStyle(color: Colors.white60, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                ]),
+              ])),
+              const SizedBox(width: 12),
+              Container(
+                width: 52, height: 52,
+                decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+                    border: Border.all(color: const Color(0xFFFFD700), width: 2)),
+                child: Center(child: Text(figuraRating.toStringAsFixed(1),
+                    style: const TextStyle(color: Color(0xFFFFD700), fontSize: 18, fontWeight: FontWeight.bold))),
+              ),
+            ]),
+          ),
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1A5C2A), Color(0xFF144D22)]),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white24),
+            ),
+            child: Column(children: [
+              const Padding(padding: EdgeInsets.only(top: 10, bottom: 2),
+                child: Text('EQUIPO DE LA FECHA',
+                    style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5))),
+              const Divider(color: Colors.white12, indent: 20, endIndent: 20),
+              if (del.isNotEmpty) fila(del),
+              if (med.isNotEmpty) fila(med),
+              if (def.isNotEmpty) fila(def),
+              const Divider(color: Colors.white12, indent: 20, endIndent: 20),
+              if (arq.isNotEmpty) fila(arq),
+              const SizedBox(height: 8),
+            ]),
+          ),
+          const Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 6),
+            child: Align(alignment: Alignment.centerLeft,
+              child: Text('TOP 20 — ÚLTIMA FECHA',
+                  style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.5)))),
+          ...top20.asMap().entries.map((e) {
+            final i = e.key;
+            final p = e.value;
+            final esFigura = (p['id'] as int) == figuraId;
+            final foto   = p['foto'] as String? ?? '';
+            final logo   = p['equipoLogo'] as String? ?? '';
+            final equipo = p['equipo'] as String? ?? '';
+            final rating = p['rating'] as double;
+            final col = esFigura ? const Color(0xFFFFD700)
+                : rating >= 8.0 ? const Color(0xFF00C853)
+                : rating >= 7.0 ? const Color(0xFFFF9800)
+                : Colors.white54;
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: esFigura ? const Color(0xFF2A1F00) : const Color(0xFF1B2A3B),
+                borderRadius: BorderRadius.circular(8),
+                border: esFigura ? Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.5), width: 1) : null,
+              ),
+              child: ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                leading: Row(mainAxisSize: MainAxisSize.min, children: [
+                  SizedBox(width: 22, child: Text('${i + 1}',
+                      style: TextStyle(color: esFigura ? const Color(0xFFFFD700) : Colors.white38,
+                          fontSize: 11, fontWeight: FontWeight.bold))),
+                  CircleAvatar(radius: 18, backgroundColor: const Color(0xFF0D1B2A),
+                      backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
+                      child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 16) : null),
+                ]),
+                title: Row(children: [
+                  Expanded(child: Text(p['nombre'] as String? ?? '',
+                      style: TextStyle(color: esFigura ? const Color(0xFFFFD700) : Colors.white,
+                          fontSize: 12, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis)),
+                  if (esFigura) const Text(' ⭐', style: TextStyle(fontSize: 11)),
+                ]),
+                subtitle: Row(children: [
+                  if (logo.isNotEmpty) ...[
+                    Image.network(logo, width: 14, height: 14,
+                        errorBuilder: (_, __, ___) => const SizedBox(width: 14)),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(child: Text(equipo,
+                      style: const TextStyle(color: Colors.white38, fontSize: 10), overflow: TextOverflow.ellipsis)),
+                ]),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: col.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: col, width: 1)),
+                  child: Text(rating.toStringAsFixed(1),
+                      style: TextStyle(color: col, fontWeight: FontWeight.bold, fontSize: 14)),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 20),
+        ]));
+      },
     );
   }
 
@@ -1313,13 +2343,28 @@ class _MainScreenState extends State<MainScreen> {
                 const SizedBox(height: 8),
                 _tablaHeader(),
                 ...zona.value.map((equipo) {
-                  final team = equipo['team'];
-                  final stats = equipo['all'];
-                  final teamId = team['id'] as int;
-                  final vivo = enVivoMap[teamId];
-                  final nombre = vivo != null ? '${team['name']} ($vivo)' : team['name'];
-                  final rank = equipo['rank'] as int? ?? 0;
-                  return _tablaRowConClasif(equipo['rank'].toString(), nombre, stats['played'].toString(), stats['win'].toString(), stats['draw'].toString(), stats['lose'].toString(), equipo['points'].toString(), enVivo: vivo != null, logo: team['logo'] as String?, teamId: team['id'] as int?, clasifica: rank <= 8);
+                  try {
+                    final team = (equipo['team'] as Map<String, dynamic>?) ?? {};
+                    final stats = (equipo['all'] as Map<String, dynamic>?) ?? {};
+                    final teamId = team['id'] as int? ?? 0;
+                    final nombre = team['name'] as String? ?? '—';
+                    final vivo = enVivoMap[teamId];
+                    final nombreDisplay = vivo != null ? '$nombre ($vivo)' : nombre;
+                    final rank = equipo['rank'] as int? ?? 0;
+                    return _tablaRowConClasif(
+                      rank.toString(), nombreDisplay,
+                      (stats['played'] ?? 0).toString(),
+                      (stats['win'] ?? 0).toString(),
+                      (stats['draw'] ?? 0).toString(),
+                      (stats['lose'] ?? 0).toString(),
+                      (equipo['points'] ?? 0).toString(),
+                      enVivo: vivo != null,
+                      logo: team['logo'] as String?,
+                      teamId: teamId,
+                      clasifica: rank <= 8);
+                  } catch (_) {
+                    return const SizedBox.shrink();
+                  }
                 }),
                 const SizedBox(height: 16),
               ],
@@ -1561,14 +2606,14 @@ class _MainScreenState extends State<MainScreen> {
               const SizedBox(height: 4),
               // Mini stats row
               Row(children: [
-                _miniStatBadge('$amarillas', 'âš¡', Colors.amber),
+                _miniStatBadge('$amarillas', '⚡', Colors.amber),
                 const SizedBox(width: 4),
                 _miniStatBadge('$rojas', '🟥', Colors.red),
                 const SizedBox(width: 4),
-                _miniStatBadge('$penales', 'âš½', Colors.white70),
+                _miniStatBadge('$penales', '⚽', Colors.white70),
                 if (golesCorner > 0) ...[
                   const SizedBox(width: 4),
-                  _miniStatBadge('$golesCorner', '📐', const Color(0xFFFFD700)),
+                  _miniStatBadge('$golesCorner', 'ðŸ“', const Color(0xFFFFD700)),
                 ],
               ]),
             ])),
@@ -1646,7 +2691,7 @@ class _MainScreenState extends State<MainScreen> {
                 decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Text('âš¡', style: TextStyle(fontSize: 11)),
+                    const Text('⚡', style: TextStyle(fontSize: 11)),
                     const SizedBox(width: 4),
                     const Text('AMARILLAS', style: TextStyle(color: Colors.white38, fontSize: 8, letterSpacing: 1)),
                     const Spacer(),
@@ -1685,7 +2730,7 @@ class _MainScreenState extends State<MainScreen> {
                 decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const Row(children: [
-                    Text('âš½', style: TextStyle(fontSize: 11)),
+                    Text('⚽', style: TextStyle(fontSize: 11)),
                     SizedBox(width: 4),
                     Text('PENALES', style: TextStyle(color: Colors.white38, fontSize: 8, letterSpacing: 1)),
                   ]),
@@ -1774,11 +2819,11 @@ class _MainScreenState extends State<MainScreen> {
                   ]),
                   const SizedBox(height: 8),
                   Row(children: [
-                    _varChip('â›" Goles anul.', '${varGolesAnuladosLocal + varGolesAnuladosVisit}', 'L:$varGolesAnuladosLocal V:$varGolesAnuladosVisit'),
+                    _varChip('➔" Goles anul.', '${varGolesAnuladosLocal + varGolesAnuladosVisit}', 'L:$varGolesAnuladosLocal V:$varGolesAnuladosVisit'),
                     const SizedBox(width: 6),
                     _varChip('✅ Pen. conf.', '$varPenalesConf', ''),
                     const SizedBox(width: 6),
-                    _varChip('❌ Pen. anul.', '$varPenalesAnul', ''),
+                    _varChip('âŒ Pen. anul.', '$varPenalesAnul', ''),
                   ]),
                 ]),
               ),
@@ -1795,7 +2840,7 @@ class _MainScreenState extends State<MainScreen> {
                   border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.2)),
                 ),
                 child: Row(children: [
-                  const Text('📐', style: TextStyle(fontSize: 13)),
+                  const Text('ðŸ“', style: TextStyle(fontSize: 13)),
                   const SizedBox(width: 8),
                   const Expanded(child: Text('Goles de córner (olímpico)', style: TextStyle(color: Colors.white70, fontSize: 11))),
                   Container(
@@ -1896,7 +2941,7 @@ class _MainScreenState extends State<MainScreen> {
                     final e = (s['draw'] as num? ?? 0).toString();
                     final p = (s['lose'] as num? ?? 0).toString();
                     final pts = (((s['win'] as num? ?? 0) * 3) + (s['draw'] as num? ?? 0)).toString();
-                    return _tablaRow(i.toString(), eq['team']['name'], pj, g, e, p, pts, logo: eq['team']['logo'] as String?, teamId: eq['team']['id'] as int?);
+                    return _tablaRow(i.toString(), (eq['team']?['name'] as String? ?? '—'), pj, g, e, p, pts, logo: (eq['team']?['logo'] as String?), teamId: (eq['team']?['id'] as int?));
                   }),
                   const SizedBox(height: 16),
                 ],
@@ -1977,7 +3022,7 @@ Widget _tabTiempo(String tipo) {
                   if (r == 'W') pts += 3;
                   else if (r == 'D') pts += 1;
                 }
-                return {'nombre': eq['team']['name'], 'logo': eq['team']['logo'], 'pts': pts, 'forma': ultimos.reversed.toList()};
+                return {'nombre': (eq['team']?['name'] as String? ?? '—'), 'logo': eq['team']['logo'], 'pts': pts, 'forma': ultimos.reversed.toList()};
               }).toList();
               tabla.sort((a, b) => (b['pts'] as int).compareTo(a['pts'] as int));
               return Column(
@@ -2937,7 +3982,7 @@ Widget _tabTiempo(String tipo) {
                         final tipo = e['type'];
                         final minuto = "${e['time']['elapsed']}'";
                         final equipo = e['team']['name'] ?? '';
-                        String icono = 'âš½';
+                        String icono = '⚽';
                         String tipoText = 'Gol: ${e['player']['name'] ?? ''}';
                         if (tipo == 'Card') {
                           icono = e['detail'] == 'Yellow Card' ? '🟡' : '🔴';
@@ -2958,7 +4003,7 @@ Widget _tabTiempo(String tipo) {
                         } else if (tipo == 'Goal') {
                           final detail = e['detail'] ?? '';
                           if (detail == 'Own Goal') {
-                            icono = 'âš½';
+                            icono = '⚽';
                             tipoText = 'Gol en contra: ${e['player']['name'] ?? ''}';
                           } else if (detail == 'Penalty') {
                             tipoText = 'Penal: ${e['player']['name'] ?? ''}';
@@ -3346,7 +4391,7 @@ Widget _tabTiempo(String tipo) {
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.white24, width: 1),
                   ),
-                  child: Text(goles == 1 ? 'âš½' : 'âš½$goles', style: const TextStyle(fontSize: 8)),
+                  child: Text(goles == 1 ? '⚽' : '⚽$goles', style: const TextStyle(fontSize: 8)),
                 ),
               ),
             // Tarjeta — abajo derecha (roja tiene prioridad sobre amarilla)
@@ -4230,7 +5275,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     disabledBackgroundColor: Colors.white12,
                   ),
                   child: Text(
-                    _seleccionado != null ? 'LISTO, ENTRAR A HDF STATS' : 'SELECCIÓN TU EQUIPO',
+                    _seleccionado != null ? 'LISTO, ENTRAR A HDF STATS' : 'SELECCIÃ“N TU EQUIPO',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1),
                   ),
                 ),
@@ -4255,9 +5300,418 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
+// ══ SIMULADOR MUNDIAL STATEFUL WIDGET ══════════════════════════════════
+class _MundialSimuladorWidget extends StatefulWidget {
+  const _MundialSimuladorWidget({super.key});
+  @override
+  State<_MundialSimuladorWidget> createState() => _MundialSimuladorState();
+}
 
+class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleTickerProviderStateMixin {
+  Map<String, List<Map<String, dynamic>>> _grupos = {};
+  Map<String, List<Map<String, dynamic>>> _simGrupos = {};
+  bool _loading = true;
+  late TabController _tabCtrl;
+  Set<String> _tercerosManual = {};
+  final Map<String, Map<String, dynamic>?> _bracketWinners = {};
 
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+    _loadGrupos();
+  }
 
+  @override
+  void dispose() { _tabCtrl.dispose(); super.dispose(); }
 
+  Future<void> _loadGrupos() async {
+    final data = await ApiService.getMundialGrupos();
+    if (mounted) setState(() {
+      _grupos = data;
+      _simGrupos = data.map((k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v)));
+      _loading = false;
+      _calcBestThirds();
+    });
+  }
+
+  void _calcBestThirds() {
+    final terceros = <Map<String, dynamic>>[];
+    _simGrupos.forEach((g, teams) {
+      if (teams.length >= 3) terceros.add({...teams[2], 'grupo': g});
+    });
+    terceros.sort((a, b) {
+      final pA = a['points'] as int? ?? 0; final pB = b['points'] as int? ?? 0;
+      if (pA != pB) return pB.compareTo(pA);
+      final gdA = a['goalsDiff'] as int? ?? 0; final gdB = b['goalsDiff'] as int? ?? 0;
+      if (gdA != gdB) return gdB.compareTo(gdA);
+      return ((b['goals']?['for'] as int? ?? 0)).compareTo((a['goals']?['for'] as int? ?? 0));
+    });
+    _tercerosManual = terceros.take(8).map((t) => t['grupo'] as String).toSet();
+  }
+
+  List<List<Map<String, dynamic>?>> _buildR32Matches() {
+    // ══ BRACKET OFICIAL FIFA MUNDIAL 2026 ══════════════════════════════════
+    // Fuente: Wikipedia — 2026 FIFA World Cup knockout stage
+    // 16 partidos del Round of 32, cruces FIJOS segun reglamento FIFA:
+    //
+    // Match 1:  2A vs 2B          Match 9:  1D vs 3ro(B/E/F/I/J)
+    // Match 2:  1E vs 3ro(A/B/C/D/F)  Match 10: 1G vs 3ro(A/E/H/I/J)
+    // Match 3:  1F vs 2C          Match 11: 2K vs 2L
+    // Match 4:  1C vs 2F          Match 12: 1H vs 2J  ← Espana si 1ro vs Argentina si 2do
+    // Match 5:  1I vs 3ro(C/D/F/G/H)  Match 13: 1B vs 3ro(E/F/G/I/J)
+    // Match 6:  2E vs 2I          Match 14: 1J vs 2H  ← Argentina si 1ro vs Espana si 2do
+    // Match 7:  1A vs 3ro(C/E/F/H/I)  Match 15: 1K vs 3ro(D/E/I/J/L)
+    // Match 8:  1L vs 3ro(E/H/I/J/K)  Match 16: 2D vs 2G
+    //
+    // Grupos:
+    // A: Mexico/Corea/Sudafrica/Chequia  B: Canada/Suiza/Qatar/Bosnia
+    // C: Brasil/Marruecos/Haiti/Escocia  D: EEUU/Paraguay/Australia/Turquia
+    // E: Alemania/PBajos/Suecia/Ecuador  F: CdI/Tunisia/NZ/...
+    // G: Belgica/Iran/NZ/Egipto          H: Espana/Arabia/Uruguay/CaboVerde
+    // I: Francia/Senegal/Irak/Noruega    J: Argentina/Argelia/Austria/Jordania
+    // K: Portugal/RDCongo/Uzbekistan/Colombia  L: Inglaterra/Croacia/Panama/Ghana
+
+    final Map<String, Map<String, dynamic>?> w = {};  // winners
+    final Map<String, Map<String, dynamic>?> r = {};  // runners-up
+    final Map<String, Map<String, dynamic>?> t3 = {}; // thirds
+
+    _simGrupos.forEach((g, teams) {
+      w[g] = teams.isNotEmpty ? {...teams[0], 'grupo': g} : null;
+      r[g] = teams.length >= 2 ? {...teams[1], 'grupo': g} : null;
+      if (teams.length >= 3 && _tercerosManual.contains(g)) {
+        t3[g] = {...teams[2], 'grupo': g};
+      }
+    });
+
+    // Funcion para elegir el mejor tercero de una lista de grupos candidatos
+    Map<String, dynamic>? bestThird(List<String> candidates) {
+      Map<String, dynamic>? best;
+      int bestPts = -1;
+      for (final g in candidates) {
+        if (t3.containsKey(g)) {
+          final pts = (t3[g]!['points'] as int? ?? 0);
+          if (pts > bestPts) { bestPts = pts; best = t3[g]; }
+        }
+      }
+      return best;
+    }
+
+    return [
+      // Match 1:  2A vs 2B
+      [r['A'], r['B']],
+      // Match 2:  1E vs mejor 3ro de A/B/C/D/F
+      [w['E'], bestThird(['A','B','C','D','F'])],
+      // Match 3:  1F vs 2C
+      [w['F'], r['C']],
+      // Match 4:  1C vs 2F
+      [w['C'], r['F']],
+      // Match 5:  1I vs mejor 3ro de C/D/F/G/H
+      [w['I'], bestThird(['C','D','F','G','H'])],
+      // Match 6:  2E vs 2I
+      [r['E'], r['I']],
+      // Match 7:  1A vs mejor 3ro de C/E/F/H/I
+      [w['A'], bestThird(['C','E','F','H','I'])],
+      // Match 8:  1L vs mejor 3ro de E/H/I/J/K
+      [w['L'], bestThird(['E','H','I','J','K'])],
+      // Match 9:  1D vs mejor 3ro de B/E/F/I/J
+      [w['D'], bestThird(['B','E','F','I','J'])],
+      // Match 10: 1G vs mejor 3ro de A/E/H/I/J
+      [w['G'], bestThird(['A','E','H','I','J'])],
+      // Match 11: 2K vs 2L
+      [r['K'], r['L']],
+      // Match 12: 1H vs 2J  ← Espana(1ro H) vs Argentina(2do J)
+      [w['H'], r['J']],
+      // Match 13: 1B vs mejor 3ro de E/F/G/I/J
+      [w['B'], bestThird(['E','F','G','I','J'])],
+      // Match 14: 1J vs 2H  ← Argentina(1ro J) vs Espana(2do H)
+      [w['J'], r['H']],
+      // Match 15: 1K vs mejor 3ro de D/E/I/J/L
+      [w['K'], bestThird(['D','E','I','J','L'])],
+      // Match 16: 2D vs 2G
+      [r['D'], r['G']],
+    ];
+  }
+
+  void _setWinner(String matchId, Map<String, dynamic>? team) {
+    setState(() {
+      _bracketWinners[matchId] = team;
+      _clearNext(matchId);
+    });
+  }
+
+  void _clearNext(String matchId) {
+    final parts = matchId.split('_');
+    final round = parts[0]; final idx = int.tryParse(parts[1]) ?? 0;
+    if (round == 'r32') { final n = idx ~/ 2; _bracketWinners.remove('r16_$n'); _clearNext('r16_$n'); }
+    else if (round == 'r16') { final n = idx ~/ 2; _bracketWinners.remove('qf_$n'); _clearNext('qf_$n'); }
+    else if (round == 'qf') { final n = idx ~/ 2; _bracketWinners.remove('sf_$n'); _clearNext('sf_$n'); }
+    else if (round == 'sf') { _bracketWinners.remove('f_0'); }
+  }
+
+  Map<String, dynamic>? _w(String id) => _bracketWinners.containsKey(id) ? _bracketWinners[id] : null;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+    if (_simGrupos.isEmpty) return const Center(child: Text('Sin datos', style: TextStyle(color: Colors.white54)));
+    return Column(children: [
+      Container(color: const Color(0xFF0A1628), child: TabBar(
+        controller: _tabCtrl,
+        tabs: const [Tab(text: 'GRUPOS'), Tab(text: 'BRACKET')],
+        labelColor: const Color(0xFFFFD700), unselectedLabelColor: Colors.white54,
+        indicatorColor: const Color(0xFFFFD700),
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+      )),
+      Expanded(child: TabBarView(controller: _tabCtrl, children: [
+        _buildGruposTab(),
+        _buildBracketTab(),
+      ])),
+    ]);
+  }
+
+  Widget _buildGruposTab() {
+    final grupos = _simGrupos.keys.toList()..sort();
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: grupos.length + 1,
+      itemBuilder: (ctx, idx) {
+        if (idx == grupos.length) return _buildTercerosSelector();
+        return _buildGrupoReorderable(grupos[idx]);
+      },
+    );
+  }
+
+  Widget _buildGrupoReorderable(String grupo) {
+    final teams = _simGrupos[grupo] ?? [];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(10)),
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(10))),
+          child: Row(children: [
+            Text('GRUPO $grupo', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const Spacer(),
+            const Icon(Icons.swap_vert, color: Colors.white38, size: 14),
+            const SizedBox(width: 4),
+            const Text('Manten para reordenar', style: TextStyle(color: Colors.white38, fontSize: 10)),
+          ]),
+        ),
+        ReorderableListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          onReorder: (oldIdx, newIdx) {
+            setState(() {
+              if (newIdx > oldIdx) newIdx--;
+              final team = teams.removeAt(oldIdx);
+              teams.insert(newIdx, team);
+              _simGrupos[grupo] = teams;
+              _calcBestThirds();
+              _bracketWinners.clear();
+            });
+          },
+          children: teams.asMap().entries.map((entry) {
+            final i = entry.key; final team = entry.value;
+            final t = team['team'] as Map<String, dynamic>? ?? {};
+            final pts = team['points'] as int? ?? 0;
+            final gd = team['goalsDiff'] as int? ?? 0;
+            Color posColor; String badge;
+            if (i == 0) { posColor = const Color(0xFF00C853); badge = '1'; }
+            else if (i == 1) { posColor = const Color(0xFF2196F3); badge = '2'; }
+            else if (i == 2 && _tercerosManual.contains(grupo)) { posColor = const Color(0xFFFF6F00); badge = '3\u2713'; }
+            else { posColor = Colors.white24; badge = i == 2 ? '3' : '4'; }
+            return Container(
+              key: ValueKey('$grupo-$i-${t['id']}'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(border: Border(left: BorderSide(color: posColor, width: 3))),
+              child: Row(children: [
+                SizedBox(width: 26, child: Text(badge, style: TextStyle(color: posColor, fontSize: 10, fontWeight: FontWeight.bold))),
+                if (t['logo'] != null) Image.network(t['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                Text('$pts pts', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Text('${gd >= 0 ? '+' : ''}$gd', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                const SizedBox(width: 8),
+                const Icon(Icons.drag_handle, color: Colors.white24, size: 16),
+              ]),
+            );
+          }).toList(),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildTercerosSelector() {
+    final terceros = <Map<String, dynamic>>[];
+    _simGrupos.forEach((g, teams) {
+      if (teams.length >= 3) terceros.add({...teams[2], 'grupo': g});
+    });
+    terceros.sort((a, b) => ((b['points'] as int? ?? 0)).compareTo((a['points'] as int? ?? 0)));
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFF6F00).withValues(alpha: 0.4))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('MEJORES TERCEROS', style: TextStyle(color: Color(0xFFFF6F00), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        const SizedBox(height: 2),
+        const Text('Toca para incluir o excluir del bracket', style: TextStyle(color: Colors.white54, fontSize: 10)),
+        const SizedBox(height: 8),
+        ...terceros.map((t) {
+          final g = t['grupo'] as String;
+          final isIn = _tercerosManual.contains(g);
+          final team = t['team'] as Map<String, dynamic>? ?? {};
+          final pts = t['points'] as int? ?? 0;
+          return GestureDetector(
+            onTap: () => setState(() {
+              if (isIn) { _tercerosManual.remove(g); }
+              else if (_tercerosManual.length < 8) { _tercerosManual.add(g); }
+              _bracketWinners.clear();
+            }),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: isIn ? const Color(0xFFFF6F00).withValues(alpha: 0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: isIn ? const Color(0xFFFF6F00) : Colors.white24)),
+              child: Row(children: [
+                Icon(isIn ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: isIn ? const Color(0xFFFF6F00) : Colors.white38, size: 16),
+                const SizedBox(width: 8),
+                Text('Gr.$g', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                const SizedBox(width: 6),
+                if (team['logo'] != null) Image.network(team['logo'] as String, width: 16, height: 16, errorBuilder: (_, __, ___) => const SizedBox(width: 16)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(team['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                Text('$pts pts', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11)),
+              ]),
+            ),
+          );
+        }),
+        const SizedBox(height: 4),
+        Text('${_tercerosManual.length}/8 seleccionados',
+          style: TextStyle(color: _tercerosManual.length == 8 ? const Color(0xFF00C853) : const Color(0xFFFF6F00),
+            fontSize: 11, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
+  Widget _buildBracketTab() {
+    final r32 = _buildR32Matches();
+    return ListView(padding: const EdgeInsets.all(12), children: [
+      _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket oficial FIFA)'),
+      const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Cruces reales: 1J vs 2H • 1H vs 2J • 1C vs 2F... Toca para elegir ganador', style: TextStyle(color: Colors.white38, fontSize: 10))),
+      ...r32.asMap().entries.map((e) => _buildMatchCard('r32_${e.key}', e.value[0], e.value[1])),
+      const SizedBox(height: 12),
+      _buildRoundHeader('OCTAVOS DE FINAL'),
+      ...List.generate(8, (i) => _buildMatchCard('r16_$i', _w('r32_${i*2}'), _w('r32_${i*2+1}'))),
+      const SizedBox(height: 12),
+      _buildRoundHeader('CUARTOS DE FINAL'),
+      ...List.generate(4, (i) => _buildMatchCard('qf_$i', _w('r16_${i*2}'), _w('r16_${i*2+1}'))),
+      const SizedBox(height: 12),
+      _buildRoundHeader('SEMIFINALES'),
+      ...List.generate(2, (i) => _buildMatchCard('sf_$i', _w('qf_${i*2}'), _w('qf_${i*2+1}'))),
+      const SizedBox(height: 12),
+      _buildRoundHeader('FINAL'),
+      _buildMatchCard('f_0', _w('sf_0'), _w('sf_1')),
+      const SizedBox(height: 8),
+      _buildCampeon(),
+    ]);
+  }
+
+  Widget _buildRoundHeader(String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(title, style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+  );
+
+  Widget _buildMatchCard(String matchId, Map<String, dynamic>? t1, Map<String, dynamic>? t2) {
+    final winner = _w(matchId);
+    final t1t = t1?['team'] as Map<String, dynamic>? ?? {};
+    final t2t = t2?['team'] as Map<String, dynamic>? ?? {};
+    final t1Name = t1t['name'] as String? ?? t1?['name'] as String? ?? 'TBD';
+    final t2Name = t2t['name'] as String? ?? t2?['name'] as String? ?? 'TBD';
+    final t1Logo = t1t['logo'] as String? ?? t1?['logo'] as String?;
+    final t2Logo = t2t['logo'] as String? ?? t2?['logo'] as String?;
+    final t1id = t1t['id'] ?? t1?['id'];
+    final winnerId = (winner?['team'] as Map?)? ['id'] ?? winner?['id'];
+    final t1Win = winner != null && winnerId == t1id;
+    final t2Win = winner != null && !t1Win;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 5),
+      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
+      child: IntrinsicHeight(child: Row(children: [
+        Expanded(child: GestureDetector(
+          onTap: t1 == null ? null : () => _setWinner(matchId, t1),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: t1Win ? const Color(0xFF00C853).withValues(alpha: 0.2) : Colors.transparent,
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8))),
+            child: Row(children: [
+              if (t1Logo != null) Image.network(t1Logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+              const SizedBox(width: 6),
+              Expanded(child: Text(t1Name, style: TextStyle(
+                color: t1 == null ? Colors.white24 : (t1Win ? const Color(0xFF00C853) : Colors.white),
+                fontSize: 11, fontWeight: t1Win ? FontWeight.bold : FontWeight.normal))),
+              if (t1Win) const Icon(Icons.check_circle, color: Color(0xFF00C853), size: 13),
+            ]),
+          ),
+        )),
+        Container(padding: const EdgeInsets.symmetric(horizontal: 6), color: const Color(0xFF0A1628), alignment: Alignment.center,
+          child: const Text('VS', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold))),
+        Expanded(child: GestureDetector(
+          onTap: t2 == null ? null : () => _setWinner(matchId, t2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: t2Win ? const Color(0xFF00C853).withValues(alpha: 0.2) : Colors.transparent,
+              borderRadius: const BorderRadius.only(topRight: Radius.circular(8), bottomRight: Radius.circular(8))),
+            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              if (t2Win) const Icon(Icons.check_circle, color: Color(0xFF00C853), size: 13),
+              const SizedBox(width: 4),
+              Expanded(child: Text(t2Name, textAlign: TextAlign.right, style: TextStyle(
+                color: t2 == null ? Colors.white24 : (t2Win ? const Color(0xFF00C853) : Colors.white),
+                fontSize: 11, fontWeight: t2Win ? FontWeight.bold : FontWeight.normal))),
+              const SizedBox(width: 6),
+              if (t2Logo != null) Image.network(t2Logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+            ]),
+          ),
+        )),
+      ])),
+    );
+  }
+
+  Widget _buildCampeon() {
+    final c = _w('f_0');
+    if (c == null) return const SizedBox.shrink();
+    final t = c['team'] as Map<String, dynamic>? ?? c;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: const Color(0xFFFFD700).withValues(alpha: 0.4), blurRadius: 20)]),
+      child: Column(children: [
+        const Text('CAMPEON DEL MUNDO', style: TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        const SizedBox(height: 10),
+        if (t['logo'] != null) Image.network(t['logo'] as String, width: 50, height: 50, errorBuilder: (_, __, ___) => const SizedBox(height: 50)),
+        const SizedBox(height: 6),
+        Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+}
+// ══ FIN SIMULADOR ══════════════════════════════════════════════════════════
 
 

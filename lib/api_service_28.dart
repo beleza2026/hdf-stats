@@ -1,5 +1,6 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ApiService {
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
@@ -10,6 +11,36 @@ class ApiService {
   static Map<String, String> get _headers => {
     'x-apisports-key': _apiKey,
   };
+
+  // ─── CACHE GLOBAL ────────────────────────────────────────────────
+  // Standings y fixtures se comparten entre todos los métodos.
+  // Solo se hace 1 request por sesión, sin importar cuántos métodos lo pidan.
+  static Future<dynamic>? _standingsFuture;
+  static Future<List>? _fixturesFuture;
+
+  static void clearCache() {
+    _standingsFuture = null;
+    _fixturesFuture = null;
+  }
+
+  static Future<dynamic> _getStandingsData() {
+    _standingsFuture ??= http.get(
+      Uri.parse('$_baseUrl/standings?league=$_ligaArgentina&season=$_season'),
+      headers: _headers,
+    ).then((r) => r.statusCode == 200 ? jsonDecode(r.body) : null);
+    return _standingsFuture!;
+  }
+
+  static Future<List> _getFixturesData() {
+    _fixturesFuture ??= http.get(
+      Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
+      headers: _headers,
+    ).then((r) => r.statusCode == 200
+        ? (jsonDecode(r.body)['response'] as List)
+        : <dynamic>[]);
+    return _fixturesFuture!;
+  }
+  // ─────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
     final hoy = DateTime.now();
@@ -32,15 +63,11 @@ class ApiService {
 
   static Future<Map<String, List<Map<String, dynamic>>>> getTablas() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/standings?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      final data = await _getStandingsData();
+      if (data != null) {
         final standings = data['response'][0]['league']['standings'] as List;
         Map<String, List<Map<String, dynamic>>> zonas = {};
-   for (int i = 0; i < standings.length && i < 2; i++) {
+        for (int i = 0; i < standings.length && i < 2; i++) {
           final zona = standings[i] as List;
           zonas['Zona ${String.fromCharCode(65 + i)}'] =
               zona.map((e) => e as Map<String, dynamic>).toList();
@@ -52,20 +79,38 @@ class ApiService {
       return {};
     }
   }
+
+  static Future<Map<String, List<Map<String, dynamic>>>> getTablasAnualYPromedios() async {
+    try {
+      final data = await _getStandingsData();
+      if (data != null) {
+        final standings = data['response'][0]['league']['standings'] as List;
+        Map<String, List<Map<String, dynamic>>> result = {};
+        for (final group in standings) {
+          final zona = group as List;
+          if (zona.isEmpty) continue;
+          final sample = zona[0] as Map<String, dynamic>;
+          final groupStr = (sample['group'] as String? ?? '').toLowerCase();
+          if (groupStr.contains('anual')) {
+            result['Anual'] = zona.map((e) => e as Map<String, dynamic>).toList();
+          } else if (groupStr.contains('promedios')) {
+            result['Promedios'] = zona.map((e) => e as Map<String, dynamic>).toList();
+          }
+        }
+        return result;
+      }
+      return {};
+    } catch (e) {
+      return {};
+    }
+  }
+
 static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async {
     try {
-      final resFixtures = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      final resTablas = await http.get(
-        Uri.parse('$_baseUrl/standings?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      if (resFixtures.statusCode == 200 && resTablas.statusCode == 200) {
-        final dataFixtures = jsonDecode(resFixtures.body);
-        final dataTablas = jsonDecode(resTablas.body);
-        final fixtures = dataFixtures['response'] as List;
+      final dataFixturesList = await _getFixturesData();
+      final dataTablas = await _getStandingsData();
+      if (dataFixturesList.isNotEmpty && dataTablas != null) {
+        final fixtures = dataFixturesList;
         final standings = dataTablas['response'][0]['league']['standings'] as List;
 
         // Mapear team ID -> zona y nombre
@@ -247,12 +292,8 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
   static Future<List<Map<String, dynamic>>> getArqueros() async {
     try {
       // 1. Traer equipos desde standings
-      final resStandings = await http.get(
-        Uri.parse('$_baseUrl/standings?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      if (resStandings.statusCode != 200) return [];
-      final standingsData = jsonDecode(resStandings.body);
+      final standingsData = await _getStandingsData();
+      if (standingsData == null) return [];
       final grupos = standingsData['response']?[0]?['league']?['standings'] as List? ?? [];
       final Set<int> teamIds = {};
       for (var grupo in grupos) {
@@ -376,6 +417,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
     for (var team in teams) {
       final teamName = team['team']['name'] as String;
       final teamId = team['team']['id'] as int;
+      final teamLogo = team['team']['logo'] as String? ?? '';
       final players = team['players'] as List;
       for (var p in players) {
         final stats = p['statistics'][0];
@@ -386,6 +428,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
           'foto': p['player']['photo'],
           'equipo': teamName,
           'equipoId': teamId,
+          'equipoLogo': teamLogo,
           'rating': rating != null ? (double.tryParse(rating.toString()) ?? 0.0) : 0.0,
           'tieneRating': rating != null,
           'tiros': stats['shots']['on'] ?? 0,
@@ -425,15 +468,11 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
   static Future<List<Map<String, dynamic>>> getEficaciaGoleadores() async {
     try {
-      // 1. Traer fixture para calcular partidos jugados por equipo automaticamente
-      final resFixture = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
+      // 1. Traer fixtures usando cache global
+      final fixturesCached = await _getFixturesData();
       int maxPartidos = 1;
-      if (resFixture.statusCode == 200) {
-        final dataF = jsonDecode(resFixture.body);
-        final fixtures = dataF['response'] as List;
+      if (fixturesCached.isNotEmpty) {
+        final fixtures = fixturesCached;
         final Map<int, int> partidosPorEquipo = {};
         for (var f in fixtures) {
           final st = f['fixture']['status']['short'] as String;
@@ -608,7 +647,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         fixturesConArbitro.add({'fixture': f, 'nombre': nombre});
       }
 
-      // Traer foto del Ã¡rbitro (una sola vez por Ã¡rbitro)
+      // Traer foto del árbitro (una sola vez por árbitro)
       final nombresUnicos = arbitros.keys.toList();
       await Future.wait(nombresUnicos.map((nombre) async {
         try {
@@ -661,6 +700,13 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
                 if (esLocal) { arbitros[nombre]!['penalesLocal'] += 1; equipoStats[homeId]?['penales'] += 1; }
                 else { arbitros[nombre]!['penalesVisitante'] += 1; equipoStats[awayId]?['penales'] += 1; }
               }
+              // Goles de corner (córner directo / gol olímpico)
+              if (tipo == 'Goal' && detalle == 'Own Goal') {
+                arbitros[nombre]!['golesPropia'] = (arbitros[nombre]!['golesPropia'] as int? ?? 0) + 1;
+              }
+              if (tipo == 'Goal' && (detalle == 'Corner' || detalle == 'Direct Corner')) {
+                arbitros[nombre]!['golesCorner'] = (arbitros[nombre]!['golesCorner'] as int? ?? 0) + 1;
+              }
               if (tipo == 'Var') {
                 arbitros[nombre]!['varTotal'] += 1;
                 if (detalle == 'Goal cancelled') {
@@ -687,17 +733,23 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final favVisit = (a['penalesVisitante'] as int) - (a['amarillasVisitante'] as int) ~/ 3;
         final favorece = favLocal > favVisit ? 'Local' : favVisit > favLocal ? 'Visitante' : 'Neutro';
 
-        // Calcular equipo mÃ¡s beneficiado y perjudicado
+        // Calcular equipo más beneficiado y perjudicado (deben ser DISTINTOS)
         final equipoStats = a['equipoStats'] as Map<int, Map<String, dynamic>>;
         String equipoBeneficiado = '-';
         String equipoPerjudicado = '-';
-        int maxScore = -999, minScore = 999;
-        for (var eq in equipoStats.values) {
-          final p = eq['partidos'] as int;
-          if (p == 0) continue;
-          final score = (eq['penales'] as int) * 3 - (eq['amarillas'] as int) - (eq['rojas'] as int) * 3;
-          if (score > maxScore) { maxScore = score; equipoBeneficiado = eq['nombre'] as String; }
-          if (score < minScore) { minScore = score; equipoPerjudicado = eq['nombre'] as String; }
+        final equiposOrdenados = equipoStats.values.toList()
+          ..sort((x, y) {
+            final sx = (x['penales'] as int) * 3 - (x['amarillas'] as int) - (x['rojas'] as int) * 3;
+            final sy = (y['penales'] as int) * 3 - (y['amarillas'] as int) - (y['rojas'] as int) * 3;
+            return sy.compareTo(sx);
+          });
+        if (equiposOrdenados.isNotEmpty) {
+          equipoBeneficiado = equiposOrdenados.first['nombre'] as String;
+          final candidato = equiposOrdenados.lastWhere(
+            (eq) => eq['nombre'] != equipoBeneficiado,
+            orElse: () => <String, dynamic>{},
+          );
+          if (candidato.isNotEmpty) equipoPerjudicado = candidato['nombre'] as String;
         }
 
         return {
@@ -749,7 +801,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
       }
       final fechas = porFecha.keys.toList()..sort();
       int? proximaFecha;
-      // Encontrar la Ãºltima fecha jugada y tomar la siguiente
+      // Encontrar la última fecha jugada y tomar la siguiente
       int ultimaFechaJugada = 0;
       for (final f in fechas) {
         final partidos = porFecha[f]!;
@@ -759,7 +811,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         });
         if (tieneFT && f > ultimaFechaJugada) ultimaFechaJugada = f;
       }
-      // PrÃ³xima = primera fecha con nÃºmero mayor a la Ãºltima jugada que tenga NS
+      // Próxima = primera fecha con número mayor a la última jugada que tenga NS
       for (final f in fechas) {
         if (f <= ultimaFechaJugada) continue;
         final partidos = porFecha[f]!;
@@ -772,7 +824,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         return s == 'NS';
       }).toList();
 
-      // 3. Para cada partido calcular predicciÃ³n
+      // 3. Para cada partido calcular predicción
       final resultados = await Future.wait(partidos.map((p) async {
         final homeId = p['teams']['home']['id'] as int;
         final awayId = p['teams']['away']['id'] as int;
@@ -795,9 +847,9 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final statsLocal = results[3] as Map<String, dynamic>;
         final statsVisit = results[4] as Map<String, dynamic>;
 
-        // â”€â”€ ALGORITMO v2: 40% FORMA CONDICIÃ“N + 35% TORNEO + 25% H2H â”€â”€
+        // ── ALGORITMO v2: 40% FORMA CONDICIÓN + 35% TORNEO + 25% H2H ──
 
-        // â€” BLOQUE A: Forma reciente en CONDICIÃ“N (local como local, visitante como visitante) â€”
+        // — BLOQUE A: Forma reciente en CONDICIÓN (local como local, visitante como visitante) —
         double puntosFormaLocal = 0, puntosFormaVisit = 0;
         int partidosFormaLocal = 0, partidosFormaVisit = 0;
 
@@ -864,7 +916,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final formaLocalNorm = puntosFormaLocal / maxPtosL;
         final formaVisitNorm = puntosFormaVisit / maxPtosV;
 
-        // â€” BLOQUE B: Stats torneo en condiciÃ³n â€”
+        // — BLOQUE B: Stats torneo en condición —
         final totalLocalFor = (statsLocal['goals']?['for']?['total']?['home'] as num?)?.toDouble() ?? 0.0;
         final totalVisitFor = (statsVisit['goals']?['for']?['total']?['away'] as num?)?.toDouble() ?? 0.0;
         final totalLocalAgainst = (statsLocal['goals']?['against']?['total']?['home'] as num?)?.toDouble() ?? 0.0;
@@ -885,7 +937,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final torneoLocalNorm = pjLocalHome > 0 ? (vLocal * 3 + eLocal) / (pjLocalHome * 3) : 0.33;
         final torneoVisitNorm = pjVisitAway > 0 ? (vVisit * 3 + eVisit) / (pjVisitAway * 3) : 0.33;
 
-        // â€” BLOQUE C: H2H histÃ³rico (Ãºltimos 10) â€”
+        // — BLOQUE C: H2H histórico (últimos 10) —
         int h2hLocal = 0, h2hVisit = 0, h2hEmpate = 0;
         double h2hGolesLocal = 0, h2hGolesVisit = 0;
         int h2hCount = 0;
@@ -911,7 +963,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final h2hLocalNorm = h2hCount > 0 ? h2hLocal / h2hCount.toDouble() : 0.35;
         final h2hVisitNorm = h2hCount > 0 ? h2hVisit / h2hCount.toDouble() : 0.28;
 
-        // â€” MIX FINAL: 40% forma condiciÃ³n + 35% torneo + 25% H2H â€”
+        // — MIX FINAL: 40% forma condición + 35% torneo + 25% H2H —
         const wForma = 0.40, wTorneo = 0.35, wH2h = 0.25;
 
         double scoreLocal = formaLocalNorm * wForma + torneoLocalNorm * wTorneo + h2hLocalNorm * wH2h + 0.05; // +5% ventaja local
@@ -928,7 +980,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         pctVisit = pctVisit / pctSum2 * 100;
         pctEmpate = pctEmpate / pctSum2 * 100;
 
-        // â€” MARCADOR PREDICHO â€”
+        // — MARCADOR PREDICHO —
         final defVisitFactor = avgGolVisitContra / 1.2;
         final defLocalFactor = avgGolLocalContra / 1.0;
         double golesLocalEsp = avgGolLocalFavor * defVisitFactor;
@@ -942,7 +994,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
           golesVisitEsp = golesVisitEsp * 0.6 + avgH2hVisit * 0.4;
         }
 
-        // Ajuste por forma reciente (Â±0.3 goles mÃ¡ximo)
+        // Ajuste por forma reciente (±0.3 goles máximo)
         final ajusteGolesL = ((formaLocalNorm - 0.5) * 0.6).clamp(-0.3, 0.3);
         final ajusteGolesV = ((formaVisitNorm - 0.5) * 0.6).clamp(-0.3, 0.3);
         golesLocalEsp = (golesLocalEsp + ajusteGolesL + 0.1).clamp(0.3, 3.5);
@@ -951,7 +1003,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final golesLocalPred = golesLocalEsp.round().clamp(0, 4);
         final golesVisitPred = golesVisitEsp.round().clamp(0, 3);
 
-        // Forma reciente para display (bolitas W/D/L â€” Ãºltimos 5 general)
+        // Forma reciente para display (bolitas W/D/L — últimos 5 general)
         List<String> formaRecLocal = [], formaRecVisit = [];
         for (var f in ultLocal) {
           final st = f['fixture']['status']['short'] as String;
@@ -996,13 +1048,10 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
   static Future<List<Map<String, dynamic>>> getTablaDTs() async {
     try {
-      // 1. Traer todos los fixtures y filtrar FT en cÃ³digo (status=FT no funciona en todos los planes)
-      final resFixtures = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      if (resFixtures.statusCode != 200) return [];
-      final todosFixtures = (jsonDecode(resFixtures.body)['response'] as List).cast<Map<String, dynamic>>();
+      // 1. Traer todos los fixtures y filtrar FT en código (status=FT no funciona en todos los planes)
+      final todosFixturesList = await _getFixturesData();
+      if (todosFixturesList.isEmpty) return [];
+      final todosFixtures = todosFixturesList.cast<Map<String, dynamic>>();
       final fixtures = todosFixtures.where((f) {
         final status = f['fixture']['status']['short'] as String? ?? '';
         return status == 'FT' || status == 'AET' || status == 'PEN';
@@ -1027,7 +1076,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         if (gano) { dts[id]!['victorias'] += 1; (dts[id]!['racha'] as List).add('W'); }
         else if (empato) { dts[id]!['empates'] += 1; (dts[id]!['racha'] as List).add('D'); }
         else { dts[id]!['derrotas'] += 1; (dts[id]!['racha'] as List).add('L'); }
-        // Actualizar equipo actual (Ãºltimo partido)
+        // Actualizar equipo actual (último partido)
         dts[id]!['equipo'] = equipoNombre;
         dts[id]!['equipoId'] = equipoId;
       }
@@ -1073,7 +1122,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         final puntosMaximos = partidos * 3;
         final pctPuntos = puntosMaximos > 0 ? (puntos / puntosMaximos * 100) : 0.0;
         final rachaLista = (dt['racha'] as List).cast<String>();
-        // Racha actual: Ãºltimos resultados consecutivos iguales al Ãºltimo
+        // Racha actual: últimos resultados consecutivos iguales al último
         String rachaActual = '';
         if (rachaLista.isNotEmpty) {
           final ultimo = rachaLista.last;
@@ -1105,13 +1154,13 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
           if (data.isEmpty) return;
           final coach = data[0];
           final career = (coach['career'] as List?) ?? [];
-          // AÃ±os de experiencia: desde el primer club hasta hoy
+          // Años de experiencia: desde el primer club hasta hoy
           String primerAnio = '';
           String ultimoClubAnterior = '';
           if (career.isNotEmpty) {
-            final primero = career.last; // career viene de mÃ¡s reciente a mÃ¡s antiguo
+            final primero = career.last; // career viene de más reciente a más antiguo
             primerAnio = (primero['start'] as String? ?? '').substring(0, 4);
-            // Ãšltimo club anterior al actual
+            // Último club anterior al actual
             if (career.length > 1) {
               ultimoClubAnterior = career[1]['team']?['name'] as String? ?? '';
             }
@@ -1197,7 +1246,7 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         return "$min' $tipo ($detalle) - $jugador ($equipo)";
       }).join('\n');
 
-      final prompt = 'Sos el analista de HDF Stats, una app argentina de fÃºtbol. AnalizÃ¡ este partido EN VIVO con tono futbolero rioplatense, directo y apasionado. MÃ¡ximo 3 oraciones cortas.\n\nPartido: $local $resultado $visitante (min $minuto)\nPosesiÃ³n: $local $posLocal â€” $visitante $posVisit\nTiros al arco: $local $tirosLocal â€” $visitante $tirosVisit\nTarjetas: $local ${amarillasLocal}ðŸŸ¡ ${rojasLocal}ðŸ”´ â€” $visitante ${amarillasVisit}ðŸŸ¡ ${rojasVisit}ðŸ”´\nÃšltimos eventos:\n$ultimosEventos\n\nDescribÃ­ quÃ© estÃ¡ pasando: quiÃ©n domina, momentum, peligro o algo llamativo. UsÃ¡ emojis de fÃºtbol. Sin asteriscos ni markdown.';
+      final prompt = 'Sos el analista de HDF Stats, una app argentina de fútbol. Analizá este partido EN VIVO con tono futbolero rioplatense, directo y apasionado. Máximo 3 oraciones cortas.\n\nPartido: $local $resultado $visitante (min $minuto)\nPosesión: $local $posLocal — $visitante $posVisit\nTiros al arco: $local $tirosLocal — $visitante $tirosVisit\nTarjetas: $local ${amarillasLocal}🟡 ${rojasLocal}🔴 — $visitante ${amarillasVisit}🟡 ${rojasVisit}🔴\nÚltimos eventos:\n$ultimosEventos\n\nDescribí qué está pasando: quién domina, momentum, peligro o algo llamativo. Usá emojis de fútbol. Sin asteriscos ni markdown.';
 
       final response = await http.post(
         Uri.parse('https://api.anthropic.com/v1/messages'),
@@ -1215,11 +1264,11 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return (data['content'] as List?)?.first?['text'] as String? ?? 'Sin anÃ¡lisis disponible.';
+        return (data['content'] as List?)?.first?['text'] as String? ?? 'Sin análisis disponible.';
       }
-      return 'Sin anÃ¡lisis disponible.';
+      return 'Sin análisis disponible.';
     } catch (e) {
-      return 'Sin anÃ¡lisis disponible.';
+      return 'Sin análisis disponible.';
     }
   }
   static const int _copaArgentina = 515;
@@ -1227,12 +1276,8 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
   // Equipos de la liga para onboarding
   static Future<List<Map<String, dynamic>>> getEquiposLiga() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/standings?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      final data = await _getStandingsData();
+      if (data != null) {
         final standings = data['response'] as List;
         if (standings.isEmpty) return [];
         final grupos = standings[0]['league']['standings'] as List;
@@ -1321,158 +1366,237 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
 
 
   // Tabla Moral Acumulada con zonas
+  // Calcula y guarda resultado moral de cada partido jugado
+  static Future<Map<String, dynamic>> _calcularMoralFixture(Map<String, dynamic> fixture, Map<String, String> headers) async {
+    final fId = fixture['fixture']['id'] as int;
+    final homeId = fixture['teams']['home']['id'].toString();
+    final awayId = fixture['teams']['away']['id'].toString();
+    final homeName = fixture['teams']['home']['name'] as String;
+    final awayName = fixture['teams']['away']['name'] as String;
+    final glLocal = (fixture['goals']['home'] as num?)?.toInt() ?? 0;
+    final glVisit = (fixture['goals']['away'] as num?)?.toInt() ?? 0;
+
+    int moralL = glLocal;
+    int moralV = glVisit;
+
+    try {
+      final statsResp = await http.get(
+        Uri.parse('https://v3.football.api-sports.io/fixtures/statistics?fixture=$fId'),
+        headers: headers,
+      );
+      if (statsResp.statusCode == 200) {
+        final statsList = jsonDecode(statsResp.body)['response'] as List;
+        if (statsList.length >= 2) {
+          double posLocal = 50, posVisit = 50;
+          int tirosLocal = 0, tirosVisit = 0, cornersLocal = 0, cornersVisit = 0;
+          for (final s in (statsList[0]['statistics'] as List)) {
+            final v = s['value']?.toString() ?? '0';
+            if (s['type'] == 'Ball Possession') posLocal = double.tryParse(v.replaceAll('%','')) ?? 50;
+            if (s['type'] == 'Shots on Goal') tirosLocal = int.tryParse(v) ?? 0;
+            if (s['type'] == 'Corner Kicks') cornersLocal = int.tryParse(v) ?? 0;
+          }
+          for (final s in (statsList[1]['statistics'] as List)) {
+            final v = s['value']?.toString() ?? '0';
+            if (s['type'] == 'Ball Possession') posVisit = double.tryParse(v.replaceAll('%','')) ?? 50;
+            if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(v) ?? 0;
+            if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(v) ?? 0;
+          }
+          final difPos = posLocal - posVisit;
+          final difTiros = tirosLocal - tirosVisit;
+          final difCorners = cornersLocal - cornersVisit;
+          double dominio = 0;
+          if (difPos.abs() > 25) dominio += difPos > 0 ? 1.5 : -1.5;
+          else if (difPos.abs() > 15) dominio += difPos > 0 ? 1.0 : -1.0;
+          if (difTiros.abs() >= 3) dominio += difTiros > 0 ? 1.0 : -1.0;
+          else if (difTiros.abs() >= 1) dominio += difTiros > 0 ? 0.5 : -0.5;
+          if (difCorners.abs() >= 5) dominio += difCorners > 0 ? 0.5 : -0.5;
+          final diferencia = (glLocal - glVisit).abs();
+          final ajuste = dominio.round().clamp(-1, 1);
+          moralL += ajuste; moralV -= ajuste;
+          if (moralL < 0) moralL = 0;
+          if (moralV < 0) moralV = 0;
+          if (diferencia == 1) {
+            if (glLocal > glVisit && moralL < moralV) moralL = moralV;
+            if (glVisit > glLocal && moralV < moralL) moralV = moralL;
+          }
+          if (glLocal == glVisit) {
+            if (moralL > moralV + 1) moralL = moralV + 1;
+            if (moralV > moralL + 1) moralV = moralL + 1;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Guardar en Firestore
+    try {
+      await FirebaseFirestore.instance
+          .collection('resultados_morales')
+          .doc(fId.toString())
+          .set({
+        'fixtureId': fId,
+        'homeId': homeId,
+        'awayId': awayId,
+        'homeNombre': homeName,
+        'awayNombre': awayName,
+        'moralLocal': moralL,
+        'moralVisitante': moralV,
+        'ts': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
+
+    return {
+      'fixtureId': fId,
+      'homeId': homeId,
+      'awayId': awayId,
+      'moralLocal': moralL,
+      'moralVisitante': moralV,
+    };
+  }
+
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
-      // 1. Traer standings para zonas y puntos reales
-      final standResp = await http.get(
-        Uri.parse('$_baseUrl/standings?league=$_ligaArgentina&season=$_season'),
-        headers: _headers,
-      );
-      if (standResp.statusCode != 200) return {};
-      final standData = jsonDecode(standResp.body);
-      final standings = standData['response'][0]['league']['standings'] as List;
+      // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
+      final standData = await _getStandingsData();
+      final allFixtures = await _getFixturesData();
 
       final Map<String, String> equipoZona = {};
       final Map<String, int> ptsRealesMap = {};
-      for (int i = 0; i < standings.length && i < 2; i++) {
-        final zonaLabel = i == 0 ? 'Zona A' : 'Zona B';
-        for (final e in (standings[i] as List)) {
-          final id = e['team']['id'].toString();
-          equipoZona[id] = zonaLabel;
-          ptsRealesMap[id] = (e['points'] as num?)?.toInt() ?? 0;
+      final Map<String, String> equipoLogo = {};
+
+      if (standData != null) {
+        final standings = standData['response'][0]['league']['standings'] as List;
+        for (int i = 0; i < standings.length; i++) {
+          final grupo = standings[i] as List;
+          if (grupo.isEmpty) continue;
+          // Leer zona del campo 'group' real de la API
+          final groupStr = (grupo[0]['group'] as String? ?? '').toLowerCase();
+          print('HDF_DEBUG ZONA: groupStr=$groupStr');
+          if (!groupStr.contains('apertura')) continue;
+          print('DEBUG:'+groupStr); final zona = groupStr.contains('group b') ? 'Zona B' : 'Zona A';
+          print('HDF_DEBUG ZONA: zona=$zona equipos=${grupo.length}');
+          for (final e in grupo) {
+            final id = e['team']['id'].toString();
+            equipoZona[id] = zona;
+            ptsRealesMap[id] = (e['points'] as num?)?.toInt() ?? 0;
+            equipoLogo[id] = e['team']['logo'] as String? ?? '';
+          }
         }
       }
 
-      // 2. Traer fixtures jugados
-      final fixtureResp = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&timezone=America/Argentina/Buenos_Aires'),
-        headers: _headers,
-      );
-      if (fixtureResp.statusCode != 200) return {};
-      final fixtures = (jsonDecode(fixtureResp.body)['response'] as List).where((f) {
+      final jugados = allFixtures.where((f) {
         final s = f['fixture']['status']['short'];
         return s == 'FT' || s == 'AET' || s == 'PEN';
       }).toList();
 
-      final Map<String, Map<String, dynamic>> tablaMoral = {};
+      // PASO 2: Leer Firestore
+      final firestoreSnap = await FirebaseFirestore.instance
+          .collection('resultados_morales')
+          .get();
+      final Map<String, Map<String, dynamic>> morales = {
+        for (final d in firestoreSnap.docs) d.id: d.data()
+      };
 
-      for (final fixture in fixtures) {
-        final fId = fixture['fixture']['id'] as int;
-        final homeId = fixture['teams']['home']['id'].toString();
-        final awayId = fixture['teams']['away']['id'].toString();
-        final homeName = fixture['teams']['home']['name'] as String;
-        final awayName = fixture['teams']['away']['name'] as String;
-        final homeLogo = fixture['teams']['home']['logo'] as String? ?? '';
-        final awayLogo = fixture['teams']['away']['logo'] as String? ?? '';
-        final glLocal = (fixture['goals']['home'] as num?)?.toInt() ?? 0;
-        final glVisit = (fixture['goals']['away'] as num?)?.toInt() ?? 0;
-
-        // Inicializar equipos
-        tablaMoral.putIfAbsent(homeId, () => {
-          'nombre': homeName, 'logo': homeLogo,
-          'zona': equipoZona[homeId] ?? 'Zona A',
-          'pj': 0, 'g': 0, 'e': 0, 'p': 0, 'gf': 0, 'gc': 0, 'pts': 0,
-          'ptsReal': ptsRealesMap[homeId] ?? 0,
-        });
-        tablaMoral.putIfAbsent(awayId, () => {
-          'nombre': awayName, 'logo': awayLogo,
-          'zona': equipoZona[awayId] ?? 'Zona B',
-          'pj': 0, 'g': 0, 'e': 0, 'p': 0, 'gf': 0, 'gc': 0, 'pts': 0,
-          'ptsReal': ptsRealesMap[awayId] ?? 0,
-        });
-
-        // Calcular Resultado Moral con estadisticas
-        int moralL = glLocal, moralV = glVisit;
-        try {
-          final statsResp = await http.get(
-            Uri.parse('$_baseUrl/fixtures/statistics?fixture=$fId'),
-            headers: _headers,
+      // PASO 3: Para fixtures que faltan en Firestore → calcular con GOLES ÚNICAMENTE
+      // (sin llamar a /fixtures/statistics — cero 429)
+      if (jugados.isNotEmpty) {
+        final batch = FirebaseFirestore.instance.batch();
+        bool hayNuevos = false;
+        for (final f in jugados) {
+          final fId = f['fixture']['id'].toString();
+          if (morales.containsKey(fId)) continue;
+          final homeId = f['teams']['home']['id'].toString();
+          final awayId = f['teams']['away']['id'].toString();
+          final glL = (f['goals']['home'] as num?)?.toInt() ?? 0;
+          final glV = (f['goals']['away'] as num?)?.toInt() ?? 0;
+          final doc = {
+            'fixtureId': int.parse(fId),
+            'homeId': homeId,
+            'awayId': awayId,
+            'homeNombre': f['teams']['home']['name'] as String,
+            'awayNombre': f['teams']['away']['name'] as String,
+            'moralLocal': glL,
+            'moralVisitante': glV,
+            'ts': FieldValue.serverTimestamp(),
+          };
+          morales[fId] = doc;
+          batch.set(
+            FirebaseFirestore.instance.collection('resultados_morales').doc(fId),
+            doc, SetOptions(merge: true),
           );
-          if (statsResp.statusCode == 200) {
-            final statsList = jsonDecode(statsResp.body)['response'] as List;
-            if (statsList.length >= 2) {
-              double posLocal = 50, posVisit = 50;
-              int tirosLocal = 0, tirosVisit = 0, cornersLocal = 0, cornersVisit = 0;
-              for (final s in (statsList[0]['statistics'] as List)) {
-                final v = s['value']?.toString() ?? '0';
-                if (s['type'] == 'Ball Possession') posLocal = double.tryParse(v.replaceAll('%', '')) ?? 50;
-                if (s['type'] == 'Shots on Goal') tirosLocal = int.tryParse(v) ?? 0;
-                if (s['type'] == 'Corner Kicks') cornersLocal = int.tryParse(v) ?? 0;
-              }
-              for (final s in (statsList[1]['statistics'] as List)) {
-                final v = s['value']?.toString() ?? '0';
-                if (s['type'] == 'Ball Possession') posVisit = double.tryParse(v.replaceAll('%', '')) ?? 50;
-                if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(v) ?? 0;
-                if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(v) ?? 0;
-              }
-              final difPos = posLocal - posVisit;
-              final difTiros = tirosLocal - tirosVisit;
-              final difCorners = cornersLocal - cornersVisit;
-              double dominio = 0;
-              if (difPos.abs() > 25) dominio += difPos > 0 ? 1.5 : -1.5;
-              else if (difPos.abs() > 15) dominio += difPos > 0 ? 1.0 : -1.0;
-              if (difTiros.abs() >= 3) dominio += difTiros > 0 ? 1.0 : -1.0;
-              else if (difTiros.abs() >= 1) dominio += difTiros > 0 ? 0.5 : -0.5;
-              if (difCorners.abs() >= 5) dominio += difCorners > 0 ? 0.5 : -0.5;
-              final diferencia = (glLocal - glVisit).abs();
-              final ajuste = dominio.round().clamp(-1, 1);
-              moralL += ajuste; moralV -= ajuste;
-              if (moralL < 0) moralL = 0;
-              if (moralV < 0) moralV = 0;
-              if (diferencia == 1) {
-                if (glLocal > glVisit && moralL < moralV) moralL = moralV;
-                if (glVisit > glLocal && moralV < moralL) moralV = moralL;
-              }
-              if (glLocal == glVisit) {
-                if (moralL > moralV + 1) moralL = moralV + 1;
-                if (moralV > moralL + 1) moralV = moralL + 1;
-              }
-            }
-          }
-        } catch (_) {}
+          hayNuevos = true;
+        }
+        if (hayNuevos) await batch.commit();
+      }
 
-        // Acumular
-        tablaMoral[homeId]!['pj'] = (tablaMoral[homeId]!['pj'] as int) + 1;
-        tablaMoral[awayId]!['pj'] = (tablaMoral[awayId]!['pj'] as int) + 1;
-        tablaMoral[homeId]!['gf'] = (tablaMoral[homeId]!['gf'] as int) + moralL;
-        tablaMoral[homeId]!['gc'] = (tablaMoral[homeId]!['gc'] as int) + moralV;
-        tablaMoral[awayId]!['gf'] = (tablaMoral[awayId]!['gf'] as int) + moralV;
-        tablaMoral[awayId]!['gc'] = (tablaMoral[awayId]!['gc'] as int) + moralL;
+      if (morales.isEmpty) return {};
+
+      // PASO 4: Construir tabla desde morales (Firestore)
+      final Map<String, Map<String, dynamic>> tabla = {};
+      for (final entry in morales.entries) {
+        final data = entry.value;
+        // Usar toString() para manejar tanto String como int en Firestore
+        final homeId = data['homeId']?.toString() ?? '';
+        final awayId = data['awayId']?.toString() ?? '';
+        if (homeId.isEmpty || awayId.isEmpty) continue;
+        final moralL = (data['moralLocal'] as num?)?.toInt() ?? 0;
+        final moralV = (data['moralVisitante'] as num?)?.toInt() ?? 0;
+        final zonaH = equipoZona[homeId] ?? 'Zona A';
+        final zonaV = equipoZona[awayId] ?? 'Zona A';
+
+        tabla.putIfAbsent(homeId, () => {
+          'nombre': data['homeNombre'] ?? '',
+          'logo': equipoLogo[homeId] ?? '',
+          'zona': zonaH, 'pj': 0, 'g': 0, 'e': 0, 'p': 0,
+          'gf': 0, 'gc': 0, 'pts': 0, 'ptsReal': ptsRealesMap[homeId] ?? 0,
+        });
+        tabla.putIfAbsent(awayId, () => {
+          'nombre': data['awayNombre'] ?? '',
+          'logo': equipoLogo[awayId] ?? '',
+          'zona': zonaV, 'pj': 0, 'g': 0, 'e': 0, 'p': 0,
+          'gf': 0, 'gc': 0, 'pts': 0, 'ptsReal': ptsRealesMap[awayId] ?? 0,
+        });
+
+        if (equipoLogo[homeId] != null) tabla[homeId]!['logo'] = equipoLogo[homeId]!;
+        if (equipoLogo[awayId] != null) tabla[awayId]!['logo'] = equipoLogo[awayId]!;
+        if (equipoZona[homeId] != null) tabla[homeId]!['zona'] = equipoZona[homeId]!;
+        if (equipoZona[awayId] != null) tabla[awayId]!['zona'] = equipoZona[awayId]!;
+        if (ptsRealesMap[homeId] != null) tabla[homeId]!['ptsReal'] = ptsRealesMap[homeId]!;
+        if (ptsRealesMap[awayId] != null) tabla[awayId]!['ptsReal'] = ptsRealesMap[awayId]!;
+
+        tabla[homeId]!['pj'] = (tabla[homeId]!['pj'] as int) + 1;
+        tabla[awayId]!['pj'] = (tabla[awayId]!['pj'] as int) + 1;
+        tabla[homeId]!['gf'] = (tabla[homeId]!['gf'] as int) + moralL;
+        tabla[homeId]!['gc'] = (tabla[homeId]!['gc'] as int) + moralV;
+        tabla[awayId]!['gf'] = (tabla[awayId]!['gf'] as int) + moralV;
+        tabla[awayId]!['gc'] = (tabla[awayId]!['gc'] as int) + moralL;
         if (moralL > moralV) {
-          tablaMoral[homeId]!['g'] = (tablaMoral[homeId]!['g'] as int) + 1;
-          tablaMoral[homeId]!['pts'] = (tablaMoral[homeId]!['pts'] as int) + 3;
-          tablaMoral[awayId]!['p'] = (tablaMoral[awayId]!['p'] as int) + 1;
+          tabla[homeId]!['g'] = (tabla[homeId]!['g'] as int) + 1;
+          tabla[homeId]!['pts'] = (tabla[homeId]!['pts'] as int) + 3;
+          tabla[awayId]!['p'] = (tabla[awayId]!['p'] as int) + 1;
         } else if (moralV > moralL) {
-          tablaMoral[awayId]!['g'] = (tablaMoral[awayId]!['g'] as int) + 1;
-          tablaMoral[awayId]!['pts'] = (tablaMoral[awayId]!['pts'] as int) + 3;
-          tablaMoral[homeId]!['p'] = (tablaMoral[homeId]!['p'] as int) + 1;
+          tabla[awayId]!['g'] = (tabla[awayId]!['g'] as int) + 1;
+          tabla[awayId]!['pts'] = (tabla[awayId]!['pts'] as int) + 3;
+          tabla[homeId]!['p'] = (tabla[homeId]!['p'] as int) + 1;
         } else {
-          tablaMoral[homeId]!['e'] = (tablaMoral[homeId]!['e'] as int) + 1;
-          tablaMoral[homeId]!['pts'] = (tablaMoral[homeId]!['pts'] as int) + 1;
-          tablaMoral[awayId]!['e'] = (tablaMoral[awayId]!['e'] as int) + 1;
-          tablaMoral[awayId]!['pts'] = (tablaMoral[awayId]!['pts'] as int) + 1;
+          tabla[homeId]!['e'] = (tabla[homeId]!['e'] as int) + 1;
+          tabla[homeId]!['pts'] = (tabla[homeId]!['pts'] as int) + 1;
+          tabla[awayId]!['e'] = (tabla[awayId]!['e'] as int) + 1;
+          tabla[awayId]!['pts'] = (tabla[awayId]!['pts'] as int) + 1;
         }
       }
 
-      // Agrupar por zona y ordenar
-      final Map<String, List<Map<String, dynamic>>> resultado = {
-        'Zona A': [],
-        'Zona B': [],
-      };
-      for (final entry in tablaMoral.entries) {
+      // PASO 5: Agrupar y ordenar
+      final resultado = <String, List<Map<String, dynamic>>>{'Zona A': [], 'Zona B': []};
+      for (final entry in tabla.entries) {
         final eq = {...entry.value, 'id': entry.key};
-        final zona = eq['zona'] as String;
-        if (resultado.containsKey(zona)) {
-          resultado[zona]!.add(eq);
-        } else {
-          resultado['Zona A']!.add(eq);
-        }
+        resultado[eq['zona'] as String]?.add(eq);
       }
       for (final zona in resultado.keys) {
         resultado[zona]!.sort((a, b) {
-          final diff = (b['pts'] as int).compareTo(a['pts'] as int);
-          if (diff != 0) return diff;
-          return ((b['gf'] as int) - (b['gc'] as int)).compareTo((a['gf'] as int) - (a['gc'] as int));
+          final d = (b['pts'] as int).compareTo(a['pts'] as int);
+          if (d != 0) return d;
+          return ((b['gf'] as int) - (b['gc'] as int))
+              .compareTo((a['gf'] as int) - (a['gc'] as int));
         });
       }
       return resultado;
@@ -1481,8 +1605,395 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
     }
   }
 
+  // ══ MUNDIAL 2026 ══════════════════════════════════════════════════════════
+  static const int _mundialId = 1;
+  static const int _mundialSeason = 2026;
+  static Map<String, List<Map<String, dynamic>>>? _mundialGruposCache;
+
+  // Grupos del Mundial — 12 grupos A-L con 4 selecciones cada uno
+  static Future<Map<String, List<Map<String, dynamic>>>> getMundialGrupos() async {
+    if (_mundialGruposCache != null && _mundialGruposCache!.isNotEmpty) {
+      return _mundialGruposCache!;
+    }
+    try {
+      final uri = Uri.parse(
+          '$_baseUrl/standings?league=$_mundialId&season=$_mundialSeason');
+      final res = await http.get(uri, headers: _headers);
+      final data = jsonDecode(res.body);
+      if (data['response'] == null || (data['response'] as List).isEmpty) return {};
+      final standings = data['response'][0]['league']['standings'] as List;
+      final Map<String, List<Map<String, dynamic>>> grupos = {};
+      for (final group in standings) {
+        final zona = group as List;
+        if (zona.isEmpty) continue;
+        final groupName = zona[0]['group'] as String? ?? '';
+        if (!groupName.startsWith('Group')) continue;
+        grupos[groupName] = zona.map((e) => e as Map<String, dynamic>).toList();
+      }
+      _mundialGruposCache = grupos;
+      return grupos;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // Fixture del Mundial — todos los partidos de grupos
+  static Future<List<Map<String, dynamic>>> getMundialFixture({String? fecha}) async {
+    try {
+      var url = '$_baseUrl/fixtures?league=$_mundialId&season=$_mundialSeason&timezone=America/Argentina/Buenos_Aires';
+      if (fecha != null) url += '&date=$fecha';
+      final uri = Uri.parse(url);
+      final res = await http.get(uri, headers: _headers);
+      final data = jsonDecode(res.body);
+      if (data['response'] == null) return [];
+      final fixtures = (data['response'] as List)
+          .map((f) => f as Map<String, dynamic>)
+          .toList();
+      fixtures.sort((a, b) {
+        final da = DateTime.tryParse(a['fixture']['date'] as String? ?? '') ?? DateTime(2026);
+        final db = DateTime.tryParse(b['fixture']['date'] as String? ?? '') ?? DateTime(2026);
+        return da.compareTo(db);
+      });
+      return fixtures;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Goleadores del Mundial
+  static Future<List<Map<String, dynamic>>> getMundialGoleadores() async {
+    try {
+      final uri = Uri.parse(
+          '$_baseUrl/players/topscorers?league=$_mundialId&season=$_mundialSeason');
+      final res = await http.get(uri, headers: _headers);
+      final data = jsonDecode(res.body);
+      if (data['response'] == null) return [];
+      return (data['response'] as List)
+          .map((p) => p as Map<String, dynamic>)
+          .take(20)
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Proximos partidos del Mundial (hoy y mañana)
+  static Future<List<Map<String, dynamic>>> getMundialHoy() async {
+    try {
+      final hoy = DateTime.now().toLocal();
+      final fechaStr = '${hoy.year}-${hoy.month.toString().padLeft(2,'0')}-${hoy.day.toString().padLeft(2,'0')}';
+      final uri = Uri.parse(
+          '$_baseUrl/fixtures?league=$_mundialId&season=$_mundialSeason&date=$fechaStr&timezone=America/Argentina/Buenos_Aires');
+      final res = await http.get(uri, headers: _headers);
+      final data = jsonDecode(res.body);
+      if (data['response'] == null) return [];
+      return (data['response'] as List).map((f) => f as Map<String, dynamic>).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+  // ══ FIN MUNDIAL 2026 ══════════════════════════════════════════════════════
+
+
+  // Plantel de selección para el Mundial
+  static Future<List<dynamic>> getPlantelSeleccion(int teamId) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/players/squads?team=$teamId');
+      final res = await http.get(uri, headers: _headers);
+      final data = jsonDecode(res.body);
+      if (data['response'] == null || (data['response'] as List).isEmpty) return [];
+      return (data['response'][0]['players'] as List);
+    } catch (e) { return []; }
+  }
+
+  // Stats de jugadores en el Mundial 2026
+  static Future<List<dynamic>> getStatsCopaJugadores(int teamId) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/players?league=$_mundialId&season=$_mundialSeason&team=$teamId');
+      final res = await http.get(uri, headers: _headers);
+      final data = jsonDecode(res.body);
+      if (data['response'] == null) return [];
+      return data['response'] as List;
+    } catch (e) { return []; }
+  }
+
+  // Carrera histórica de jugadores en selección
+  static Future<List<dynamic>> getCarreraJugadoresSeleccion(int teamId) async {
+    try {
+      // Traer plantel primero para obtener IDs
+      final squad = await getPlantelSeleccion(teamId);
+      if (squad.isEmpty) return [];
+      final List<dynamic> result = [];
+      // Procesar solo primeros 10 para no gastar calls
+      final top = squad.take(10).toList();
+      for (final p in top) {
+        final playerId = p['id'] as int?;
+        if (playerId == null) continue;
+        try {
+          final uri = Uri.parse('$_baseUrl/players?id=$playerId&season=2024');
+          final res = await http.get(uri, headers: _headers);
+          final data = jsonDecode(res.body);
+          if (data['response'] != null && (data['response'] as List).isNotEmpty) {
+            result.add(data['response'][0]);
+          }
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+      return result;
+    } catch (e) { return []; }
+  }
+
+
+
+  // ══ NOTICIAS RSS ══════════════════════════════════════════════════════════
+  // Mapeo de equipos a keywords para filtrar noticias
+  static const Map<int, List<String>> _teamKeywords = {
+    435: ['River', 'River Plate', 'Millonario'],
+    433: ['Boca', 'Boca Juniors', 'Xeneize'],
+    440: ['Racing', 'Racing Club', 'Academia'],
+    436: ['Independiente'],
+    437: ['San Lorenzo', 'Ciclón'],
+    438: ['Huracán', 'Huracan', 'Quemero'],
+    442: ['Vélez', 'Velez', 'Fortín'],
+    432: ['Talleres'],
+    443: ['Belgrano'],
+    444: ['Estudiantes'],
+    445: ['Gimnasia'],
+    446: ['Rosario Central', 'Central'],
+    447: ['Newell\'s', 'Newells', 'Lepra'],
+    450: ['Lanús', 'Lanus', 'Granate'],
+    451: ['Banfield'],
+    452: ['Arsenal'],
+    453: ['Tigre'],
+    454: ['Quilmes'],
+    455: ['Platense'],
+    456: ['Sarmiento'],
+    457: ['Colón', 'Colon'],
+    458: ['Unión', 'Union'],
+    459: ['Atlético Tucumán', 'Atletico Tucuman', 'Decano'],
+    460: ['Godoy Cruz', 'Tomba'],
+    461: ['Instituto'],
+    462: ['Riestra', 'Deportivo Riestra'],
+    463: ['Aldosivi'],
+    464: ['Barracas Central'],
+    465: ['Argentinos Juniors', 'Argentinos', 'Bicho'],
+  };
+
+  static List<String> _getKeywordsForTeam(int? teamId, String? teamName) {
+    if (teamId != null && _teamKeywords.containsKey(teamId)) {
+      return _teamKeywords[teamId]!;
+    }
+    if (teamName != null && teamName.isNotEmpty) {
+      // Fallback: use team name parts
+      final parts = teamName.split(' ').where((p) => p.length > 3).toList();
+      return [teamName, ...parts];
+    }
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getNoticias({
+    int? teamId,
+    String? teamName,
+  }) async {
+    final feeds = [
+      'https://www.ole.com.ar/rss/futbol-argentino.xml',
+      'https://www.tycsports.com/rss.xml',
+      'https://www.espn.com.ar/rss/futbol/nota',
+    ];
+
+    final keywords = _getKeywordsForTeam(teamId, teamName);
+    final allNoticias = <Map<String, dynamic>>[];
+
+    for (final feedUrl in feeds) {
+      try {
+        final response = await http.get(
+          Uri.parse(feedUrl),
+          headers: {'Accept': 'application/rss+xml, application/xml, text/xml'},
+        ).timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          final body = response.body;
+          final items = _parseRss(body, feedUrl);
+          allNoticias.addAll(items);
+        }
+      } catch (_) {}
+    }
+
+    // Filter to Argentina-only news
+    const argKeywords = [
+      'liga profesional', 'lpf', 'apertura', 'clausura', 'afa', 
+      'boca', 'river', 'racing', 'independiente', 'san lorenzo',
+      'huracán', 'huracan', 'vélez', 'velez', 'talleres', 'belgrano',
+      'estudiantes', 'gimnasia', 'rosario central', 'newell', 'lanús', 'lanus',
+      'banfield', 'tigre', 'platense', 'sarmiento', 'colón', 'colon',
+      'unión', 'union', 'atlético tucumán', 'atletico tucuman', 'godoy cruz',
+      'instituto', 'riestra', 'aldosivi', 'barracas', 'argentinos juniors',
+      'quilmes', 'arsenal', 'zona a', 'zona b', 'torneo apertura', 'torneo clausura',
+      'bombonera', 'monumental', 'superclásico', 'superclasico',
+    ];
+
+    final argNoticias = allNoticias.where((n) {
+      final title = (n['titulo'] as String? ?? '').toLowerCase();
+      final desc = (n['descripcion'] as String? ?? '').toLowerCase();
+      return argKeywords.any((kw) => title.contains(kw) || desc.contains(kw));
+    }).toList();
+
+    // Filter by team keywords if provided
+    if (keywords.isNotEmpty) {
+      final filtered = argNoticias.where((n) {
+        final title = (n['titulo'] as String? ?? '').toLowerCase();
+        final desc = (n['descripcion'] as String? ?? '').toLowerCase();
+        return keywords.any((kw) =>
+          title.contains(kw.toLowerCase()) ||
+          desc.contains(kw.toLowerCase()));
+      }).toList();
+      if (filtered.isNotEmpty) return filtered;
+      return [];
+    }
+
+    return argNoticias;
+  }
+
+  static List<Map<String, dynamic>> _parseRss(String xml, String feedUrl) {
+    final items = <Map<String, dynamic>>[];
+    try {
+      // Extract source name from URL
+      String source = 'Noticias';
+      if (feedUrl.contains('ole')) source = 'Olé';
+      else if (feedUrl.contains('tyc')) source = 'TyC Sports';
+      else if (feedUrl.contains('espn')) source = 'ESPN';
+
+      // Find all <item> blocks
+      final itemRegex = RegExp(r'<item>([\s\S]*?)<\/item>', caseSensitive: false);
+      final matches = itemRegex.allMatches(xml);
+
+      for (final match in matches) {
+        final itemXml = match.group(1) ?? '';
+
+        final titulo = _extractTag(itemXml, 'title');
+        final descripcion = _extractTag(itemXml, 'description');
+        final link = _extractTag(itemXml, 'link');
+        final pubDate = _extractTag(itemXml, 'pubDate');
+        final imagen = _extractImage(itemXml);
+
+        if (titulo.isNotEmpty) {
+          items.add({
+            'titulo': _cleanHtml(titulo),
+            'descripcion': _cleanHtml(descripcion),
+            'link': link,
+            'fecha': _parseDate(pubDate),
+            'imagen': imagen,
+            'fuente': source,
+          });
+        }
+        if (items.length >= 30) break;
+      }
+    } catch (_) {}
+    return items;
+  }
+
+  static String _extractTag(String xml, String tag) {
+    final regex = RegExp('<$tag[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?<\\/$tag>',
+        caseSensitive: false, dotAll: true);
+    final match = regex.firstMatch(xml);
+    return match?.group(1)?.trim() ?? '';
+  }
+
+  static String _extractImage(String xml) {
+    // Try media:content, enclosure, or img in description
+    final patterns = [
+      RegExp(r'<media:content[^>]*url="([^"]+)"', caseSensitive: false),
+      RegExp(r'<enclosure[^>]*url="([^"]+)"', caseSensitive: false),
+      RegExp(r'<img[^>]*src="([^"]+)"', caseSensitive: false),
+    ];
+    for (final p in patterns) {
+      final m = p.firstMatch(xml);
+      if (m != null) return m.group(1) ?? '';
+    }
+    return '';
+  }
+
+  static String _cleanHtml(String text) {
+    return text
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'")
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  }
+
+  static String _parseDate(String pubDate) {
+    try {
+      final dt = DateTime.parse(pubDate);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
+      if (diff.inHours < 24) return 'Hace ${diff.inHours} h';
+      return 'Hace ${diff.inDays} días';
+    } catch (_) {
+      // Try RFC 822 format (common in RSS)
+      try {
+        // Simple extraction of day/month
+        final parts = pubDate.split(' ');
+        if (parts.length >= 4) return '${parts[1]} ${parts[2]}';
+      } catch (_) {}
+      return '';
+    }
+  }
+  // ══ FIN NOTICIAS RSS ══════════════════════════════════════════════════════
+
+  static Future<List<Map<String, dynamic>>> getEquipoDeFecha() async {
+    try {
+      final allFixtures = await _getFixturesData();
+      int maxRound = 0;
+      for (var f in allFixtures) {
+        final status = f['fixture']['status']['short'] as String? ?? '';
+        final round = f['league']['round'] as String? ?? '';
+        if ((status == 'FT' || status == 'AET' || status == 'PEN') &&
+            round.contains('Regular Season')) {
+          final parts = round.split('- ');
+          if (parts.length == 2) {
+            final n = int.tryParse(parts[1].trim()) ?? 0;
+            if (n > maxRound) maxRound = n;
+          }
+        }
+      }
+      if (maxRound == 0) return [];
+      final roundStr = 'Regular Season - $maxRound';
+      final fixtureIds = <int>[];
+      for (var f in allFixtures) {
+        final round = f['league']['round'] as String? ?? '';
+        if (round == roundStr) {
+          final id = f['fixture']['id'] as int?;
+          if (id != null) fixtureIds.add(id);
+        }
+      }
+      if (fixtureIds.isEmpty) return [];
+      final results = await Future.wait(
+        fixtureIds.map((id) => getPlayersPartido(id.toString())),
+      );
+      final Map<int, Map<String, dynamic>> best = {};
+      for (var list in results) {
+        for (var p in list) {
+          final id = p['id'] as int;
+          final r = p['rating'] as double;
+          if (!best.containsKey(id) || r > (best[id]!['rating'] as double)) {
+            best[id] = p;
+          }
+        }
+      }
+      final starters = best.values
+          .where((p) => p['tieneRating'] == true && p['suplente'] == false)
+          .toList();
+      starters.sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
+      return starters;
+    } catch (e) {
+      return [];
+    }
+  }
 
 }
-
-
-
