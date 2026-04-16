@@ -1289,177 +1289,207 @@ class _MainScreenState extends State<MainScreen> {
         if (grupos.isEmpty)
           return const Center(child: Text('Sin datos de grupos', style: TextStyle(color: Colors.white54)));
 
-        // Build classified teams
-        final List<Map<String, dynamic>> primeros = [];
-        final List<Map<String, dynamic>> segundos = [];
-        final List<Map<String, dynamic>> terceros = [];
+        // Helper: obtener equipo por posicion y grupo
+        Map<String, dynamic>? getPos(int pos, String g) {
+          final key = 'Group $g';
+          final teams = grupos[key];
+          if (teams == null || teams.length <= pos) return null;
+          return {...teams[pos], 'grupo': key, 'pos': pos};
+        }
 
-        grupos.forEach((grupo, teams) {
-          if (teams.length >= 1) primeros.add({...teams[0], 'grupo': grupo});
-          if (teams.length >= 2) segundos.add({...teams[1], 'grupo': grupo});
-          if (teams.length >= 3) terceros.add({...teams[2], 'grupo': grupo});
-        });
-
-        // Sort terceros by pts, gd, gf
-        terceros.sort((a, b) {
+        // Mejores 8 terceros (ordenados por pts, dif, gf)
+        final ordenGrupos = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+        final List<Map<String, dynamic>> todosTerceros = [];
+        for (final g in ordenGrupos) {
+          final t = getPos(2, g);
+          if (t != null) todosTerceros.add(t);
+        }
+        todosTerceros.sort((a, b) {
           final pA = a['points'] as int? ?? 0;
           final pB = b['points'] as int? ?? 0;
           if (pA != pB) return pB.compareTo(pA);
           final gdA = a['goalsDiff'] as int? ?? 0;
           final gdB = b['goalsDiff'] as int? ?? 0;
           if (gdA != gdB) return gdB.compareTo(gdA);
-          final gfA = (a['all'] as Map)['goals']['for'] as int? ?? 0;
-          final gfB = (b['all'] as Map)['goals']['for'] as int? ?? 0;
+          final gfA = ((a['all'] as Map?)?['goals'] as Map?)?['for'] as int? ?? 0;
+          final gfB = ((b['all'] as Map?)?['goals'] as Map?)?['for'] as int? ?? 0;
           return gfB.compareTo(gfA);
         });
-        final mejoresTerceros = terceros.take(8).toList();
-        final eliminados = terceros.skip(8).toList();
+        final mejores3 = todosTerceros.take(8).toList();
 
-        // Build Round of 32 matchups (simplified - group winners vs runners-up/thirds)
-        // Real FIFA has 495 scenarios - we show projected matchups based on current standings
-        final List<Map<String, dynamic>> cruces = [];
-        for (int i = 0; i < primeros.length && i < segundos.length; i++) {
-          cruces.add({'local': primeros[i], 'visita': segundos[(i + 6) % segundos.length], 'tipo': '1Â° vs 2Â°'});
+        // Mejor tercero disponible de una lista de grupos candidatos
+        final usados3 = <String>{};
+        Map<String, dynamic>? mejor3De(List<String> candidatos) {
+          for (final t in mejores3) {
+            final gKey = t['grupo'] as String? ?? '';
+            final letra = gKey.replaceAll('Group ', '');
+            if (candidatos.contains(letra) && !usados3.contains(gKey)) {
+              usados3.add(gKey);
+              return t;
+            }
+          }
+          // Fallback: cualquier tercero no usado
+          for (final t in mejores3) {
+            final gKey = t['grupo'] as String? ?? '';
+            if (!usados3.contains(gKey)) {
+              usados3.add(gKey);
+              return t;
+            }
+          }
+          return null;
         }
+
+        String gl(String g) => 'Gr.$g';
+
+        // 16 CRUCES OFICIALES FIFA 2026 â€” Round of 32
+        final List<Map<String, dynamic>> partidos = [
+          // P73 â€” 2Â°A vs 2Â°B
+          {'l': getPos(1,'A'), 'v': getPos(1,'B'), 'lbl': '2Â° ${gl('A')} vs 2Â° ${gl('B')}', 'tipo': '2vs2'},
+          // P74 â€” 1Â°E vs 3Â°(A/B/C/D/F)
+          {'l': getPos(0,'E'), 'v3': ['A','B','C','D','F'], 'lbl': '1Â° ${gl('E')} vs 3Â° (A/B/C/D/F)', 'tipo': '1vs3'},
+          // P75 â€” 1Â°F vs 2Â°C
+          {'l': getPos(0,'F'), 'v': getPos(1,'C'), 'lbl': '1Â° ${gl('F')} vs 2Â° ${gl('C')}', 'tipo': '1vs2'},
+          // P76 â€” 1Â°C vs 2Â°F
+          {'l': getPos(0,'C'), 'v': getPos(1,'F'), 'lbl': '1Â° ${gl('C')} vs 2Â° ${gl('F')}', 'tipo': '1vs2'},
+          // P77 â€” 1Â°I vs 3Â°(C/D/F/G/H)
+          {'l': getPos(0,'I'), 'v3': ['C','D','F','G','H'], 'lbl': '1Â° ${gl('I')} vs 3Â° (C/D/F/G/H)', 'tipo': '1vs3'},
+          // P78 â€” 2Â°E vs 2Â°I
+          {'l': getPos(1,'E'), 'v': getPos(1,'I'), 'lbl': '2Â° ${gl('E')} vs 2Â° ${gl('I')}', 'tipo': '2vs2'},
+          // P79 â€” 1Â°A vs 3Â°(C/E/F/H/I)
+          {'l': getPos(0,'A'), 'v3': ['C','E','F','H','I'], 'lbl': '1Â° ${gl('A')} vs 3Â° (C/E/F/H/I)', 'tipo': '1vs3'},
+          // P80 â€” 1Â°L vs 3Â°(E/H/I/J/K)
+          {'l': getPos(0,'L'), 'v3': ['E','H','I','J','K'], 'lbl': '1Â° ${gl('L')} vs 3Â° (E/H/I/J/K)', 'tipo': '1vs3'},
+          // P81 â€” 1Â°D vs 3Â°(B/E/F/I/J)
+          {'l': getPos(0,'D'), 'v3': ['B','E','F','I','J'], 'lbl': '1Â° ${gl('D')} vs 3Â° (B/E/F/I/J)', 'tipo': '1vs3'},
+          // P82 â€” 1Â°G vs 3Â°(A/E/H/I/J)
+          {'l': getPos(0,'G'), 'v3': ['A','E','H','I','J'], 'lbl': '1Â° ${gl('G')} vs 3Â° (A/E/H/I/J)', 'tipo': '1vs3'},
+          // P83 â€” 2Â°K vs 2Â°L
+          {'l': getPos(1,'K'), 'v': getPos(1,'L'), 'lbl': '2Â° ${gl('K')} vs 2Â° ${gl('L')}', 'tipo': '2vs2'},
+          // P84 â€” 1Â°H vs 2Â°J
+          {'l': getPos(0,'H'), 'v': getPos(1,'J'), 'lbl': '1Â° ${gl('H')} vs 2Â° ${gl('J')}', 'tipo': '1vs2'},
+          // P85 â€” 1Â°B vs 3Â°(E/F/G/I/J)
+          {'l': getPos(0,'B'), 'v3': ['E','F','G','I','J'], 'lbl': '1Â° ${gl('B')} vs 3Â° (E/F/G/I/J)', 'tipo': '1vs3'},
+          // P86 â€” 1Â°J vs 2Â°H
+          {'l': getPos(0,'J'), 'v': getPos(1,'H'), 'lbl': '1Â° ${gl('J')} vs 2Â° ${gl('H')}', 'tipo': '1vs2'},
+          // P87 â€” 1Â°K vs 3Â°(D/E/I/J/L)
+          {'l': getPos(0,'K'), 'v3': ['D','E','I','J','L'], 'lbl': '1Â° ${gl('K')} vs 3Â° (D/E/I/J/L)', 'tipo': '1vs3'},
+          // P88 â€” 2Â°D vs 2Â°G
+          {'l': getPos(1,'D'), 'v': getPos(1,'G'), 'lbl': '2Â° ${gl('D')} vs 2Â° ${gl('G')}', 'tipo': '2vs2'},
+        ];
+
+        // Resolver terceros
+        final partidosResueltos = partidos.map((p) {
+          if (p['tipo'] == '1vs3') {
+            return {...p, 'v': mejor3De(p['v3'] as List<String>)};
+          }
+          return p;
+        }).toList();
 
         return ListView(padding: const EdgeInsets.all(12), children: [
           // Header
           Container(
             padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
               color: const Color(0xFF1B2A3B),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.3)),
+              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.4)),
             ),
             child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('ROUND OF 32 â€” PROYECCION ACTUAL', style: TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              Text('ROUND OF 32 â€” MUNDIAL 2026',
+                style: TextStyle(color: Color(0xFFFFD700), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
               SizedBox(height: 4),
-              Text('Basado en la tabla actual. Los cruces finales se definen el 27/06 con los 495 escenarios FIFA.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              Text('16 partidos oficiales FIFA. Los rivales de los 3ros dependen de los 8 mejores.',
+                style: TextStyle(color: Colors.white54, fontSize: 11)),
             ]),
           ),
 
-          // Clasificados
-          _sectionTitle('CLASIFICADOS DIRECTOS (24)'),
-          const SizedBox(height: 4),
-          const Text('PRIMEROS DE GRUPO (12)', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          const SizedBox(height: 4),
-          ...primeros.map((t) => _mundialTeamRow(t, const Color(0xFF00C853))),
-          const SizedBox(height: 8),
-          const Text('SEGUNDOS DE GRUPO (12)', style: TextStyle(color: Color(0xFF2196F3), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          const SizedBox(height: 4),
-          ...segundos.map((t) => _mundialTeamRow(t, const Color(0xFF2196F3))),
-          const SizedBox(height: 12),
-
           // Mejores terceros
-          _sectionTitle('MEJORES TERCEROS (8 clasifican)'),
-          const SizedBox(height: 4),
-          ...terceros.asMap().entries.map((entry) {
-            final i = entry.key;
-            final t = entry.value;
-            final clasifica = i < 8;
-            return _mundialTeamRow(t, clasifica ? const Color(0xFFFF6F00) : Colors.white24,
-                extra: clasifica ? 'âœ“ CLASIFICA' : 'âœ— ELIMINADO');
+          _sectionTitle('MEJORES TERCEROS (8 de 12 clasifican)'),
+          const SizedBox(height: 6),
+          ...todosTerceros.asMap().entries.map((e) {
+            final clasifica = e.key < 8;
+            final t = e.value;
+            final equipo = t['team'] as Map<String, dynamic>? ?? t;
+            final nombre = equipo['name'] as String? ?? '';
+            final logo = equipo['logo'] as String?;
+            final grupo = (t['grupo'] as String? ?? '').replaceAll('Group ', 'Gr.');
+            final pts = t['points'] as int? ?? 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B2A3B),
+                borderRadius: BorderRadius.circular(7),
+                border: Border(left: BorderSide(color: clasifica ? const Color(0xFFFF6F00) : Colors.white24, width: 3)),
+              ),
+              child: Row(children: [
+                SizedBox(width: 20, child: Text('${e.key + 1}Â°', style: TextStyle(color: clasifica ? const Color(0xFFFF6F00) : Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
+                if (logo != null) ...[Image.network(logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)), const SizedBox(width: 6)],
+                Expanded(child: Text(nombre, style: TextStyle(color: clasifica ? Colors.white : Colors.white38, fontSize: 12))),
+                Text(grupo, style: TextStyle(color: clasifica ? const Color(0xFFFF6F00) : Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Text('$pts pts', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                const SizedBox(width: 8),
+                Text(clasifica ? 'âœ“ CLASIFICA' : 'âœ— ELIMINADO',
+                  style: TextStyle(color: clasifica ? const Color(0xFF00C853) : Colors.white24, fontSize: 10, fontWeight: FontWeight.bold)),
+              ]),
+            );
           }),
-          const SizedBox(height: 12),
 
-          // Cruces proyectados
-          _sectionTitle('CRUCES PROYECTADOS â€” ROUND OF 32'),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.all(10),
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
-            child: const Text('ðŸŒŸ 1Â° de grupo vs 2Â° de grupo (cruzado) + Mejores 3Â° vs 1Â° de grupo\nLos cruces exactos dependen de los 495 escenarios FIFA pre-definidos.',
-              style: TextStyle(color: Colors.white54, fontSize: 11)),
-          ),
-          // Show projected bracket
-          ...primeros.asMap().entries.map((entry) {
-            final i = entry.key;
-            final primer = entry.value;
-            // Simplified: 1st of group X vs 2nd of group Y (crossing)
-            final rival = i < mejoresTerceros.length
-                ? mejoresTerceros[i]
-                : (segundos.isNotEmpty ? segundos[(i + 6) % segundos.length] : null);
-            if (rival == null) return const SizedBox.shrink();
-            return _mundialCruceRow(primer, rival);
+          const SizedBox(height: 16),
+          _sectionTitle('CRUCES OFICIALES â€” ROUND OF 32'),
+          const SizedBox(height: 8),
+
+          ...partidosResueltos.asMap().entries.map((e) {
+            final i = e.key;
+            final p = e.value;
+            final local = p['l'] as Map<String, dynamic>?;
+            final visita = p['v'] as Map<String, dynamic>?;
+            final lbl = p['lbl'] as String? ?? '';
+            if (local == null || visita == null) return const SizedBox.shrink();
+            return _mundialCruceRow2(local, visita, 'P${73 + i}  $lbl');
           }),
         ]);
       },
     );
   }
 
-  Widget _mundialTeamRow(Map<String, dynamic> team, Color color, {String? extra}) {
-    final t = team['team'] as Map<String, dynamic>? ?? team;
-    final nombre = t['name'] as String? ?? team['nombre'] as String? ?? '';
-    final logo = t['logo'] as String?;
-    final grupo = team['grupo'] as String? ?? '';
-    final pts = team['points'] as int? ?? 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B2A3B),
-        borderRadius: BorderRadius.circular(7),
-        border: Border(left: BorderSide(color: color, width: 3)),
-      ),
-      child: Row(children: [
-        if (logo != null) Image.network(logo, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
-        const SizedBox(width: 8),
-        Expanded(child: Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
-        if (grupo.isNotEmpty) Text(grupo.replaceAll('Group ', 'Gr.'), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
-        const SizedBox(width: 8),
-        Text('$pts pts', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-        if (extra != null) ...[const SizedBox(width: 8), Text(extra, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold))],
-      ]),
-    );
-  }
-
-  Widget _mundialCruceRow(Map<String, dynamic> local, Map<String, dynamic> visita) {
+  Widget _mundialCruceRow2(Map<String, dynamic> local, Map<String, dynamic> visita, String label) {
     final tL = local['team'] as Map<String, dynamic>? ?? local;
     final tV = visita['team'] as Map<String, dynamic>? ?? visita;
     final nombreL = tL['name'] as String? ?? '';
     final nombreV = tV['name'] as String? ?? '';
     final logoL = tL['logo'] as String?;
     final logoV = tV['logo'] as String?;
-    final grupoL = local['grupo'] as String? ?? '';
-    final grupoV = visita['grupo'] as String? ?? '';
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(8)),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            if (logoL != null) Image.network(logoL, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
-            const SizedBox(width: 6),
-            Expanded(child: Text(nombreL, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
-            Text(grupoL.replaceAll('Group ', '1Â° Gr.'), style: const TextStyle(color: Color(0xFF00C853), fontSize: 10)),
-          ]),
-        ])),
-        Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          margin: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(4)),
-          child: const Text('VS', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            Text(grupoV.replaceAll('Group ', '3Â° Gr.'), style: const TextStyle(color: Color(0xFFFF6F00), fontSize: 10)),
-            const SizedBox(width: 6),
-            Expanded(child: Text(nombreV, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
-            const SizedBox(width: 6),
-            if (logoV != null) Image.network(logoV, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
-          ]),
-        ])),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 0.5)),
+        const SizedBox(height: 6),
+        Row(children: [
+          if (logoL != null) Image.network(logoL, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(nombreL, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(4)),
+            child: const Text('VS', style: TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(child: Text(nombreV, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
+          const SizedBox(width: 8),
+          if (logoV != null) Image.network(logoV, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+        ]),
       ]),
     );
   }
-
-  // Ã¢â€¢ÂÃ¢â€¢Â SIMULADOR Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
-  Widget _tabMundialSimulador() {
-    return _MundialSimuladorWidget(key: ValueKey('simulador'));
-  }
-  // Ã¢â€¢ÂÃ¢â€¢Â FIN CRUCES MUNDIAL Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
-
   Widget _tabMundialGrupos() {
     return FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
       future: ApiService.getMundialGrupos(),
@@ -5711,5 +5741,6 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
   }
 }
 // â•â• FIN SIMULADOR â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
 
 
