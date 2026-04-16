@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
 
     <application
-        android:label="hdf_stats"
+        android:label="MatchGol Stats"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
