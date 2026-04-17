@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'racha_model.dart';
 
 class ApiService {
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
@@ -17,10 +18,14 @@ class ApiService {
   // Solo se hace 1 request por sesión, sin importar cuántos métodos lo pidan.
   static Future<dynamic>? _standingsFuture;
   static Future<List>? _fixturesFuture;
+  static Future<Map<String, List<Map<String, dynamic>>>>? _tiemposFuture;
+  static List<RachaEquipo>? _rachasCache;
 
   static void clearCache() {
     _standingsFuture = null;
     _fixturesFuture = null;
+    _tiemposFuture = null;
+    _rachasCache = null;
   }
 
   static Future<dynamic> _getStandingsData() {
@@ -105,9 +110,20 @@ class ApiService {
     }
   }
 
-static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async {
+  static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() {
+    _tiemposFuture ??= _computeTablasTiempos();
+    return _tiemposFuture!;
+  }
+
+  static Future<Map<String, List<Map<String, dynamic>>>> _computeTablasTiempos() async {
     try {
-      final dataFixturesList = await _getFixturesData();
+      // Fetch dedicado — no usa caché compartido de _fixturesFuture
+      final resF = await http.get(
+        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
+        headers: _headers,
+      );
+      if (resF.statusCode != 200) return {};
+      final dataFixturesList = (jsonDecode(resF.body)['response'] as List);
       final dataTablas = await _getStandingsData();
       if (dataFixturesList.isNotEmpty && dataTablas != null) {
         final fixtures = dataFixturesList;
@@ -144,51 +160,56 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
         }
 
         for (var f in fixtures) {
-          final ht = f['score']['halftime'];
-          final ft = f['score']['fulltime'];
-          if (ht == null || ht['home'] == null || ht['away'] == null) continue;
+          final status = f['fixture']?['status']?['short'] as String? ?? '';
+          if (status != 'FT' && status != 'AET' && status != 'PEN') continue;
+          final ft = f['score']?['fulltime'];
           if (ft == null || ft['home'] == null || ft['away'] == null) continue;
+
           final homeId = f['teams']['home']['id'] as int;
           final awayId = f['teams']['away']['id'] as int;
-          final zona = idZona[homeId] ?? idZona[awayId];
-          if (zona == null) continue;
-          if (idZona[homeId] != idZona[awayId]) continue;
-          initEquipo(zona, homeId);
-          initEquipo(zona, awayId);
+          final zonaHome = idZona[homeId];
+          final zonaAway = idZona[awayId];
+          if (zonaHome == null && zonaAway == null) continue;
 
-          final htHome = ht['home'] as int;
-          final htAway = ht['away'] as int;
-          final ftHome = ft['home'] as int;
-          final ftAway = ft['away'] as int;
-          final stHome = ftHome - htHome;
-          final stAway = ftAway - htAway;
+          final ht = f['score']?['halftime'];
+          final htValido = ht != null && ht['home'] != null && ht['away'] != null;
+          final htH = htValido ? (ht['home'] as num).toInt() : 0;
+          final htA = htValido ? (ht['away'] as num).toInt() : 0;
+          final ftH = (ft['home'] as num).toInt();
+          final ftA = (ft['away'] as num).toInt();
+          final stH = ftH - htH;
+          final stA = ftA - htA;
 
-          // 1er tiempo
-          zonas[zona]![homeId]!['pj1'] += 1;
-          zonas[zona]![awayId]!['pj1'] += 1;
-          if (htHome > htAway) {
-            zonas[zona]![homeId]!['g1'] += 1; zonas[zona]![homeId]!['pts1'] += 3;
-            zonas[zona]![awayId]!['p1'] += 1;
-          } else if (htHome == htAway) {
-            zonas[zona]![homeId]!['e1'] += 1; zonas[zona]![homeId]!['pts1'] += 1;
-            zonas[zona]![awayId]!['e1'] += 1; zonas[zona]![awayId]!['pts1'] += 1;
-          } else {
-            zonas[zona]![awayId]!['g1'] += 1; zonas[zona]![awayId]!['pts1'] += 3;
-            zonas[zona]![homeId]!['p1'] += 1;
+          // Registrar equipo LOCAL en su zona
+          if (zonaHome != null) {
+            final z = zonaHome;
+            initEquipo(z, homeId);
+            final eq = zonas[z]![homeId]!;
+            // pj1 siempre incrementa (usa 0-0 si no hay datos HT)
+            eq['pj1'] = (eq['pj1'] as int) + 1;
+            if (htH > htA)      { eq['g1'] = (eq['g1'] as int)+1; eq['pts1'] = (eq['pts1'] as int)+3; }
+            else if (htH == htA){ eq['e1'] = (eq['e1'] as int)+1; eq['pts1'] = (eq['pts1'] as int)+1; }
+            else                { eq['p1'] = (eq['p1'] as int)+1; }
+            eq['pj2'] = (eq['pj2'] as int) + 1;
+            if (stH > stA)      { eq['g2'] = (eq['g2'] as int)+1; eq['pts2'] = (eq['pts2'] as int)+3; }
+            else if (stH == stA){ eq['e2'] = (eq['e2'] as int)+1; eq['pts2'] = (eq['pts2'] as int)+1; }
+            else                { eq['p2'] = (eq['p2'] as int)+1; }
           }
 
-          // 2do tiempo
-          zonas[zona]![homeId]!['pj2'] += 1;
-          zonas[zona]![awayId]!['pj2'] += 1;
-          if (stHome > stAway) {
-            zonas[zona]![homeId]!['g2'] += 1; zonas[zona]![homeId]!['pts2'] += 3;
-            zonas[zona]![awayId]!['p2'] += 1;
-          } else if (stHome == stAway) {
-            zonas[zona]![homeId]!['e2'] += 1; zonas[zona]![homeId]!['pts2'] += 1;
-            zonas[zona]![awayId]!['e2'] += 1; zonas[zona]![awayId]!['pts2'] += 1;
-          } else {
-            zonas[zona]![awayId]!['g2'] += 1; zonas[zona]![awayId]!['pts2'] += 3;
-            zonas[zona]![homeId]!['p2'] += 1;
+          // Registrar equipo VISITANTE en su zona
+          if (zonaAway != null) {
+            final z = zonaAway;
+            initEquipo(z, awayId);
+            final eq = zonas[z]![awayId]!;
+            // pj1 siempre incrementa (usa 0-0 si no hay datos HT)
+            eq['pj1'] = (eq['pj1'] as int) + 1;
+            if (htA > htH)      { eq['g1'] = (eq['g1'] as int)+1; eq['pts1'] = (eq['pts1'] as int)+3; }
+            else if (htH == htA){ eq['e1'] = (eq['e1'] as int)+1; eq['pts1'] = (eq['pts1'] as int)+1; }
+            else                { eq['p1'] = (eq['p1'] as int)+1; }
+            eq['pj2'] = (eq['pj2'] as int) + 1;
+            if (stA > stH)      { eq['g2'] = (eq['g2'] as int)+1; eq['pts2'] = (eq['pts2'] as int)+3; }
+            else if (stH == stA){ eq['e2'] = (eq['e2'] as int)+1; eq['pts2'] = (eq['pts2'] as int)+1; }
+            else                { eq['p2'] = (eq['p2'] as int)+1; }
           }
         }
 
@@ -2016,5 +2037,64 @@ static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() async 
       return [];
     }
   }
+
+  // ── RACHAS DE EQUIPOS ────────────────────────────────────────────────────
+  // Reutiliza _getFixturesData() — sin llamada extra a la API
+  static Future<List<RachaEquipo>> getRachasEquipos({bool forceRefresh = false}) async {
+    if (!forceRefresh && _rachasCache != null) return _rachasCache!;
+    try {
+      final fixtures = await _getFixturesData();
+      final Map<int, Map<String, dynamic>> teamMap = {};
+
+      for (final fixture in fixtures) {
+        final status = fixture['fixture']?['status']?['short'] as String? ?? '';
+        if (status != 'FT') continue;
+
+        final homeTeam  = fixture['teams']?['home']  as Map<String, dynamic>? ?? {};
+        final awayTeam  = fixture['teams']?['away']  as Map<String, dynamic>? ?? {};
+        final homeGoals = fixture['goals']?['home']  as int?;
+        final awayGoals = fixture['goals']?['away']  as int?;
+        final dateStr   = fixture['fixture']?['date'] as String?;
+        if (homeGoals == null || awayGoals == null || dateStr == null) continue;
+
+        final fecha = DateTime.tryParse(dateStr);
+        if (fecha == null) continue;
+
+        final String homeRes, awayRes;
+        if (homeGoals > awayGoals) { homeRes = 'W'; awayRes = 'L'; }
+        else if (homeGoals == awayGoals) { homeRes = 'D'; awayRes = 'D'; }
+        else { homeRes = 'L'; awayRes = 'W'; }
+
+        _addPartidoRacha(teamMap, homeTeam['id'] as int, homeTeam['name'] as String,
+            homeTeam['logo'] as String, PartidoRacha(fecha: fecha, resultado: homeRes, esLocal: true));
+        _addPartidoRacha(teamMap, awayTeam['id'] as int, awayTeam['name'] as String,
+            awayTeam['logo'] as String, PartidoRacha(fecha: fecha, resultado: awayRes, esLocal: false));
+      }
+
+      final rachas = <RachaEquipo>[];
+      teamMap.forEach((id, data) {
+        final partidos = (data['partidos'] as List<PartidoRacha>)
+          ..sort((a, b) => b.fecha.compareTo(a.fecha));
+        rachas.add(RachaEquipo.fromPartidos(
+          teamId: id,
+          teamName: data['name'] as String,
+          teamLogo: data['logo'] as String,
+          partidos: partidos,
+        ));
+      });
+      rachas.sort((a, b) => a.teamName.compareTo(b.teamName));
+      _rachasCache = rachas;
+      return rachas;
+    } catch (e) {
+      return _rachasCache ?? [];
+    }
+  }
+
+  static void _addPartidoRacha(Map<int, Map<String, dynamic>> map,
+      int id, String name, String logo, PartidoRacha partido) {
+    map.putIfAbsent(id, () => {'name': name, 'logo': logo, 'partidos': <PartidoRacha>[]});
+    (map[id]!['partidos'] as List<PartidoRacha>).add(partido);
+  }
+  // ── FIN RACHAS ───────────────────────────────────────────────────────────
 
 }

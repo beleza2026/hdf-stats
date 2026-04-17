@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'racha_model.dart';
 
 class ApiService {
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
@@ -18,11 +19,13 @@ class ApiService {
   static Future<dynamic>? _standingsFuture;
   static Future<List>? _fixturesFuture;
   static Future<Map<String, List<Map<String, dynamic>>>>? _tiemposFuture;
+  static List<RachaEquipo>? _rachasCache;
 
   static void clearCache() {
     _standingsFuture = null;
     _fixturesFuture = null;
     _tiemposFuture = null;
+    _rachasCache = null;
   }
 
   static Future<dynamic> _getStandingsData() {
@@ -2034,5 +2037,64 @@ class ApiService {
       return [];
     }
   }
+
+  // ── RACHAS DE EQUIPOS ────────────────────────────────────────────────────
+  // Reutiliza _getFixturesData() — sin llamada extra a la API
+  static Future<List<RachaEquipo>> getRachasEquipos({bool forceRefresh = false}) async {
+    if (!forceRefresh && _rachasCache != null) return _rachasCache!;
+    try {
+      final fixtures = await _getFixturesData();
+      final Map<int, Map<String, dynamic>> teamMap = {};
+
+      for (final fixture in fixtures) {
+        final status = fixture['fixture']?['status']?['short'] as String? ?? '';
+        if (status != 'FT') continue;
+
+        final homeTeam  = fixture['teams']?['home']  as Map<String, dynamic>? ?? {};
+        final awayTeam  = fixture['teams']?['away']  as Map<String, dynamic>? ?? {};
+        final homeGoals = fixture['goals']?['home']  as int?;
+        final awayGoals = fixture['goals']?['away']  as int?;
+        final dateStr   = fixture['fixture']?['date'] as String?;
+        if (homeGoals == null || awayGoals == null || dateStr == null) continue;
+
+        final fecha = DateTime.tryParse(dateStr);
+        if (fecha == null) continue;
+
+        final String homeRes, awayRes;
+        if (homeGoals > awayGoals) { homeRes = 'W'; awayRes = 'L'; }
+        else if (homeGoals == awayGoals) { homeRes = 'D'; awayRes = 'D'; }
+        else { homeRes = 'L'; awayRes = 'W'; }
+
+        _addPartidoRacha(teamMap, homeTeam['id'] as int, homeTeam['name'] as String,
+            homeTeam['logo'] as String, PartidoRacha(fecha: fecha, resultado: homeRes, esLocal: true));
+        _addPartidoRacha(teamMap, awayTeam['id'] as int, awayTeam['name'] as String,
+            awayTeam['logo'] as String, PartidoRacha(fecha: fecha, resultado: awayRes, esLocal: false));
+      }
+
+      final rachas = <RachaEquipo>[];
+      teamMap.forEach((id, data) {
+        final partidos = (data['partidos'] as List<PartidoRacha>)
+          ..sort((a, b) => b.fecha.compareTo(a.fecha));
+        rachas.add(RachaEquipo.fromPartidos(
+          teamId: id,
+          teamName: data['name'] as String,
+          teamLogo: data['logo'] as String,
+          partidos: partidos,
+        ));
+      });
+      rachas.sort((a, b) => a.teamName.compareTo(b.teamName));
+      _rachasCache = rachas;
+      return rachas;
+    } catch (e) {
+      return _rachasCache ?? [];
+    }
+  }
+
+  static void _addPartidoRacha(Map<int, Map<String, dynamic>> map,
+      int id, String name, String logo, PartidoRacha partido) {
+    map.putIfAbsent(id, () => {'name': name, 'logo': logo, 'partidos': <PartidoRacha>[]});
+    (map[id]!['partidos'] as List<PartidoRacha>).add(partido);
+  }
+  // ── FIN RACHAS ───────────────────────────────────────────────────────────
 
 }

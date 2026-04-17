@@ -6,6 +6,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'api_service.dart';
+import 'racha_model.dart';
+import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -2155,7 +2157,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildTablas() {
     return DefaultTabController(
-      length: 12,
+      length: 13,
       child: Column(children: [
         Container(
           color: const Color(0xFF1B2A3B),
@@ -2178,6 +2180,7 @@ class _MainScreenState extends State<MainScreen> {
               Tab(text: 'ANUAL 📅'),
               Tab(text: 'PROMEDIOS 📉'),
               Tab(text: 'FECHA â­'),
+              Tab(text: 'RACHAS 📊'),
             ],
           ),
         ),
@@ -2194,6 +2197,7 @@ class _MainScreenState extends State<MainScreen> {
           _tabAnual(),
           _tabPromedios(),
           _tabEquipoDeFecha(),
+          const TablaRachasTab(),
         ])),
       ]),
     );
