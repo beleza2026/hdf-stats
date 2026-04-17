@@ -28,7 +28,7 @@ class HDFStatsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'HDF STATS',
+      title: 'MatchGol Stats',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFF0D1B2A),
@@ -802,7 +802,7 @@ class _MainScreenState extends State<MainScreen> {
         backgroundColor: const Color(0xFF0D1B2A),
         elevation: 0,
         title: Row(children: const [
-          Text('HDF', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 2)),
+          Text('MATCHGOL', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 2)),
           Text(' STATS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22, letterSpacing: 2)),
         ]),
         actions: [
@@ -2157,7 +2157,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildTablas() {
     return DefaultTabController(
-      length: 13,
+      length: 14,
       child: Column(children: [
         Container(
           color: const Color(0xFF1B2A3B),
@@ -2179,7 +2179,8 @@ class _MainScreenState extends State<MainScreen> {
           Tab(text: 'CRUCES 🏆'),
               Tab(text: 'ANUAL 📅'),
               Tab(text: 'PROMEDIOS 📉'),
-              Tab(text: 'FECHA â­'),
+              Tab(text: 'FECHA ⭐'),
+              Tab(text: 'DTs 🧠'),
               Tab(text: 'RACHAS 📊'),
             ],
           ),
@@ -2197,6 +2198,7 @@ class _MainScreenState extends State<MainScreen> {
           _tabAnual(),
           _tabPromedios(),
           _tabEquipoDeFecha(),
+          _tabDTs(),
           const TablaRachasTab(),
         ])),
       ]),
@@ -2528,21 +2530,18 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _dtCard(int pos, Map<String, dynamic> dt) {
-    final nombre = dt['nombre'] as String;
-    final foto = dt['foto'] as String?;
-    final equipo = dt['equipo'] as String;
-    final partidos = dt['partidos'] as int;
-    final victorias = dt['victorias'] as int;
-    final empates = dt['empates'] as int;
-    final derrotas = dt['derrotas'] as int;
-    final puntos = dt['puntos'] as int;
-    final pct = (dt['pctPuntos'] as double).toStringAsFixed(1);
+    final nombre   = dt['nombre']    as String;
+    final foto     = dt['foto']      as String?;
+    final equipo   = dt['equipo']    as String;
+    final partidos = dt['partidos']  as int;
+    final victorias= dt['victorias'] as int;
+    final empates  = dt['empates']   as int;
+    final derrotas = dt['derrotas']  as int;
+    final puntos   = dt['puntos']    as int;
+    final pct      = (dt['pctPuntos'] as double).toStringAsFixed(1);
     final rachaActual = dt['rachaActual'] as String;
-    final ultimos5 = (dt['ultimos5'] as List).cast<String>();
-    final edad = dt['edad'] as int? ?? 0;
-    final nacionalidad = dt['nacionalidad'] as String? ?? '';
-    final aniosExp = dt['aniosExp'] as int? ?? 0;
-    final clubAnterior = dt['clubAnterior'] as String? ?? '';
+    final ultimos5    = (dt['ultimos5'] as List).cast<String>();
+    final coachId     = dt['id'] as String;
 
     Color rachaColor = Colors.white54;
     if (rachaActual.endsWith('W')) rachaColor = const Color(0xFF00C853);
@@ -2555,54 +2554,49 @@ class _MainScreenState extends State<MainScreen> {
       return Colors.amber;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(12)),
-      child: Column(children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(children: [
-            SizedBox(width: 24, child: Text('$pos', style: const TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-            const SizedBox(width: 8),
-            Container(
-              width: 52, height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF0D1B2A),
-                border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4), width: 2),
-                image: foto != null ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover) : null,
-              ),
-              child: foto == null ? const Icon(Icons.person, color: Color(0xFF00C853), size: 26) : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-              Text(equipo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 11)),
-              if (edad > 0 || nacionalidad.isNotEmpty)
-                Text(
-                  [if (edad > 0) '$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
-                  style: const TextStyle(color: Colors.white54, fontSize: 10),
-                ),
-              if (aniosExp > 0)
-                Text('$aniosExp años de carrera', style: const TextStyle(color: Colors.white38, fontSize: 10)),
-            ])),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('$pct%', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 18)),
-              Text('$puntos pts · $partidos PJ', style: const TextStyle(color: Colors.white54, fontSize: 10)),
-              const SizedBox(height: 4),
+    return GestureDetector(
+      onTap: () => _mostrarCarreraDT(context, dt, coachId),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(12)),
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(children: [
+              SizedBox(width: 24, child: Text('$pos', style: const TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: rachaColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4), border: Border.all(color: rachaColor.withValues(alpha: 0.4))),
-                child: Text(rachaActual, style: TextStyle(color: rachaColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                width: 52, height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF0D1B2A),
+                  border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4), width: 2),
+                  image: foto != null ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover) : null,
+                ),
+                child: foto == null ? const Icon(Icons.person, color: Color(0xFF00C853), size: 26) : null,
               ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                Text(equipo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 11)),
+                const Text('Tocá para ver carrera completa', style: TextStyle(color: Colors.white24, fontSize: 9)),
+              ])),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('\$pct%', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 18)),
+                Text('\$puntos pts · \$partidos PJ', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: rachaColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4), border: Border.all(color: rachaColor.withValues(alpha: 0.4))),
+                  child: Text(rachaActual, style: TextStyle(color: rachaColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ]),
             ]),
-          ]),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: const Color(0xFF0D1B2A).withValues(alpha: 0.5), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12))),
-          child: Column(children: [
-            Row(children: [
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: const Color(0xFF0D1B2A).withValues(alpha: 0.5), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12))),
+            child: Row(children: [
               _statChip('G', victorias.toString(), const Color(0xFF00C853)),
               const SizedBox(width: 6),
               _statChip('E', empates.toString(), Colors.amber),
@@ -2616,18 +2610,127 @@ class _MainScreenState extends State<MainScreen> {
                 child: Center(child: Text(r, style: TextStyle(color: resultColor(r), fontSize: 9, fontWeight: FontWeight.bold))),
               )).toList()),
             ]),
-            if (clubAnterior.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Row(children: [
-                const Icon(Icons.history, color: Colors.white24, size: 12),
-                const SizedBox(width: 4),
-                Text('Anterior: $clubAnterior', style: const TextStyle(color: Colors.white38, fontSize: 10)),
-              ]),
-            ],
-          ]),
-        ),
-      ]),
+          ),
+        ]),
+      ),
     );
+  }
+
+  void _mostrarCarreraDT(BuildContext context, Map<String, dynamic> dt, String coachId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1B2A3B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.92,
+        builder: (_, ctrl) => FutureBuilder<Map<String, dynamic>>(
+          future: ApiService.getCarreraDT(coachId),
+          builder: (ctx, snap) {
+            final nombre   = dt['nombre']    as String;
+            final foto     = dt['foto']      as String?;
+            final equipo   = dt['equipo']    as String;
+            final partidos = dt['partidos']  as int;
+            final victorias= dt['victorias'] as int;
+            final empates  = dt['empates']   as int;
+            final derrotas = dt['derrotas']  as int;
+            final puntos   = dt['puntos']    as int;
+            final pct      = (dt['pctPuntos'] as double).toStringAsFixed(1);
+
+            final carrera = snap.hasData
+                ? (snap.data!['carrera'] as List? ?? [])
+                : <dynamic>[];
+            final edad          = snap.data?['edad']         as int?    ?? 0;
+            final nacionalidad  = snap.data?['nacionalidad'] as String? ?? '';
+            final aniosExp      = snap.data?['aniosExp']     as int?    ?? 0;
+            final totalClubes   = snap.data?['totalClubes']  as int?    ?? 0;
+
+            return ListView(controller: ctrl, padding: const EdgeInsets.all(20), children: [
+              // Handle
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              // Header DT
+              Row(children: [
+                Container(
+                  width: 64, height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF0D1B2A),
+                    border: Border.all(color: const Color(0xFF00C853), width: 2),
+                    image: foto != null ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover) : null,
+                  ),
+                  child: foto == null ? const Icon(Icons.person, color: Color(0xFF00C853), size: 30) : null,
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(equipo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12)),
+                  if (edad > 0 || nacionalidad.isNotEmpty)
+                    Text([if (edad > 0) '\$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  if (aniosExp > 0)
+                    Text('\$aniosExp años de experiencia · \$totalClubes clubes',
+                      style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                ])),
+              ]),
+              const SizedBox(height: 20),
+              // Stats torneo actual
+              const Text('TORNEO ACTUAL', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                  _statCol('\$partidos', 'PJ'),
+                  _statCol('\$victorias', 'G', color: const Color(0xFF00C853)),
+                  _statCol('\$empates', 'E', color: Colors.amber),
+                  _statCol('\$derrotas', 'P', color: const Color(0xFFFF5252)),
+                  _statCol('\$puntos', 'Pts', color: const Color(0xFF00C853)),
+                  _statCol('\$pct%', 'Efic.', color: const Color(0xFF00C853)),
+                ]),
+              ),
+              const SizedBox(height: 20),
+              // Carrera
+              const Text('CARRERA COMPLETA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              if (snap.connectionState == ConnectionState.waiting)
+                const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFF00C853))))
+              else if (carrera.isEmpty)
+                const Text('Sin datos de carrera disponibles', style: TextStyle(color: Colors.white38, fontSize: 12))
+              else
+                ...carrera.map((c) {
+                  final club   = (c['team']  as Map?)?['name']  as String? ?? '';
+                  final logo   = (c['team']  as Map?)?['logo']  as String?;
+                  final inicio = (c['start'] as String? ?? '').length >= 4 ? (c['start'] as String).substring(0, 4) : '?';
+                  final fin    = c['end']    as String?;
+                  final finStr = fin != null && fin.length >= 4 ? fin.substring(0, 4) : 'presente';
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
+                    child: Row(children: [
+                      if (logo != null) Image.network(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const SizedBox(width: 24))
+                      else const Icon(Icons.sports_soccer, color: Colors.white38, size: 24),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(club, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                      Text('\$inicio – \$finStr', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    ]),
+                  );
+                }),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _statCol(String valor, String label, {Color color = Colors.white}) {
+    return Column(children: [
+      Text(valor, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15)),
+      Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+    ]);
   }
 
   Widget _tabArbitros() {
@@ -4014,7 +4117,7 @@ Widget _tabTiempo(String tipo) {
                       ),
                     ],
                     if (jugado && eventos.isNotEmpty) ...[
-                      _detalleSeccion('FIGURA DEL PARTIDO HDF'),
+                      _detalleSeccion('FIGURA DEL PARTIDO MATCHGOL'),
                       Builder(builder: (context) {
                         final Map<String, int> puntos = {};
                         final Map<String, String> equipos = {};
@@ -5429,7 +5532,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             children: [
               const SizedBox(height: 24),
               Row(children: const [
-                Text('HDF', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 28, letterSpacing: 2)),
+                Text('MATCHGOL', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 28, letterSpacing: 2)),
                 Text(' STATS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28, letterSpacing: 2)),
               ]),
               const SizedBox(height: 32),
@@ -5507,7 +5610,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     disabledBackgroundColor: Colors.white12,
                   ),
                   child: Text(
-                    _seleccionado != null ? 'LISTO, ENTRAR A HDF STATS' : 'SELECCIÓN TU EQUIPO',
+                    _seleccionado != null ? 'LISTO, ENTRAR A MATCHGOL STATS' : 'SELECCIÓN TU EQUIPO',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1),
                   ),
                 ),

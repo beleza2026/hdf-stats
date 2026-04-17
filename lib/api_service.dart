@@ -26,6 +26,7 @@ class ApiService {
     _fixturesFuture = null;
     _tiemposFuture = null;
     _rachasCache = null;
+    _tablaDTsCache = null;
   }
 
   static Future<dynamic> _getStandingsData() {
@@ -1067,139 +1068,185 @@ class ApiService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getTablaDTs() async {
-    try {
-      // 1. Traer todos los fixtures y filtrar FT en código (status=FT no funciona en todos los planes)
-      final todosFixturesList = await _getFixturesData();
-      if (todosFixturesList.isEmpty) return [];
-      final todosFixtures = todosFixturesList.cast<Map<String, dynamic>>();
-      final fixtures = todosFixtures.where((f) {
-        final status = f['fixture']['status']['short'] as String? ?? '';
-        return status == 'FT' || status == 'AET' || status == 'PEN';
-      }).toList();
+  // Cache para TablaDTs
+  static List<Map<String, dynamic>>? _tablaDTsCache;
 
-      // 2. Traer lineups en lotes de 20 en paralelo
+  static Future<List<Map<String, dynamic>>> getTablaDTs({bool forceRefresh = false}) async {
+    if (!forceRefresh && _tablaDTsCache != null) return _tablaDTsCache!;
+    try {
+      // 1. Obtener equipos desde standings (ya cacheado)
+      final standingsData = await _getStandingsData();
+      final standingsList = standingsData?['response']?[0]?['league']?['standings'] as List?;
+      if (standingsList == null) return [];
+
+      final List<Map<String, dynamic>> todosEquipos = [];
+      for (final zona in standingsList) {
+        for (final item in (zona as List)) {
+          final team = item['team'] as Map<String, dynamic>;
+          todosEquipos.add({
+            'id':   team['id'] as int,
+            'name': team['name'] as String,
+            'logo': team['logo'] as String? ?? '',
+          });
+        }
+      }
+
+      // 2. Fixtures del torneo ya cacheados
+      final allFixtures = await _getFixturesData();
+      final fixtures = allFixtures
+          .cast<Map<String, dynamic>>()
+          .where((f) {
+            final s = f['fixture']['status']['short'] as String? ?? '';
+            return s == 'FT' || s == 'AET' || s == 'PEN';
+          }).toList();
+
+      // 3. Para cada equipo: buscar DT actual + contar resultados
       final Map<String, Map<String, dynamic>> dts = {};
 
-      void registrarDT(Map<String, dynamic> coach, String equipoNombre, int equipoId, bool gano, bool empato) {
-        final id = coach['id']?.toString() ?? '';
-        if (id.isEmpty) return;
-        dts.putIfAbsent(id, () => ({
-          'id': id,
-          'nombre': coach['name'] ?? '',
-          'foto': coach['photo'],
-          'equipo': equipoNombre,
-          'equipoId': equipoId,
-          'partidos': 0, 'victorias': 0, 'empates': 0, 'derrotas': 0,
-          'racha': <String>[],
-        }));
-        dts[id]!['partidos'] += 1;
-        if (gano) { dts[id]!['victorias'] += 1; (dts[id]!['racha'] as List).add('W'); }
-        else if (empato) { dts[id]!['empates'] += 1; (dts[id]!['racha'] as List).add('D'); }
-        else { dts[id]!['derrotas'] += 1; (dts[id]!['racha'] as List).add('L'); }
-        // Actualizar equipo actual (último partido)
-        dts[id]!['equipo'] = equipoNombre;
-        dts[id]!['equipoId'] = equipoId;
-      }
-
-      const loteSize = 20;
-      for (int i = 0; i < fixtures.length; i += loteSize) {
-        final lote = fixtures.skip(i).take(loteSize).toList();
-        await Future.wait(lote.map((f) async {
-          final fixtureId = f['fixture']['id'];
-          final homeGoals = f['goals']['home'] as int? ?? 0;
-          final awayGoals = f['goals']['away'] as int? ?? 0;
-          final homeId = f['teams']['home']['id'] as int;
-          final awayId = f['teams']['away']['id'] as int;
-          final homeName = f['teams']['home']['name'] as String;
-          final awayName = f['teams']['away']['name'] as String;
-          try {
-            final res = await http.get(
-              Uri.parse('$_baseUrl/fixtures/lineups?fixture=$fixtureId'),
-              headers: _headers,
-            );
-            if (res.statusCode != 200) return;
-            final lineups = (jsonDecode(res.body)['response'] as List).cast<Map<String, dynamic>>();
-            for (var lineup in lineups) {
-              final coach = lineup['coach'] as Map<String, dynamic>?;
-              if (coach == null) continue;
-              final isHome = lineup['team']?['id'] == homeId;
-              final teamName = isHome ? homeName : awayName;
-              final teamId = isHome ? homeId : awayId;
-              final gano = isHome ? homeGoals > awayGoals : awayGoals > homeGoals;
-              final empato = homeGoals == awayGoals;
-              registrarDT(coach, teamName, teamId, gano, empato);
-            }
-          } catch (e) {}
-        }));
-      }
-
-      // 3. Calcular stats finales
-      final result = dts.values.map((dt) {
-        final partidos = dt['partidos'] as int;
-        final victorias = dt['victorias'] as int;
-        final empates = dt['empates'] as int;
-        final puntos = victorias * 3 + empates;
-        final puntosMaximos = partidos * 3;
-        final pctPuntos = puntosMaximos > 0 ? (puntos / puntosMaximos * 100) : 0.0;
-        final rachaLista = (dt['racha'] as List).cast<String>();
-        // Racha actual: últimos resultados consecutivos iguales al último
-        String rachaActual = '';
-        if (rachaLista.isNotEmpty) {
-          final ultimo = rachaLista.last;
-          int count = 0;
-          for (int i = rachaLista.length - 1; i >= 0; i--) {
-            if (rachaLista[i] == ultimo) count++;
-            else break;
-          }
-          rachaActual = '$count$ultimo';
-        }
-        return {
-          ...dt,
-          'puntos': puntos,
-          'pctPuntos': pctPuntos,
-          'rachaActual': rachaActual,
-          'ultimos5': rachaLista.length >= 5 ? rachaLista.sublist(rachaLista.length - 5) : rachaLista,
-        };
-      }).toList();
-
-      // 4. Enriquecer con datos personales del DT (edad, nacionalidad, carrera)
-      await Future.wait(result.map((dt) async {
+      await Future.wait(todosEquipos.map((equipo) async {
+        final teamId   = equipo['id']   as int;
+        final teamName = equipo['name'] as String;
+        final teamLogo = equipo['logo'] as String;
         try {
           final res = await http.get(
-            Uri.parse('$_baseUrl/coachs?id=${dt['id']}'),
+            Uri.parse('\$_baseUrl/coachs?team=\$teamId'),
             headers: _headers,
           );
           if (res.statusCode != 200) return;
           final data = jsonDecode(res.body)['response'] as List;
           if (data.isEmpty) return;
-          final coach = data[0];
-          final career = (coach['career'] as List?) ?? [];
-          // Años de experiencia: desde el primer club hasta hoy
-          String primerAnio = '';
-          String ultimoClubAnterior = '';
-          if (career.isNotEmpty) {
-            final primero = career.last; // career viene de más reciente a más antiguo
-            primerAnio = (primero['start'] as String? ?? '').substring(0, 4);
-            // Último club anterior al actual
-            if (career.length > 1) {
-              ultimoClubAnterior = career[1]['team']?['name'] as String? ?? '';
+
+          // DT actual: el que tiene end == null en su carrera para este equipo
+          Map<String, dynamic>? coachActual;
+          for (final c in data) {
+            final career = (c['career'] as List?) ?? [];
+            for (final cargo in career) {
+              final cargoTeamId = (cargo['team'] as Map?)?['id'];
+              final end = cargo['end'];
+              if (cargoTeamId == teamId && end == null) {
+                coachActual = c as Map<String, dynamic>;
+                break;
+              }
             }
+            if (coachActual != null) break;
           }
-          final anioInicio = int.tryParse(primerAnio) ?? 0;
-          final aniosExp = anioInicio > 0 ? (2026 - anioInicio) : 0;
-          dt['edad'] = coach['age'] ?? 0;
-          dt['nacionalidad'] = coach['nationality'] ?? '';
-          dt['aniosExp'] = aniosExp;
-          dt['clubAnterior'] = ultimoClubAnterior;
-          dt['totalClubes'] = career.length;
-        } catch (e) {}
+          // Fallback: primer DT de la lista
+          coachActual ??= data[0] as Map<String, dynamic>;
+
+          final coachId   = coachActual['id']?.toString() ?? '';
+          final coachName = coachActual['name']  as String? ?? '';
+          final coachFoto = coachActual['photo'] as String?;
+          if (coachId.isEmpty) return;
+
+          // Contar resultados de este equipo en los fixtures del torneo
+          int partidos = 0, victorias = 0, empates = 0, derrotas = 0;
+          final racha = <String>[];
+
+          // Ordenar fixtures por fecha asc
+          final equipoFixtures = fixtures.where((f) {
+            final hId = f['teams']['home']['id'] as int;
+            final aId = f['teams']['away']['id'] as int;
+            return hId == teamId || aId == teamId;
+          }).toList()
+            ..sort((a, b) {
+              final da = DateTime.tryParse(a['fixture']['date'] as String? ?? '') ?? DateTime(2000);
+              final db = DateTime.tryParse(b['fixture']['date'] as String? ?? '') ?? DateTime(2000);
+              return da.compareTo(db);
+            });
+
+          for (final f in equipoFixtures) {
+            final hId     = f['teams']['home']['id'] as int;
+            final hGoals  = f['goals']['home'] as int? ?? 0;
+            final aGoals  = f['goals']['away'] as int? ?? 0;
+            final isHome  = hId == teamId;
+            final gano    = isHome ? hGoals > aGoals : aGoals > hGoals;
+            final empato  = hGoals == aGoals;
+            partidos++;
+            if (gano)        { victorias++; racha.add('W'); }
+            else if (empato) { empates++;   racha.add('D'); }
+            else             { derrotas++;  racha.add('L'); }
+          }
+
+          if (partidos == 0) return;
+
+          // Racha actual
+          String rachaActual = '';
+          if (racha.isNotEmpty) {
+            final ultimo = racha.last;
+            int count = 0;
+            for (int i = racha.length - 1; i >= 0; i--) {
+              if (racha[i] == ultimo) count++;
+              else break;
+            }
+            rachaActual = '\$count\$ultimo';
+          }
+
+          final puntos   = victorias * 3 + empates;
+          final pctPuntos = partidos > 0 ? (puntos / (partidos * 3) * 100) : 0.0;
+          final ultimos5  = racha.length >= 5 ? racha.sublist(racha.length - 5) : racha;
+
+          dts[coachId] = {
+            'id':         coachId,
+            'nombre':     coachName,
+            'foto':       coachFoto,
+            'equipo':     teamName,
+            'equipoLogo': teamLogo,
+            'equipoId':   teamId,
+            'partidos':   partidos,
+            'victorias':  victorias,
+            'empates':    empates,
+            'derrotas':   derrotas,
+            'puntos':     puntos,
+            'pctPuntos':  pctPuntos,
+            'rachaActual': rachaActual,
+            'ultimos5':   ultimos5,
+          };
+        } catch (_) {}
       }));
 
-      result.sort((a, b) => (b['pctPuntos'] as double).compareTo(a['pctPuntos'] as double));
+      final result = dts.values.toList()
+        ..sort((a, b) => (b['pctPuntos'] as double).compareTo(a['pctPuntos'] as double));
+
+      _tablaDTsCache = result;
       return result;
     } catch (e) {
-      return [];
+      return _tablaDTsCache ?? [];
+    }
+  }
+
+
+  /// Carga la carrera completa de un DT bajo demanda (al tocar en la tabla)
+  static Future<Map<String, dynamic>> getCarreraDT(String coachId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('\$_baseUrl/coachs?id=\$coachId'),
+        headers: _headers,
+      );
+      if (res.statusCode != 200) return {};
+      final data = jsonDecode(res.body)['response'] as List;
+      if (data.isEmpty) return {};
+      final coach = data[0] as Map<String, dynamic>;
+      final career = (coach['career'] as List?) ?? [];
+
+      String primerAnio = '';
+      if (career.isNotEmpty) {
+        final primero = career.last;
+        primerAnio = ((primero['start'] as String?) ?? '').length >= 4
+            ? (primero['start'] as String).substring(0, 4)
+            : '';
+      }
+      final anioInicio = int.tryParse(primerAnio) ?? 0;
+
+      return {
+        'edad':        coach['age'] ?? 0,
+        'nacionalidad': coach['nationality'] ?? '',
+        'foto':        coach['photo'] ?? '',
+        'aniosExp':    anioInicio > 0 ? (2026 - anioInicio) : 0,
+        'totalClubes': career.length,
+        'carrera':     career, // lista completa para mostrar en detalle
+      };
+    } catch (e) {
+      return {};
     }
   }
 
