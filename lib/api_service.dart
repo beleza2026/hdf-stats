@@ -608,23 +608,8 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final fixtures = (data['response'] as List).cast<Map<String, dynamic>>();
-        // Enriquecer con estadísticas de cada partido
-        final enriched = await Future.wait(fixtures.map((f) async {
-          try {
-            final fixtureId = f['fixture']['id'];
-            final statsRes = await http.get(
-              Uri.parse('$_baseUrl/fixtures/statistics?fixture=$fixtureId'),
-              headers: _headers,
-            );
-            if (statsRes.statusCode == 200) {
-              final statsData = jsonDecode(statsRes.body);
-              f['statistics'] = statsData['response'] ?? [];
-            }
-          } catch (_) {}
-          return f;
-        }));
-        return enriched;
+        final fixtures = data['response'] as List;
+        return fixtures.map((f) => f as Map<String, dynamic>).toList();
       }
       return [];
     } catch (e) {
@@ -2152,5 +2137,122 @@ class ApiService {
     (map[id]!['partidos'] as List<PartidoRacha>).add(partido);
   }
   // ── FIN RACHAS ───────────────────────────────────────────────────────────
+
+  // ── CLIMA ────────────────────────────────────────────────────────────────
+  static const String _weatherKey = '7a9a478b04215760440c86834eb07620';
+
+  static const Map<String, List<double>> _estadioCoords = {
+    'Kempes': [-31.3609, -64.2372],
+    'Monumental': [-34.5452, -58.4510],
+    'Armando': [-34.6345, -58.3647],
+    'Bombonera': [-34.6345, -58.3647],
+    'Cilindro': [-34.6598, -58.3753],
+    'Libertadores de América': [-34.6651, -58.3697],
+    'Bidegain': [-34.6446, -58.4380],
+    'Gasómetro': [-34.6446, -58.4380],
+    'Ducó': [-34.6510, -58.4390],
+    'Amalfitani': [-34.6360, -58.5270],
+    'Grondona': [-34.6743, -58.3551],
+    'Sola': [-34.7420, -58.2612],
+    'Hirschi': [-34.9271, -57.9589],
+    'Zerillo': [-34.9139, -57.9443],
+    'Gigante': [-32.9363, -60.6704],
+    'Bielsa': [-32.9488, -60.6635],
+    'Madre de Ciudades': [-28.4534, -65.8698],
+    'Malvinas': [-32.8956, -68.8539],
+    'Villagra': [-31.4312, -64.1854],
+    'Riestra': [-34.6261, -58.4631],
+  };
+
+  static List<double>? _coordsParaEstadio(String nombre) {
+    for (final entry in _estadioCoords.entries) {
+      if (nombre.toLowerCase().contains(entry.key.toLowerCase())) return entry.value;
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>> getClimaEstadio(String estadio, {DateTime? matchTime}) async {
+    try {
+      final coords = _coordsParaEstadio(estadio);
+      if (coords == null) return {};
+      final resp = await http.get(Uri.parse(
+        'https://api.openweathermap.org/data/2.5/weather?lat=${coords[0]}&lon=${coords[1]}&appid=$_weatherKey&units=metric&lang=es'
+      )).timeout(const Duration(seconds: 5));
+      if (resp.statusCode != 200) return {};
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      final weather = (data['weather'] as List?)?.first as Map<String, dynamic>? ?? {};
+      final main = data['main'] as Map<String, dynamic>? ?? {};
+      final wind = data['wind'] as Map<String, dynamic>? ?? {};
+      return {
+        'descripcion': weather['description'] as String? ?? '',
+        'temp': (main['temp'] as num?)?.round() ?? 0,
+        'humedad': main['humidity'] as int? ?? 0,
+        'viento': ((wind['speed'] as num?) ?? 0) * 3.6,
+      };
+    } catch (_) { return {}; }
+  }
+
+  static String climaEmoji(String descripcion) {
+    final d = descripcion.toLowerCase();
+    if (d.contains('tormenta') || d.contains('storm')) return '⛈️';
+    if (d.contains('lluvia') || d.contains('rain') || d.contains('llovizna')) return '🌧️';
+    if (d.contains('nieve') || d.contains('snow')) return '❄️';
+    if (d.contains('niebla') || d.contains('fog')) return '🌫️';
+    if (d.contains('nublado') || d.contains('cloud') || d.contains('nub')) return '☁️';
+    if (d.contains('parcialmente') || d.contains('partly')) return '⛅';
+    if (d.contains('despejado') || d.contains('clear') || d.contains('sol')) return '☀️';
+    return '🌤️';
+  }
+
+  // ── PREVIEW EQUIPO (top rating + goleadores + edad promedio) ─────────────
+  static Future<Map<String, dynamic>> getPreviewEquipo(int teamId) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&team=$teamId&page=1');
+      final res = await http.get(uri, headers: _headers);
+      if (res.statusCode != 200) return {'rating': [], 'goles': [], 'promedioEdad': 0.0};
+      final players = (jsonDecode(res.body)['response'] as List? ?? []).cast<Map<String, dynamic>>();
+      final conStats = players.where((p) {
+        final stats = (p['statistics'] as List?)?.first;
+        return (stats?['games']?['appearences'] as int? ?? 0) > 0;
+      }).map((p) {
+        final stats = (p['statistics'] as List).first as Map<String, dynamic>;
+        final ratingStr = stats['games']?['rating'] as String? ?? '0';
+        final rating = double.tryParse(ratingStr) ?? 0.0;
+        final goles = stats['goals']?['total'] as int? ?? 0;
+        final foto = p['player']?['photo'] as String? ?? '';
+        final nombre = p['player']?['name'] as String? ?? '';
+        final edad = p['player']?['age'] as int? ?? 0;
+        return {'nombre': nombre, 'foto': foto, 'rating': rating, 'goles': goles, 'edad': edad};
+      }).toList();
+      final edades = conStats.map((p) => p['edad'] as int? ?? 0).where((e) => e > 0).toList();
+      final promedioEdad = edades.isNotEmpty ? edades.reduce((a, b) => a + b) / edades.length : 0.0;
+      final porRating = List<Map<String, dynamic>>.from(conStats)
+        ..removeWhere((p) => (p['rating'] as double) == 0.0)
+        ..sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
+      final porGoles = List<Map<String, dynamic>>.from(conStats)
+        ..removeWhere((p) => (p['goles'] as int) == 0)
+        ..sort((a, b) => (b['goles'] as int).compareTo(a['goles'] as int));
+      return {'rating': porRating.take(3).toList(), 'goles': porGoles.take(3).toList(), 'promedioEdad': promedioEdad};
+    } catch (_) { return {'rating': [], 'goles': [], 'promedioEdad': 0.0}; }
+  }
+
+  // ── STANDINGS FOR TEAMS ───────────────────────────────────────────────────
+  static Future<Map<int, Map<String, dynamic>>> getStandingsForTeams(int homeId, int awayId) async {
+    try {
+      final data = await _getStandingsData();
+      final result = <int, Map<String, dynamic>>{};
+      for (final league in (data['response'] as List? ?? [])) {
+        for (final group in (league['league']?['standings'] as List? ?? [])) {
+          for (final team in (group as List)) {
+            final id = team['team']?['id'] as int?;
+            if (id == homeId || id == awayId) {
+              result[id!] = {'pos': team['rank'] as int? ?? 0, 'pts': team['points'] as int? ?? 0};
+            }
+          }
+        }
+      }
+      return result;
+    } catch (_) { return {}; }
+  }
 
 }
