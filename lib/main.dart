@@ -26,8 +26,8 @@ class PremiumService {
   static const String _rcApiKeyAndroid = 'test_qEEXDgvGatIchPpQpYSoGeQWgYH';
 
   static Future<void> init() async {
-    await Purchases.setLogLevel(LogLevel.debug);
-    await Purchases.configure(PurchasesConfiguration(_rcApiKeyAndroid));
+//    await Purchases.setLogLevel(LogLevel.debug);
+//    await Purchases.configure(PurchasesConfiguration(_rcApiKeyAndroid));
   }
 
   static Future<bool> isPremium() async {

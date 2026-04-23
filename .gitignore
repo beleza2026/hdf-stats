@@ -9,3 +9,7 @@ key.properties
 *.jks
 google-services.json
 firebase_options.dart
+
+service_account.json
+
+service_account.json
