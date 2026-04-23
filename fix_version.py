@@ -1,0 +1,1 @@
+f=open('android/app/build.gradle.kts','r+');c=f.read();c=c.replace('versionCode = 1','versionCode = 2');c=c.replace('versionName = chr(34)1.0.0chr(34)','versionName = chr(34)1.0.1chr(34)');f.seek(0);f.write(c);f.close();print('Listo')
