@@ -29,7 +29,6 @@ class ApiService {
     _rachasCache = null;
     _tablaDTsCache = null;
     _fixturesPrevFuture = null;
-    _tablasCache = null;
   }
 
   static Future<dynamic> _getStandingsData() {
@@ -52,11 +51,11 @@ class ApiService {
   // ─────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
-    final hoy = DateTime.now().toLocal();
+    final hoy = DateTime.now();
     final fecha = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
+        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&date=$fecha'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -70,8 +69,6 @@ class ApiService {
     }
   }
 
-  static Map<String, List<Map<String, dynamic>>>? _tablasCache;
-
   static Future<Map<String, List<Map<String, dynamic>>>> getTablas() async {
     try {
       final data = await _getStandingsData();
@@ -83,29 +80,11 @@ class ApiService {
           zonas['Zona ${String.fromCharCode(65 + i)}'] =
               zona.map((e) => e as Map<String, dynamic>).toList();
         }
-        if (zonas.isNotEmpty) {
-          // Reinyectar equipos que desaparecen mientras juegan (API los saca del standings en vivo)
-          if (_tablasCache != null) {
-            for (final zonaKey in zonas.keys) {
-              final cached = _tablasCache![zonaKey] ?? [];
-              final nuevosIds = zonas[zonaKey]!.map((e) => e['team']['id'] as int).toSet();
-              for (final eq in cached) {
-                if (!nuevosIds.contains(eq['team']['id'] as int)) zonas[zonaKey]!.add(eq);
-              }
-              zonas[zonaKey]!.sort((a, b) {
-                final d = (b['points'] as int? ?? 0).compareTo(a['points'] as int? ?? 0);
-                if (d != 0) return d;
-                return ((b['goalsDiff'] as int?) ?? 0).compareTo((a['goalsDiff'] as int?) ?? 0);
-              });
-            }
-          }
-          _tablasCache = Map.from(zonas.map((k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v))));
-          return zonas;
-        }
+        return zonas;
       }
-      return _tablasCache ?? {};
+      return {};
     } catch (e) {
-      return _tablasCache ?? {};
+      return {};
     }
   }
 
@@ -552,7 +531,6 @@ class ApiService {
         result.add({
           'id': player['id'],
           'nombre': player['name'],
-          'foto': player['photo'],
           'equipo': stats['team']['name'],
           'goles': goles,
           'partidos': partidos,
@@ -820,15 +798,7 @@ class ApiService {
     }
   }
 
-  static List<Map<String, dynamic>>? _prediccionesCache;
-  static DateTime? _prediccionesCacheTime;
-
   static Future<List<Map<String, dynamic>>> getPredicciones() async {
-    // Cache 45 min — evita recalcular y resultados cambiantes
-    if (_prediccionesCache != null && _prediccionesCacheTime != null &&
-        DateTime.now().difference(_prediccionesCacheTime!).inMinutes < 45) {
-      return _prediccionesCache!;
-    }
     try {
       // 1. Traer fixture completo
       final resFixture = await http.get(
@@ -855,32 +825,24 @@ class ApiService {
       }
       final fechas = porFecha.keys.toList()..sort();
       int? proximaFecha;
-
-      // Fecha en curso = la más alta con al menos 1 partido activo o FT
-      int fechaEnCurso = 0;
+      // Encontrar la última fecha jugada y tomar la siguiente
+      int ultimaFechaJugada = 0;
       for (final f in fechas) {
-        final tieneActividad = porFecha[f]!.any((p) {
+        final partidos = porFecha[f]!;
+        final tieneFT = partidos.any((p) {
           final s = p['fixture']['status']['short'] as String;
-          return s == 'FT' || s == 'AET' || s == 'PEN' || s == '1H' || s == '2H' || s == 'HT';
+          return s == 'FT' || s == 'AET' || s == 'PEN';
         });
-        if (tieneActividad && f > fechaEnCurso) fechaEnCurso = f;
+        if (tieneFT && f > ultimaFechaJugada) ultimaFechaJugada = f;
       }
-      // Si la fecha en curso todavía tiene NS → mostrar esos partidos
-      if (fechaEnCurso > 0) {
-        final nsEnCurso = porFecha[fechaEnCurso]?.where((p) =>
-            p['fixture']['status']['short'] == 'NS').toList() ?? [];
-        if (nsEnCurso.isNotEmpty) proximaFecha = fechaEnCurso;
+      // Próxima = primera fecha con número mayor a la última jugada que tenga NS
+      for (final f in fechas) {
+        if (f <= ultimaFechaJugada) continue;
+        final partidos = porFecha[f]!;
+        final tieneNS = partidos.any((p) => p['fixture']['status']['short'] == 'NS');
+        if (tieneNS) { proximaFecha = f; break; }
       }
-      // Si la fecha en curso está completa → mostrar la siguiente
-      if (proximaFecha == null) {
-        for (final f in fechas) {
-          if (f <= fechaEnCurso) continue;
-          if (porFecha[f]!.any((p) => p['fixture']['status']['short'] == 'NS')) {
-            proximaFecha = f; break;
-          }
-        }
-      }
-      if (proximaFecha == null) return _prediccionesCache ?? [];
+      if (proximaFecha == null) return [];
       final partidos = porFecha[proximaFecha]!.where((p) {
         final s = p['fixture']['status']['short'] as String;
         return s == 'NS';
@@ -895,9 +857,6 @@ class ApiService {
         final homeLogo = p['teams']['home']['logo'] as String?;
         final awayLogo = p['teams']['away']['logo'] as String?;
         final fechaHora = p['fixture']['date'] as String?;
-        final venueId = p['fixture']['venue']?['id'] as int?;
-        final venueName = p['fixture']['venue']?['name'] as String? ?? '';
-        final venueCity = p['fixture']['venue']?['city'] as String? ?? '';
 
         final results = await Future.wait([
           getUltimos5(homeId),
@@ -1097,9 +1056,6 @@ class ApiService {
           'homeName': homeName, 'awayName': awayName,
           'homeLogo': homeLogo, 'awayLogo': awayLogo,
           'fechaHora': fechaHora,
-          'venueId': venueId,
-          'venueName': venueName,
-          'venueCity': venueCity,
           'pctLocal': pctLocal, 'pctEmpate': pctEmpate, 'pctVisit': pctVisit,
           'formaLocal': formaRecLocal, 'formaVisit': formaRecVisit,
           'h2hLocal': h2hLocal, 'h2hEmpate': h2hEmpate, 'h2hVisit': h2hVisit,
@@ -1108,11 +1064,9 @@ class ApiService {
         };
       }));
 
-      _prediccionesCache = resultados;
-      _prediccionesCacheTime = DateTime.now();
       return resultados;
     } catch (e) {
-      return _prediccionesCache ?? [];
+      return [];
     }
   }
 
@@ -2299,29 +2253,6 @@ class ApiService {
       }
       return result;
     } catch (_) { return {}; }
-  }
-
-  // ── FOTO DE ESTADIO ──────────────────────────────────────────────────────
-  static final Map<int, String?> _venueFotoCache = {};
-
-  static Future<String?> getVenueFoto(int? venueId) async {
-    if (venueId == null) return null;
-    if (_venueFotoCache.containsKey(venueId)) return _venueFotoCache[venueId];
-    try {
-      final res = await http.get(
-        Uri.parse('$_baseUrl/venues?id=$venueId'),
-        headers: _headers,
-      ).timeout(const Duration(seconds: 5));
-      if (res.statusCode != 200) { _venueFotoCache[venueId] = null; return null; }
-      final data = jsonDecode(res.body)['response'] as List? ?? [];
-      if (data.isEmpty) { _venueFotoCache[venueId] = null; return null; }
-      final foto = data[0]['image'] as String?;
-      _venueFotoCache[venueId] = foto;
-      return foto;
-    } catch (_) {
-      _venueFotoCache[venueId] = null;
-      return null;
-    }
   }
 
 }

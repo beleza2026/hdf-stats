@@ -41,6 +41,7 @@ dependencies:
   cloud_firestore: ^6.2.0
   flutter_local_notifications: 17.2.4
   purchases_flutter: ^10.0.1
+  firebase_auth: ^6.4.0
 
 dev_dependencies:
   flutter_test:
