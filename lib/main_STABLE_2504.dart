@@ -956,7 +956,7 @@ class _MainScreenState extends State<MainScreen> {
         }
         final data = snap.data ?? {'best': <String, dynamic>{}, 'byPos': <String, dynamic>{}};
         final best = data['best'] as Map<String, dynamic>? ?? {};
-        final top10 = (data['top10'] as List? ?? []).cast<Map<String, dynamic>>();
+        final byPos = data['byPos'] as Map<String, dynamic>? ?? {};
         return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -970,7 +970,9 @@ class _MainScreenState extends State<MainScreen> {
                 ),
                 if (best.isNotEmpty) _buildIndiceDestacado(best),
                 const SizedBox(height: 10),
-                _buildIndiceTop10(top10),
+                for (final entry in [['G', 'Arqueros'], ['D', 'Defensores'], ['M', 'Mediocampistas'], ['F', 'Delanteros']])
+                  if ((byPos[entry[0]] as List?)?.isNotEmpty == true)
+                    _buildIndicePosGroup(entry[1]!, (byPos[entry[0]] as List).cast<Map<String, dynamic>>()),
               ],
             );
             },
@@ -1007,39 +1009,7 @@ class _MainScreenState extends State<MainScreen> {
       ]),
     );
   }
-Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
-    if (players.isEmpty) return const SizedBox();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(14, 10, 14, 6),
-          child: Text('TOP 10 DEL TORNEO', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        ),
-        ...players.asMap().entries.map((e) {
-          final i = e.key;
-          final p = e.value;
-          final rating = (p['rating'] as double?) ?? 0.0;
-          final foto = p['photo'] as String? ?? '';
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-            child: Row(children: [
-              SizedBox(width: 22, child: Text('${i + 1}', style: TextStyle(color: i == 0 ? const Color(0xFF00C853) : Colors.white38, fontWeight: i == 0 ? FontWeight.bold : FontWeight.normal, fontSize: 13))),
-              CircleAvatar(radius: 14, backgroundColor: const Color(0xFF243B55), backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null, child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 12) : null),
-              const SizedBox(width: 8),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(p['name'] as String? ?? '', style: TextStyle(color: i == 0 ? Colors.white : Colors.white70, fontSize: 13, fontWeight: i == 0 ? FontWeight.w600 : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(p['team'] as String? ?? '', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-              ])),
-              Text(rating.toStringAsFixed(2), style: TextStyle(color: i == 0 ? const Color(0xFF00C853) : Colors.white54, fontWeight: i == 0 ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
-            ]),
-          );
-        }),
-        const SizedBox(height: 6),
-      ]),
-    );
-  }
+
   Widget _buildIndicePosGroup(String label, List<Map<String, dynamic>> players) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -1110,6 +1080,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             ]),
             const SizedBox(height: 24),
             _buildDashboardPartidoDestacado(),
+            const SizedBox(height: 28),
+            _buildIndiceMatchgol(),
             Column(
               children: [
                 _dashBoton('🏆', 'Torneos', 'Liga · Copa · Libertadores', const Color(0xFF00C853), _irTorneos),
@@ -1307,10 +1279,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
               _ligaBoton('📢', 'Encuestas', 9),
             ],
-           
           ),
-           const SizedBox(height: 20),
-                _buildIndiceMatchgol(),
         ]),
       ),
     );
@@ -1682,8 +1651,6 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           final golesLocal = goals['home']?.toString() ?? '-';
           final golesVisitante = goals['away']?.toString() ?? '-';
           final fixtureId = fixture['id'] as int?;
-          final eventos = (partido['events'] as List? ?? []).cast<Map<String, dynamic>>();
-                final goles = eventos.where((e) => e['type'] == 'Goal' && e['detail'] != 'Missed Penalty').toList();
           String statusDisplay;
           bool jugado = false;
           if (status == 'FT' || status == 'AET' || status == 'PEN') {
@@ -1698,7 +1665,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           }
           final esFavorito = _equipoFavoritoId != null && _equipoFavoritoId != -1 &&
               (homeId == _equipoFavoritoId || awayId == _equipoFavoritoId);
-          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito, goles: goles);
+          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito);
         }
 
         return ListView(
@@ -1713,7 +1680,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
     );
   }
 
-  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false, List<Map<String, dynamic>> goles = const []}) {
+  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false}) {
     final bool isLive = status.contains("'");
     final bool isFinished = status == 'FT';
     return GestureDetector(
@@ -1729,7 +1696,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             width: esFavorito ? 2.0 : 1.0,
           ),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [
+        child: Row(children: [
           Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
           const SizedBox(width: 12),
           Container(
@@ -1747,27 +1714,9 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             ),
             child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
-        ]), // Row children
-    
-        if (goles.isNotEmpty) Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: goles.map((g) {
-                      final min = g['time']?['elapsed']?.toString() ?? '';
-                      final nombre = g['player']?['name'] as String? ?? '';
-                      final equipo = g['team']?['name'] as String? ?? '';
-                      final esPropio = g['detail'] == 'Own Goal';
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Text('${esPropio ? "⚽🔴" : "⚽"} $min\' $nombre ($equipo)', style: TextStyle(color: esPropio ? Colors.redAccent : Colors.white70, fontSize: 12)),
-                      );
-                    }).toList(),
-                  ),
-                ),
-     ]), // Column
-              ), // Container
-            ); // GestureDetector
+        ]),
+      ),
+    );
   }
 
 

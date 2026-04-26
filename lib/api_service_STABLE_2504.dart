@@ -2357,11 +2357,10 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
       all.sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
       final Map<String, List<Map<String, dynamic>>> byPos = {'G': [], 'D': [], 'M': [], 'F': []};
       for (final p in all) {
-      final rawPos = p['pos'] as String;
-            final pos = rawPos == 'Goalkeeper' ? 'G' : rawPos == 'Defender' ? 'D' : rawPos == 'Midfielder' ? 'M' : rawPos == 'Attacker' ? 'F' : '';
-            if (pos.isNotEmpty && byPos.containsKey(pos) && byPos[pos]!.length < 10) byPos[pos]!.add(p);
+        final pos = p['pos'] as String;
+        if (byPos.containsKey(pos) && byPos[pos]!.length < 10) byPos[pos]!.add(p);
       }
-      return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'top10': all.take(10).toList()};
+      return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'byPos': byPos};
     } catch (e) {
       return {'best': <String, dynamic>{}, 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
     }

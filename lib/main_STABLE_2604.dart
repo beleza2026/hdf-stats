@@ -1682,8 +1682,6 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           final golesLocal = goals['home']?.toString() ?? '-';
           final golesVisitante = goals['away']?.toString() ?? '-';
           final fixtureId = fixture['id'] as int?;
-          final eventos = (partido['events'] as List? ?? []).cast<Map<String, dynamic>>();
-                final goles = eventos.where((e) => e['type'] == 'Goal' && e['detail'] != 'Missed Penalty').toList();
           String statusDisplay;
           bool jugado = false;
           if (status == 'FT' || status == 'AET' || status == 'PEN') {
@@ -1698,7 +1696,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           }
           final esFavorito = _equipoFavoritoId != null && _equipoFavoritoId != -1 &&
               (homeId == _equipoFavoritoId || awayId == _equipoFavoritoId);
-          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito, goles: goles);
+          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito);
         }
 
         return ListView(
@@ -1713,7 +1711,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
     );
   }
 
-  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false, List<Map<String, dynamic>> goles = const []}) {
+  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false}) {
     final bool isLive = status.contains("'");
     final bool isFinished = status == 'FT';
     return GestureDetector(
@@ -1729,7 +1727,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             width: esFavorito ? 2.0 : 1.0,
           ),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [
+        child: Row(children: [
           Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
           const SizedBox(width: 12),
           Container(
@@ -1747,27 +1745,9 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             ),
             child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
-        ]), // Row children
-    
-        if (goles.isNotEmpty) Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: goles.map((g) {
-                      final min = g['time']?['elapsed']?.toString() ?? '';
-                      final nombre = g['player']?['name'] as String? ?? '';
-                      final equipo = g['team']?['name'] as String? ?? '';
-                      final esPropio = g['detail'] == 'Own Goal';
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Text('${esPropio ? "⚽🔴" : "⚽"} $min\' $nombre ($equipo)', style: TextStyle(color: esPropio ? Colors.redAccent : Colors.white70, fontSize: 12)),
-                      );
-                    }).toList(),
-                  ),
-                ),
-     ]), // Column
-              ), // Container
-            ); // GestureDetector
+        ]),
+      ),
+    );
   }
 
 
