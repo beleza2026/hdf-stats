@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
+import 'monitor_bajas_widget.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -1287,6 +1288,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             ),
           ),
           const SizedBox(height: 20),
+          const MonitorBajasWidget(),
 
           // Grid secciones
           const Text('SECCIONES', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
