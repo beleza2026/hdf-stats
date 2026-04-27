@@ -1174,8 +1174,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          _torneoItem('🌎', 'Copa Libertadores', 'Próximamente', false, null),
-          _torneoItem('🌎', 'Copa Sudamericana', 'Próximamente', false, null),
+         _torneoItem('🏆', 'Copa Libertadores', 'Fixture · Grupos · Goleadores', true, () => _irSeccion(10)),
+         _torneoItem('🥈', 'Copa Sudamericana', 'Fixture · Grupos · Goleadores', true, () => _irSeccion(11)),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1308,9 +1308,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
               _ligaBoton('📢', 'Encuestas', 9),
              
-              _ligaBoton('🏆', 'Libertadores', 10),
-              _ligaBoton('🥈', 'Sudamericana', 11),
-            ],
+                         ],
            
           ),
            const SizedBox(height: 20),
