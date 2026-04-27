@@ -14,6 +14,7 @@ import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'copa_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -1306,6 +1307,9 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               _ligaBoton('🧤', 'Arqueros', 3),
               _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
               _ligaBoton('📢', 'Encuestas', 9),
+             
+              _ligaBoton('🏆', 'Libertadores', 10),
+              _ligaBoton('🥈', 'Sudamericana', 11),
             ],
            
           ),
@@ -1494,6 +1498,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       case 7: return _buildMundial();
       case 8: return _buildNoticias();
       case 9: return _buildEncuestas();
+   case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
+case 11: return CopaScreen(leagueId: 14, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
       default: return _buildResultados();
     }
   }
