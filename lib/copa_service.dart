@@ -6,7 +6,7 @@ class CopaService {
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
   static const int _season = 2026;
   static const int leagueLibertadores = 13;
-  static const int leagueSudamericana = 14;
+  static const int leagueSudamericana = 11;
 
   static const Map<String, String> _headers = {
     'x-apisports-key': _apiKey,
@@ -20,7 +20,7 @@ class CopaService {
     try {
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/fixtures?league=$leagueId&season=$_season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
+            '$_baseUrl/fixtures?league=$leagueId&season=${leagueId == 14 ? 2025 : _season}&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -49,7 +49,7 @@ class CopaService {
     try {
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/fixtures?league=$leagueId&season=$_season&timezone=America/Argentina/Buenos_Aires'),
+            '$_baseUrl/fixtures?league=$leagueId&season=${leagueId == 14 ? 2025 : _season}&timezone=America/Argentina/Buenos_Aires'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -68,7 +68,7 @@ class CopaService {
     try {
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/standings?league=$leagueId&season=$_season'),
+            '$_baseUrl/standings?league=$leagueId&season=${leagueId == 14 ? 2025 : _season}'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -90,7 +90,7 @@ class CopaService {
     try {
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/players/topscorers?league=$leagueId&season=$_season'),
+            '$_baseUrl/players/topscorers?league=$leagueId&season=${leagueId == 14 ? 2025 : _season}'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -110,7 +110,7 @@ class CopaService {
     try {
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/teams?league=$leagueId&season=$_season&country=Argentina'),
+            '$_baseUrl/teams?league=$leagueId&season=${leagueId == 14 ? 2025 : _season}&country=Argentina'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -130,7 +130,7 @@ class CopaService {
     try {
       final response = await http.get(
         Uri.parse(
-           '$_baseUrl/players?league=$leagueId&season=$_season&team=$teamId&page=$pagina'),
+           '$_baseUrl/players?league=$leagueId&season=${leagueId == 14 ? 2025 : _season}&team=$teamId&page=$pagina'),
         headers: _headers,
       );
       if (response.statusCode == 200) {

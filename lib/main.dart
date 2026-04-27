@@ -1497,7 +1497,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       case 8: return _buildNoticias();
       case 9: return _buildEncuestas();
    case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
-case 11: return CopaScreen(leagueId: 14, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
+case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
       default: return _buildResultados();
     }
   }
