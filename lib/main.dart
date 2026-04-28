@@ -146,8 +146,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _getTablaMoralCached() {
-    _futureTablaMoral ??= ApiService.getTablaMoral();
-    return _futureTablaMoral!;
+   return ApiService.getTablaMoral();
   }
 
   Future<void> _cargarFavorito() async {

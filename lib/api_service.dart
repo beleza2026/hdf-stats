@@ -1561,8 +1561,10 @@ class ApiService {
     };
   }
 
+ 
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
+      print('🔥 TABLA MORAL INICIANDO');
       // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
       final standData = await _getStandingsData();
       final allFixtures = await _getFixturesData();
@@ -1607,6 +1609,7 @@ class ApiService {
       // PASO 3: Para fixtures que faltan en Firestore → calcular con GOLES ÚNICAMENTE
       // (sin llamar a /fixtures/statistics — cero 429)
       if (jugados.isNotEmpty) {
+  print('JUGADOS TOTAL: ${jugados.length}');
         final batch = FirebaseFirestore.instance.batch();
         bool hayNuevos = false;
         for (final f in jugados) {
@@ -1636,16 +1639,24 @@ class ApiService {
         if (hayNuevos) await batch.commit();
       }
 
-      if (morales.isEmpty) return {};
+     if (morales.isEmpty && jugados.isEmpty) return {};
 
-      // PASO 4: Construir tabla desde morales (Firestore)
-      final Map<String, Map<String, dynamic>> tabla = {};
-      for (final entry in morales.entries) {
-        final data = entry.value;
-        // Usar toString() para manejar tanto String como int en Firestore
-        final homeId = data['homeId']?.toString() ?? '';
-        final awayId = data['awayId']?.toString() ?? '';
-        if (homeId.isEmpty || awayId.isEmpty) continue;
+// PASO 4: Construir tabla desde jugados (API) — IDs siempre correctos
+final Map<String, Map<String, dynamic>> tabla = {};
+for (final f in jugados) {
+  final fId = f['fixture']['id'].toString();
+  final homeId = f['teams']['home']['id'].toString();
+  final awayId = f['teams']['away']['id'].toString();
+  final moralData = morales[fId];
+  final data = moralData ?? {
+    'homeId': homeId,
+    'awayId': awayId,
+    'homeNombre': f['teams']['home']['name'] as String,
+    'awayNombre': f['teams']['away']['name'] as String,
+    'moralLocal': (f['goals']['home'] as num?)?.toInt() ?? 0,
+    'moralVisitante': (f['goals']['away'] as num?)?.toInt() ?? 0,
+  };
+  if (homeId.isEmpty || awayId.isEmpty) continue;
         final moralL = (data['moralLocal'] as num?)?.toInt() ?? 0;
         final moralV = (data['moralVisitante'] as num?)?.toInt() ?? 0;
         final zonaH = equipoZona[homeId] ?? 'Zona A';
