@@ -41,8 +41,8 @@ class ApiService {
   }
 
   static Future<List> _getFixturesData() {
-    _fixturesFuture ??= http.get(
-      Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
+    _fixturesFuture = http.get(
+    Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&status=FT'),
       headers: _headers,
     ).then((r) => r.statusCode == 200
         ? (jsonDecode(r.body)['response'] as List)
@@ -51,41 +51,39 @@ class ApiService {
   }
   // ─────────────────────────────────────────────────────────────────
 
- static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
+  static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
   final hoy = DateTime.now().toLocal();
   final fecha = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-  
-  // IDs: 406 = Liga Pro Argentina, 13 = Libertadores, 14 = Sudamericana
-  final leagueIds = [_ligaArgentina, 13, 14];
+  final leagues = [_ligaArgentina, 13, 11]; // Liga + Libertadores + Sudamericana
   final List<Map<String, dynamic>> todos = [];
-
-  for (final leagueId in leagueIds) {
-    try {
+  try {
+    for (final league in leagues) {
       final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$leagueId&season=$_season&date=$fecha'),
+        Uri.parse('$_baseUrl/fixtures?league=$league&season=$_season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final fixtures = data['response'] as List;
-        todos.addAll(fixtures.map((f) => f as Map<String, dynamic>).toList());
+        // Para Copas, solo equipos argentinos
+        if (league != _ligaArgentina) {
+          final argIds = ['451','435','436','453','460','445','438','440','450','434','446','449','1064','452','441','456','457','463','2432'];
+          todos.addAll(fixtures
+            .map((f) => f as Map<String, dynamic>)
+            .where((f) {
+              final hId = f['teams']['home']['id'].toString();
+              final aId = f['teams']['away']['id'].toString();
+              return argIds.contains(hId) || argIds.contains(aId);
+            }).toList());
+        } else {
+          todos.addAll(fixtures.map((f) => f as Map<String, dynamic>).toList());
+        }
       }
-    } catch (e) {
-      // continúa con el siguiente
     }
+    return todos;
+  } catch (e) {
+    return [];
   }
-
-  // IDs equipos argentinos
-const equiposArgentinos = [
-  451, 435, 436, 453, 460, 445, 438, 440, 450, 434,
-  446, 449, 1064, 452, 441, 456, 457, 463, 2432
-];
-
-return todos.where((p) {
-  final homeId = p['teams']?['home']?['id'];
-  final awayId = p['teams']?['away']?['id'];
-  return equiposArgentinos.contains(homeId) || equiposArgentinos.contains(awayId);
-}).toList();
 }
 
   static Map<String, List<Map<String, dynamic>>>? _tablasCache;
@@ -1579,8 +1577,10 @@ return todos.where((p) {
     };
   }
 
+ 
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
+      print('🔥 TABLA MORAL INICIANDO');
       // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
       final standData = await _getStandingsData();
       final allFixtures = await _getFixturesData();
@@ -1625,6 +1625,7 @@ return todos.where((p) {
       // PASO 3: Para fixtures que faltan en Firestore → calcular con GOLES ÚNICAMENTE
       // (sin llamar a /fixtures/statistics — cero 429)
       if (jugados.isNotEmpty) {
+  print('JUGADOS TOTAL: ${jugados.length}');
         final batch = FirebaseFirestore.instance.batch();
         bool hayNuevos = false;
         for (final f in jugados) {
@@ -1654,16 +1655,24 @@ return todos.where((p) {
         if (hayNuevos) await batch.commit();
       }
 
-      if (morales.isEmpty) return {};
+     if (morales.isEmpty && jugados.isEmpty) return {};
 
-      // PASO 4: Construir tabla desde morales (Firestore)
-      final Map<String, Map<String, dynamic>> tabla = {};
-      for (final entry in morales.entries) {
-        final data = entry.value;
-        // Usar toString() para manejar tanto String como int en Firestore
-        final homeId = data['homeId']?.toString() ?? '';
-        final awayId = data['awayId']?.toString() ?? '';
-        if (homeId.isEmpty || awayId.isEmpty) continue;
+// PASO 4: Construir tabla desde jugados (API) — IDs siempre correctos
+final Map<String, Map<String, dynamic>> tabla = {};
+for (final f in jugados) {
+  final fId = f['fixture']['id'].toString();
+  final homeId = f['teams']['home']['id'].toString();
+  final awayId = f['teams']['away']['id'].toString();
+  final moralData = morales[fId];
+  final data = moralData ?? {
+    'homeId': homeId,
+    'awayId': awayId,
+    'homeNombre': f['teams']['home']['name'] as String,
+    'awayNombre': f['teams']['away']['name'] as String,
+    'moralLocal': (f['goals']['home'] as num?)?.toInt() ?? 0,
+    'moralVisitante': (f['goals']['away'] as num?)?.toInt() ?? 0,
+  };
+  if (homeId.isEmpty || awayId.isEmpty) continue;
         final moralL = (data['moralLocal'] as num?)?.toInt() ?? 0;
         final moralV = (data['moralVisitante'] as num?)?.toInt() ?? 0;
         final zonaH = equipoZona[homeId] ?? 'Zona A';
