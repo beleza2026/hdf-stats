@@ -14,8 +14,6 @@ import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
-import 'copa_screen.dart';
-import 'monitor_bajas_widget.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -146,7 +144,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _getTablaMoralCached() {
-   return ApiService.getTablaMoral();
+    _futureTablaMoral ??= ApiService.getTablaMoral();
+    return _futureTablaMoral!;
   }
 
   Future<void> _cargarFavorito() async {
@@ -943,138 +942,6 @@ class _MainScreenState extends State<MainScreen> {
   void _irLiga() => setState(() { _showDashboard = false; _showTorneos = false; _showLiga = true; });
   void _irInicio() => setState(() { _showDashboard = true; _showTorneos = false; _showLiga = false; });
 
-  Widget _buildIndiceMatchgol() {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: ApiService.getIndiceMatchgol(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(16)),
-            child: const Center(child: CircularProgressIndicator(color: Color(0xFF00C853), strokeWidth: 2)),
-          );
-        }
-        final data = snap.data ?? {'best': <String, dynamic>{}, 'byPos': <String, dynamic>{}};
-        final best = data['best'] as Map<String, dynamic>? ?? {};
-        final top10 = (data['top10'] as List? ?? []).cast<Map<String, dynamic>>();
-        return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Row(children: [
-                    const Text('⚡', style: TextStyle(fontSize: 16)),
-                    const SizedBox(width: 8),
-                    const Text('Índice MatchGol™', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                  ]),
-                ),
-                if (best.isNotEmpty) _buildIndiceDestacado(best),
-                const SizedBox(height: 10),
-                _buildIndiceTop10(top10),
-              ],
-            );
-            },
-        ); // FutureBuilder
-      }
- Widget _buildIndiceDestacado(Map<String, dynamic> p) {
-    final foto = p['photo'] as String? ?? '';
-    final rating = (p['rating'] as double?) ?? 0.0;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF00C853), Color(0xFF1B5E20)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(children: [
-        CircleAvatar(
-          radius: 32,
-          backgroundColor: Colors.white24,
-          backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
-          child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white, size: 28) : null,
-        ),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('⭐ FIGURA DEL TORNEO', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1)),
-          const SizedBox(height: 4),
-          Text(p['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
-          Text(p['team'] as String? ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        ])),
-        Column(children: [
-          Text(rating.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28)),
-          const Text('HDF', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1)),
-        ]),
-      ]),
-    );
-  }
-Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
-    if (players.isEmpty) return const SizedBox();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(14, 10, 14, 6),
-          child: Text('TOP 10 DEL TORNEO', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        ),
-        ...players.asMap().entries.map((e) {
-          final i = e.key;
-          final p = e.value;
-          final rating = (p['rating'] as double?) ?? 0.0;
-          final foto = p['photo'] as String? ?? '';
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-            child: Row(children: [
-              SizedBox(width: 22, child: Text('${i + 1}', style: TextStyle(color: i == 0 ? const Color(0xFF00C853) : Colors.white38, fontWeight: i == 0 ? FontWeight.bold : FontWeight.normal, fontSize: 13))),
-              CircleAvatar(radius: 14, backgroundColor: const Color(0xFF243B55), backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null, child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 12) : null),
-              const SizedBox(width: 8),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(p['name'] as String? ?? '', style: TextStyle(color: i == 0 ? Colors.white : Colors.white70, fontSize: 13, fontWeight: i == 0 ? FontWeight.w600 : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(p['team'] as String? ?? '', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-              ])),
-              Text(rating.toStringAsFixed(2), style: TextStyle(color: i == 0 ? const Color(0xFF00C853) : Colors.white54, fontWeight: i == 0 ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
-            ]),
-          );
-        }),
-        const SizedBox(height: 6),
-      ]),
-    );
-  }
-  Widget _buildIndicePosGroup(String label, List<Map<String, dynamic>> players) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(12)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-          child: Text(label.toUpperCase(), style: const TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        ),
-        ...players.asMap().entries.map((e) {
-          final i = e.key;
-          final p = e.value;
-          final rating = (p['rating'] as double?) ?? 0.0;
-          final foto = p['photo'] as String? ?? '';
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-            child: Row(children: [
-              SizedBox(width: 22, child: Text('${i + 1}', style: TextStyle(color: i == 0 ? const Color(0xFF00C853) : Colors.white38, fontWeight: i == 0 ? FontWeight.bold : FontWeight.normal, fontSize: 13))),
-              CircleAvatar(radius: 14, backgroundColor: const Color(0xFF243B55), backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null, child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 12) : null),
-              const SizedBox(width: 8),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(p['name'] as String? ?? '', style: TextStyle(color: i == 0 ? Colors.white : Colors.white70, fontSize: 13, fontWeight: i == 0 ? FontWeight.w600 : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(p['team'] as String? ?? '', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-              ])),
-              Text(rating.toStringAsFixed(2), style: TextStyle(color: i == 0 ? const Color(0xFF00C853) : Colors.white54, fontWeight: i == 0 ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
-            ]),
-          );
-        }),
-        const SizedBox(height: 6),
-      ]),
-    );
-  }
-   
-  
   Widget _buildDashboard() {
     return Scaffold(
       backgroundColor: const Color(0xFF0D1B2A),
@@ -1111,6 +978,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             ]),
             const SizedBox(height: 24),
             _buildDashboardPartidoDestacado(),
+            const SizedBox(height: 28),
             Column(
               children: [
                 _dashBoton('🏆', 'Torneos', 'Liga · Copa · Libertadores', const Color(0xFF00C853), _irTorneos),
@@ -1174,8 +1042,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-         _torneoItem('🏆', 'Copa Libertadores', 'Fixture · Grupos · Goleadores', true, () => _irSeccion(10)),
-         _torneoItem('🥈', 'Copa Sudamericana', 'Fixture · Grupos · Goleadores', true, () => _irSeccion(11)),
+          _torneoItem('🌎', 'Copa Libertadores', 'Próximamente', false, null),
+          _torneoItem('🌎', 'Copa Sudamericana', 'Próximamente', false, null),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1287,7 +1155,6 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             ),
           ),
           const SizedBox(height: 20),
-          const MonitorBajasWidget(),
 
           // Grid secciones
           const Text('SECCIONES', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
@@ -1308,12 +1175,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               _ligaBoton('🧤', 'Arqueros', 3),
               _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
               _ligaBoton('📢', 'Encuestas', 9),
-             
-                         ],
-           
+            ],
           ),
-           const SizedBox(height: 20),
-                _buildIndiceMatchgol(),
         ]),
       ),
     );
@@ -1497,8 +1360,6 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       case 7: return _buildMundial();
       case 8: return _buildNoticias();
       case 9: return _buildEncuestas();
-   case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
-case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, l, v, r, j, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, l, v, r, j, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
       default: return _buildResultados();
     }
   }
@@ -1687,8 +1548,6 @@ case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji:
           final golesLocal = goals['home']?.toString() ?? '-';
           final golesVisitante = goals['away']?.toString() ?? '-';
           final fixtureId = fixture['id'] as int?;
-          final eventos = (partido['events'] as List? ?? []).cast<Map<String, dynamic>>();
-                final goles = eventos.where((e) => e['type'] == 'Goal' && e['detail'] != 'Missed Penalty').toList();
           String statusDisplay;
           bool jugado = false;
           if (status == 'FT' || status == 'AET' || status == 'PEN') {
@@ -1703,7 +1562,7 @@ case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji:
           }
           final esFavorito = _equipoFavoritoId != null && _equipoFavoritoId != -1 &&
               (homeId == _equipoFavoritoId || awayId == _equipoFavoritoId);
-          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito, goles: goles);
+          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito);
         }
 
         return ListView(
@@ -1718,7 +1577,7 @@ case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji:
     );
   }
 
-  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false, List<Map<String, dynamic>> goles = const []}) {
+  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false}) {
     final bool isLive = status.contains("'");
     final bool isFinished = status == 'FT';
     return GestureDetector(
@@ -1734,7 +1593,7 @@ case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji:
             width: esFavorito ? 2.0 : 1.0,
           ),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [
+        child: Row(children: [
           Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
           const SizedBox(width: 12),
           Container(
@@ -1752,27 +1611,9 @@ case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji:
             ),
             child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
-        ]), // Row children
-    
-        if (goles.isNotEmpty) Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: goles.map((g) {
-                      final min = g['time']?['elapsed']?.toString() ?? '';
-                      final nombre = g['player']?['name'] as String? ?? '';
-                      final equipo = g['team']?['name'] as String? ?? '';
-                      final esPropio = g['detail'] == 'Own Goal';
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Text('${esPropio ? "⚽🔴" : "⚽"} $min\' $nombre ($equipo)', style: TextStyle(color: esPropio ? Colors.redAccent : Colors.white70, fontSize: 12)),
-                      );
-                    }).toList(),
-                  ),
-                ),
-     ]), // Column
-              ), // Container
-            ); // GestureDetector
+        ]),
+      ),
+    );
   }
 
 

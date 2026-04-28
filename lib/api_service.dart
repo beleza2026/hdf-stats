@@ -1561,10 +1561,8 @@ class ApiService {
     };
   }
 
- 
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
-      print('🔥 TABLA MORAL INICIANDO');
       // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
       final standData = await _getStandingsData();
       final allFixtures = await _getFixturesData();
@@ -1609,7 +1607,6 @@ class ApiService {
       // PASO 3: Para fixtures que faltan en Firestore → calcular con GOLES ÚNICAMENTE
       // (sin llamar a /fixtures/statistics — cero 429)
       if (jugados.isNotEmpty) {
-  print('JUGADOS TOTAL: ${jugados.length}');
         final batch = FirebaseFirestore.instance.batch();
         bool hayNuevos = false;
         for (final f in jugados) {
@@ -1639,24 +1636,16 @@ class ApiService {
         if (hayNuevos) await batch.commit();
       }
 
-     if (morales.isEmpty && jugados.isEmpty) return {};
+      if (morales.isEmpty) return {};
 
-// PASO 4: Construir tabla desde jugados (API) — IDs siempre correctos
-final Map<String, Map<String, dynamic>> tabla = {};
-for (final f in jugados) {
-  final fId = f['fixture']['id'].toString();
-  final homeId = f['teams']['home']['id'].toString();
-  final awayId = f['teams']['away']['id'].toString();
-  final moralData = morales[fId];
-  final data = moralData ?? {
-    'homeId': homeId,
-    'awayId': awayId,
-    'homeNombre': f['teams']['home']['name'] as String,
-    'awayNombre': f['teams']['away']['name'] as String,
-    'moralLocal': (f['goals']['home'] as num?)?.toInt() ?? 0,
-    'moralVisitante': (f['goals']['away'] as num?)?.toInt() ?? 0,
-  };
-  if (homeId.isEmpty || awayId.isEmpty) continue;
+      // PASO 4: Construir tabla desde morales (Firestore)
+      final Map<String, Map<String, dynamic>> tabla = {};
+      for (final entry in morales.entries) {
+        final data = entry.value;
+        // Usar toString() para manejar tanto String como int en Firestore
+        final homeId = data['homeId']?.toString() ?? '';
+        final awayId = data['awayId']?.toString() ?? '';
+        if (homeId.isEmpty || awayId.isEmpty) continue;
         final moralL = (data['moralLocal'] as num?)?.toInt() ?? 0;
         final moralV = (data['moralVisitante'] as num?)?.toInt() ?? 0;
         final zonaH = equipoZona[homeId] ?? 'Zona A';
@@ -2335,46 +2324,4 @@ for (final f in jugados) {
     }
   }
 
-static Future<Map<String, dynamic>> getIndiceMatchgol() async {
-    try {
-      final res1 = await http.get(Uri.parse('$_baseUrl/players/topscorers?league=$_ligaArgentina&season=$_season'), headers: _headers);
-      final res2 = await http.get(Uri.parse('$_baseUrl/players/topassists?league=$_ligaArgentina&season=$_season'), headers: _headers);
-      final Set<int> seen = {};
-      final List<Map<String, dynamic>> all = [];
-      for (final res in [res1, res2]) {
-        if (res.statusCode != 200) continue;
-        final data = jsonDecode(res.body)['response'] as List? ?? [];
-        for (final item in data) {
-          final pid = item['player']?['id'] as int?;
-          if (pid == null || seen.contains(pid)) continue;
-          seen.add(pid);
-          final stats = (item['statistics'] as List? ?? []);
-          if (stats.isEmpty) continue;
-          final st = stats[0] as Map<String, dynamic>;
-          final rating = double.tryParse(st['games']?['rating']?.toString() ?? '') ?? 0.0;
-          if (rating == 0.0) continue;
-          all.add({
-            'id': pid,
-            'name': item['player']?['name'] ?? '',
-            'photo': item['player']?['photo'] ?? '',
-            'pos': st['games']?['position'] ?? 'M',
-            'rating': rating,
-            'team': st['team']?['name'] ?? '',
-            'goals': st['goals']?['total'] ?? 0,
-            'assists': st['goals']?['assists'] ?? 0,
-          });
-        }
-      }
-      all.sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
-      final Map<String, List<Map<String, dynamic>>> byPos = {'G': [], 'D': [], 'M': [], 'F': []};
-      for (final p in all) {
-      final rawPos = p['pos'] as String;
-            final pos = rawPos == 'Goalkeeper' ? 'G' : rawPos == 'Defender' ? 'D' : rawPos == 'Midfielder' ? 'M' : rawPos == 'Attacker' ? 'F' : '';
-            if (pos.isNotEmpty && byPos.containsKey(pos) && byPos[pos]!.length < 10) byPos[pos]!.add(p);
-      }
-      return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'top10': all.take(10).toList()};
-    } catch (e) {
-      return {'best': <String, dynamic>{}, 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
-    }
-  }
 }
