@@ -2054,8 +2054,9 @@ Widget _alFiloCard(Map<String, dynamic> j) {
   final amarillas = j['amarillas'] as int? ?? 0;
   final foto = j['foto'] as String? ?? '';
   final logoEquipo = j['logoEquipo'] as String? ?? '';
-  final color = amarillas >= 9 ? const Color(0xFFFF5252) : const Color(0xFFFFD700);
-  final label = amarillas >= 9 ? '9 🟨 FILO' : '4 🟨 FILO';
+  final suspension = j['suspension'] as bool? ?? false;
+    final color = suspension ? const Color(0xFFFF5252) : (amarillas >= 9 ? const Color(0xFFFF5252) : const Color(0xFFFFD700));
+    final label = suspension ? 'SUSPENDIDO 🔴' : (amarillas >= 9 ? '9 🟨 FILO' : '4 🟨 FILO');
   return Container(
     margin: const EdgeInsets.only(bottom: 8),
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

@@ -2411,13 +2411,14 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
           for (final p in players) {
             final st = (p['statistics'] as List?)?.first as Map<String, dynamic>? ?? {};
             final amarillas = st['cards']?['yellow'] as int? ?? 0;
-            if (amarillas == 4 || amarillas == 9) {
+            if (amarillas == 4 || amarillas == 5 || amarillas == 9 || amarillas == 10) {
               result.add({
                 'nombre': p['player']?['name'] ?? '',
                 'foto': p['player']?['photo'] ?? '',
                 'equipo': st['team']?['name'] ?? '',
                 'logoEquipo': st['team']?['logo'] ?? '',
                 'amarillas': amarillas,
+                'suspension': amarillas == 5 || amarillas == 10,
               });
             }
           }
@@ -2429,8 +2430,7 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
     } catch (e) {
       return [];
     }
-  }
-
+}  // cierre getAlFilo
   // ── EXPULSADOS ÚLTIMA FECHA ──────────────────────────────────
   static Future<List<Map<String, dynamic>>> getExpulsadosUltimaFecha() async {
     try {
