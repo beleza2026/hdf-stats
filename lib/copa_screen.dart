@@ -41,6 +41,7 @@ class _CopaScreenState extends State<CopaScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+_tabController.index = 1; // arranca en FIXTURE
   }
 
   @override
@@ -50,8 +51,21 @@ class _CopaScreenState extends State<CopaScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF0D1B2A),
+    appBar: AppBar(
+      backgroundColor: const Color(0xFF0D1B2A),
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: Text('${widget.emoji} ${widget.nombreCopa}',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+    ),
+    body: Column(
       children: [
         Container(
           color: const Color(0xFF0D1B2A),
@@ -84,12 +98,13 @@ class _CopaScreenState extends State<CopaScreen>
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 }
 
 // ─── HELPER CARD PARTIDO ────────────────────────────────────
-Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTapPartido onTap) {
+Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTapPartido onTap, int leagueId) {
   final teams = partido['teams'];
   final goals = partido['goals'];
   final fixture = partido['fixture'];
@@ -119,12 +134,13 @@ Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTa
   }
 
   return GestureDetector(
-    onTap: () => onTap(
-      context, home, away, '$hScore - $aScore', jugado,
-      fixtureId: fixtureId, homeId: homeId, awayId: awayId,
-      fechaPartido: fechaPartido, isLive: isLive,
-      minuto: isLive ? status : '',
-    ),
+  onTap: () => onTap(
+  context, home, away, '$hScore - $aScore', jugado,
+  fixtureId: fixtureId, homeId: homeId, awayId: awayId,
+  fechaPartido: fechaPartido, isLive: isLive,
+  minuto: isLive ? status : '',
+),
+    
     child: Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -202,7 +218,7 @@ class _TabHoy extends StatelessWidget {
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: partidos.length,
-          itemBuilder: (context, i) => buildCardPartido(partidos[i], context, onTapPartido),
+        itemBuilder: (context, i) => buildCardPartido(partidos[i], context, onTapPartido, leagueId), 
         );
       },
     );
@@ -279,7 +295,7 @@ class _TabFixtureState extends State<_TabFixture> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: (porRonda[_roundSeleccionado] ?? [])
-                    .map((p) => buildCardPartido(p, context, widget.onTapPartido))
+                    .map((p) => buildCardPartido(p, context, widget.onTapPartido, widget.leagueId))
                     .toList(),
               ),
             ),

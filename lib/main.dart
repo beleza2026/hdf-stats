@@ -14,6 +14,7 @@ import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'copa_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -1173,8 +1174,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          _torneoItem('🌎', 'Copa Libertadores', 'Próximamente', false, null),
-          _torneoItem('🌎', 'Copa Sudamericana', 'Próximamente', false, null),
+          _torneoItem('🏆', 'Copa Libertadores', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
+_torneoItem('🥈', 'Copa Sudamericana', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 14, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1306,6 +1307,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               _ligaBoton('🧤', 'Arqueros', 3),
               _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
               _ligaBoton('📢', 'Encuestas', 9),
+              _ligaBoton('🟨', 'Al Filo', 12),
+_ligaBoton('🟥', 'Expulsados', 13),
             ],
            
           ),
@@ -1494,6 +1497,10 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       case 7: return _buildMundial();
       case 8: return _buildNoticias();
       case 9: return _buildEncuestas();
+     case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
+case 11: return CopaScreen(leagueId: 14, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
+     case 12: return _buildAlFilo();
+case 13: return _buildExpulsados();
       default: return _buildResultados();
     }
   }
@@ -2011,8 +2018,134 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         );
       },
     );
-  }
+  }// ── AL FILO ──────────────────────────────────────────────────
+Widget _buildAlFilo() {
+  return FutureBuilder<List<Map<String, dynamic>>>(
+    future: ApiService.getAlFilo(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+      }
+      final jugadores = snapshot.data ?? [];
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Row(children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFFFD700), size: 18),
+            SizedBox(width: 8),
+            Text('AL FILO', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold, fontSize: 13)),
+          ]),
+          const SizedBox(height: 4),
+          const Text('Jugadores con 4 o 9 amarillas — próxima = suspensión', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const SizedBox(height: 16),
+          if (jugadores.isEmpty)
+            const Center(child: Text('Sin datos disponibles', style: TextStyle(color: Colors.white38)))
+          else
+            ...jugadores.map((j) => _alFiloCard(j)).toList(),
+        ],
+      );
+    },
+  );
+}
 
+Widget _alFiloCard(Map<String, dynamic> j) {
+  final nombre = j['nombre'] as String? ?? '';
+  final equipo = j['equipo'] as String? ?? '';
+  final amarillas = j['amarillas'] as int? ?? 0;
+  final foto = j['foto'] as String? ?? '';
+  final logoEquipo = j['logoEquipo'] as String? ?? '';
+  final color = amarillas >= 9 ? const Color(0xFFFF5252) : const Color(0xFFFFD700);
+  final label = amarillas >= 9 ? '9 🟨 FILO' : '4 🟨 FILO';
+  return Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1B2A3B),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: color.withValues(alpha: 0.4)),
+    ),
+    child: Row(children: [
+      CircleAvatar(radius: 18, backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
+        backgroundColor: Colors.white12,
+        child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 16) : null),
+      const SizedBox(width: 10),
+      if (logoEquipo.isNotEmpty) Image.network(logoEquipo, width: 20, height: 20),
+      if (logoEquipo.isNotEmpty) const SizedBox(width: 6),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+        Text(equipo, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+      ])),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+        child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      ),
+    ]),
+  );
+}
+// ── EXPULSADOS ───────────────────────────────────────────────
+Widget _buildExpulsados() {
+  return FutureBuilder<List<Map<String, dynamic>>>(
+    future: ApiService.getExpulsadosUltimaFecha(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+      }
+      final jugadores = snapshot.data ?? [];
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Row(children: [
+            Icon(Icons.rectangle, color: Color(0xFFFF5252), size: 16),
+            SizedBox(width: 8),
+            Text('EXPULSADOS', style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.bold, fontSize: 13)),
+          ]),
+          const SizedBox(height: 4),
+          const Text('Tarjeta roja en la última fecha — suspensión automática', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const SizedBox(height: 16),
+          if (jugadores.isEmpty)
+            const Center(child: Text('Sin expulsados en la última fecha', style: TextStyle(color: Colors.white38)))
+          else
+            ...jugadores.map((j) => _expulsadoCard(j)).toList(),
+        ],
+      );
+    },
+  );
+}
+
+Widget _expulsadoCard(Map<String, dynamic> j) {
+  final nombre = j['nombre'] as String? ?? '';
+  final equipo = j['equipo'] as String? ?? '';
+  final minuto = j['minuto'] as String? ?? '';
+  final foto = j['foto'] as String? ?? '';
+  final logoEquipo = j['logoEquipo'] as String? ?? '';
+  return Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1B2A3B),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.4)),
+    ),
+    child: Row(children: [
+      CircleAvatar(radius: 18, backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
+        backgroundColor: Colors.white12,
+        child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 16) : null),
+      const SizedBox(width: 10),
+      if (logoEquipo.isNotEmpty) Image.network(logoEquipo, width: 20, height: 20),
+      if (logoEquipo.isNotEmpty) const SizedBox(width: 6),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+        Text(equipo, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+      ])),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(color: const Color(0xFFFF5252).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+        child: Text('min $minuto 🟥', style: const TextStyle(color: Color(0xFFFF5252), fontSize: 11, fontWeight: FontWeight.bold)),
+      ),
+    ]),
+  );
+}
   Widget _encuestaCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final pregunta = data['pregunta'] as String? ?? '';
@@ -7879,7 +8012,6 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
   }
 }
 // â•â• FIN SIMULADOR â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
 
 
 

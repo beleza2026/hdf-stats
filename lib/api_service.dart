@@ -4,8 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'racha_model.dart';
 
 class ApiService {
-  static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
   static const String _baseUrl = 'https://v3.football.api-sports.io';
+  static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
   static const int _ligaArgentina = 128;
   static const int _season = 2026;
 
@@ -54,7 +54,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
   final hoy = DateTime.now().toLocal();
   final fecha = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-  final leagues = [_ligaArgentina, 13, 11]; // Liga + Libertadores + Sudamericana
+  final leagues = [_ligaArgentina, 13, 14]; // Liga + Libertadores + Sudamericana
   final List<Map<String, dynamic>> todos = [];
   try {
     for (final league in leagues) {
@@ -2391,6 +2391,90 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
       return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'top10': all.take(10).toList()};
     } catch (e) {
       return {'best': <String, dynamic>{}, 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
+    }
+  }
+  // ── AL FILO — jugadores con 4 o 9 amarillas ─────────────────
+  static Future<List<Map<String, dynamic>>> getAlFilo() async {
+    try {
+      final List<Map<String, dynamic>> result = [];
+      int page = 1;
+      int totalPages = 1;
+      while (page <= totalPages && page <= 10) {
+        final response = await http.get(
+          Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&page=$page'),
+          headers: _headers,
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          totalPages = data['paging']?['total'] as int? ?? 1;
+          final players = data['response'] as List;
+          for (final p in players) {
+            final st = (p['statistics'] as List?)?.first as Map<String, dynamic>? ?? {};
+            final amarillas = st['cards']?['yellow'] as int? ?? 0;
+            if (amarillas == 4 || amarillas == 9) {
+              result.add({
+                'nombre': p['player']?['name'] ?? '',
+                'foto': p['player']?['photo'] ?? '',
+                'equipo': st['team']?['name'] ?? '',
+                'logoEquipo': st['team']?['logo'] ?? '',
+                'amarillas': amarillas,
+              });
+            }
+          }
+        }
+        page++;
+      }
+      result.sort((a, b) => (b['amarillas'] as int).compareTo(a['amarillas'] as int));
+      return result;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // ── EXPULSADOS ÚLTIMA FECHA ──────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getExpulsadosUltimaFecha() async {
+    try {
+      final fixtures = await _getFixturesData();
+      final jugados = fixtures.where((f) {
+        final status = f['fixture']?['status']?['short'] as String? ?? '';
+        return status == 'FT' || status == 'AET' || status == 'PEN';
+      }).toList();
+      if (jugados.isEmpty) return [];
+      jugados.sort((a, b) {
+        final da = DateTime.tryParse(a['fixture']?['date'] ?? '') ?? DateTime(2000);
+        final db = DateTime.tryParse(b['fixture']?['date'] ?? '') ?? DateTime(2000);
+        return db.compareTo(da);
+      });
+      final ultimaFecha = jugados.first['league']?['round'] as String? ?? '';
+      final ultimaFechaFixtures = jugados.where((f) => f['league']?['round'] == ultimaFecha).toList();
+      final List<Map<String, dynamic>> expulsados = [];
+      for (final fixture in ultimaFechaFixtures) {
+        final fixtureId = fixture['fixture']?['id'];
+        if (fixtureId == null) continue;
+        final evResponse = await http.get(
+          Uri.parse('$_baseUrl/fixtures/events?fixture=$fixtureId&type=Card'),
+          headers: _headers,
+        );
+        if (evResponse.statusCode == 200) {
+          final data = jsonDecode(evResponse.body);
+          final events = data['response'] as List;
+          for (final ev in events) {
+            final detail = ev['detail'] as String? ?? '';
+           if (detail == 'Red Card' || detail == 'Second Yellow card') {
+              expulsados.add({
+                'nombre': ev['player']?['name'] ?? '',
+                'foto': '',
+                'equipo': ev['team']?['name'] ?? '',
+                'logoEquipo': ev['team']?['logo'] ?? '',
+                'minuto': '${ev['time']?['elapsed'] ?? ''}',
+              });
+            }
+          }
+        }
+      }
+      return expulsados;
+    } catch (e) {
+      return [];
     }
   }
 }
