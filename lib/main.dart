@@ -943,6 +943,8 @@ class _MainScreenState extends State<MainScreen> {
   void _irTorneos() => setState(() { _showDashboard = false; _showTorneos = true; _showLiga = false; });
   void _irLiga() => setState(() { _showDashboard = false; _showTorneos = false; _showLiga = true; });
   void _irInicio() => setState(() { _showDashboard = true; _showTorneos = false; _showLiga = false; });
+  void _irLibertadores() => _irSeccion(10);
+void _irSudamericana() => _irSeccion(11);
 
   Widget _buildIndiceMatchgol() {
     return FutureBuilder<Map<String, dynamic>>(
@@ -1175,8 +1177,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          _torneoItem('🏆', 'Copa Libertadores', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
-_torneoItem('🥈', 'Copa Sudamericana', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
+         _torneoItem('🏆', 'Copa Libertadores', 'CONMEBOL 2025', true, _irLibertadores),
+_torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1498,8 +1500,8 @@ _ligaBoton('🟥', 'Expulsados', 13),
       case 7: return _buildMundial();
       case 8: return _buildNoticias();
       case 9: return _buildEncuestas();
-     case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
-case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
+     case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
+case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
      case 12: return _buildAlFilo();
 case 13: return _buildExpulsados();
       default: return _buildResultados();

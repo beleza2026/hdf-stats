@@ -5,7 +5,7 @@ class CopaService {
   static const String _baseUrl = 'https://v3.football.api-sports.io';
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
   static const int _season = 2026;
-static const int _seasonCopas = 2025;
+static const int _seasonCopas = 2026;
   static const int leagueLibertadores = 13;
   static const int leagueSudamericana = 11;
 
