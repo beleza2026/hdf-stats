@@ -619,7 +619,7 @@ class _TabPlantelesState extends State<_TabPlanteles> {
     final partidos = stats['games']?['appearences'] as int? ?? 0;
     final goles = stats['goals']?['total'] as int? ?? 0;
     final asistencias = stats['goals']?['assists'] as int? ?? 0;
-    final minutos = stats['games']?['minutes'] as int? ?? 0;
+    final rating = double.tryParse(stats['games']?['rating']?.toString() ?? '') ?? 0.0;
 
     String posAbrev = '';
     Color posColor = Colors.white38;
@@ -647,7 +647,7 @@ class _TabPlantelesState extends State<_TabPlanteles> {
         SizedBox(width: 32, child: Text('$partidos', style: const TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.center)),
         SizedBox(width: 32, child: Text('$goles', style: const TextStyle(color: Colors.white, fontSize: 12), textAlign: TextAlign.center)),
         SizedBox(width: 32, child: Text('$asistencias', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center)),
-        SizedBox(width: 40, child: Text('$minutos', style: const TextStyle(color: Colors.white38, fontSize: 11), textAlign: TextAlign.center)),
+        SizedBox(width: 40, child: Text(rating > 0 ? rating.toStringAsFixed(1) : '-', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
       ]),
     );
   }
