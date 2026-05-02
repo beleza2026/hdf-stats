@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
+import 'paywall_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -24,7 +25,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // ── REVENUECAT PREMIUM SERVICE ────────────────────────────────────────────────
 class PremiumService {
   static const String _entitlement = 'premium';
-  static const String _rcApiKeyAndroid = 'test_qEEXDgvGatIchPpQpYSoGeQWgYH';
+  static const String _rcApiKeyAndroid = 'goog_QRuxqIqpLsLTHWZKcoPKvcYfijG';
 
   static Future<void> init() async {
     await Purchases.setLogLevel(LogLevel.debug);
@@ -1175,7 +1176,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
           _torneoItem('🏆', 'Copa Libertadores', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
-_torneoItem('🥈', 'Copa Sudamericana', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 14, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
+_torneoItem('🥈', 'Copa Sudamericana', 'Fixture · Grupos · Goleadores', true, () => Navigator.push(context, MaterialPageRoute(builder: (_) => CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {})))),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1498,7 +1499,7 @@ _ligaBoton('🟥', 'Expulsados', 13),
       case 8: return _buildNoticias();
       case 9: return _buildEncuestas();
      case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
-case 11: return CopaScreen(leagueId: 14, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
+case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) {});
      case 12: return _buildAlFilo();
 case 13: return _buildExpulsados();
       default: return _buildResultados();

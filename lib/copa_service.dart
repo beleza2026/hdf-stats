@@ -7,7 +7,7 @@ class CopaService {
   static const int _season = 2026;
 static const int _seasonCopas = 2025;
   static const int leagueLibertadores = 13;
-  static const int leagueSudamericana = 14;
+  static const int leagueSudamericana = 11;
 
   static const Map<String, String> _headers = {
     'x-apisports-key': _apiKey,
@@ -19,9 +19,10 @@ static const int _seasonCopas = 2025;
     final fecha =
         '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
     try {
+      final season = leagueId == 11 ? _season : _seasonCopas;
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/fixtures?league=$leagueId&season=$_season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
+            '$_baseUrl/fixtures?league=$leagueId&season=$season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -48,9 +49,10 @@ static const int _seasonCopas = 2025;
   // FIXTURE completo del torneo
   static Future<List<Map<String, dynamic>>> getFixture(int leagueId) async {
     try {
+      final season = leagueId == 11 ? _season : _seasonCopas;
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/fixtures?league=$leagueId&season=$_season&timezone=America/Argentina/Buenos_Aires'),
+            '$_baseUrl/fixtures?league=$leagueId&season=$season&timezone=America/Argentina/Buenos_Aires'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -67,9 +69,10 @@ static const int _seasonCopas = 2025;
   // TABLA DE GRUPOS
   static Future<List<Map<String, dynamic>>> getGrupos(int leagueId) async {
     try {
+      final season = leagueId == 11 ? _season : _seasonCopas;
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/standings?league=$leagueId&season=$_season'),
+            '$_baseUrl/standings?league=$leagueId&season=$season'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
@@ -89,9 +92,10 @@ static const int _seasonCopas = 2025;
   // GOLEADORES
   static Future<List<Map<String, dynamic>>> getGoleadores(int leagueId) async {
     try {
+      final season = leagueId == 11 ? _season : _seasonCopas;
       final response = await http.get(
         Uri.parse(
-            '$_baseUrl/players/topscorers?league=$leagueId&season=$_season'),
+            '$_baseUrl/players/topscorers?league=$leagueId&season=$season'),
         headers: _headers,
       );
       if (response.statusCode == 200) {
