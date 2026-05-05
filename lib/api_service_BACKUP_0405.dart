@@ -2353,54 +2353,43 @@ for (final f in jugados) {
 
 static Future<Map<String, dynamic>> getIndiceMatchgol() async {
     try {
-      final Map<int, Map<String, dynamic>> merged = {};
+      final List<Map<String, dynamic>> all = [];
       final Set<int> seen = {};
-      void absorb(List<dynamic> items) {
-        for (final item in items) {
-          final player = item['player'];
-          final statsList = item['statistics'] as List? ?? [];
-          if (player == null || statsList.isEmpty) continue;
-          final st = statsList[0] as Map<String, dynamic>;
-          final int? pid = player['id'] as int?;
-          if (pid == null) continue;
-          final double rating = double.tryParse(st['games']?['rating']?.toString() ?? '') ?? 0.0;
-          if (!seen.contains(pid)) {
-            seen.add(pid);
-            merged[pid] = {'player': player, 'statistics': [st]};
-          } else {
-            final double existingRating = double.tryParse(merged[pid]!['statistics'][0]['games']?['rating']?.toString() ?? '') ?? 0.0;
-            if (rating > existingRating) merged[pid] = {'player': player, 'statistics': [st]};
-          }
-        }
-      }
-      try {
-        final r1 = await http.get(Uri.parse('$_baseUrl/players/topscorers?league=$_ligaArgentina&season=$_season'), headers: _headers);
-        if (r1.statusCode == 200) absorb(jsonDecode(r1.body)['response'] as List? ?? []);
-      } catch (_) {}
-      try {
-        final r2 = await http.get(Uri.parse('$_baseUrl/players/topassists?league=$_ligaArgentina&season=$_season'), headers: _headers);
-        if (r2.statusCode == 200) absorb(jsonDecode(r2.body)['response'] as List? ?? []);
-      } catch (_) {}
       int page = 1;
       int totalPages = 1;
       while (page <= totalPages && page <= 20) {
-        final res = await http.get(Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&page=$page'), headers: _headers);
+        final res = await http.get(
+          Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&page=$page'),
+          headers: _headers,
+        );
         if (res.statusCode != 200) break;
         final data = jsonDecode(res.body);
         totalPages = data['paging']?['total'] as int? ?? 1;
         final players = data['response'] as List? ?? [];
         if (players.isEmpty) break;
-        absorb(players);
+        for (final item in players) {
+          final pid = item['player']?['id'] as int?;
+          if (pid == null || seen.contains(pid)) continue;
+          seen.add(pid);
+          final stats = (item['statistics'] as List? ?? []);
+          if (stats.isEmpty) continue;
+          final st = stats[0] as Map<String, dynamic>;
+          final rating = double.tryParse(st['games']?['rating']?.toString() ?? '') ?? 0.0;
+          if (rating == 0.0) continue;
+          final appeared = st['games']?['appearences'] as int? ?? 0;
+          if (appeared < 3) continue;
+          all.add({
+            'id': pid,
+            'name': item['player']?['name'] ?? '',
+            'photo': item['player']?['photo'] ?? '',
+            'pos': st['games']?['position'] ?? 'M',
+            'rating': rating,
+            'team': st['team']?['name'] ?? '',
+            'goals': st['goals']?['total'] ?? 0,
+            'assists': st['goals']?['assists'] ?? 0,
+          });
+        }
         page++;
-      }
-      final List<Map<String, dynamic>> all = [];
-      for (final item in merged.values) {
-        final st = item['statistics'][0] as Map<String, dynamic>;
-        final double rating = double.tryParse(st['games']?['rating']?.toString() ?? '') ?? 0.0;
-        final int appeared = st['games']?['appearences'] as int? ?? 0;
-        if (appeared < 1 || rating == 0.0) continue;
-        final player = item['player'] as Map<String, dynamic>;
-        all.add({'id': player['id'], 'name': player['name'] ?? '', 'photo': player['photo'] ?? '', 'pos': st['games']?['position'] ?? 'M', 'rating': rating, 'team': st['team']?['name'] ?? '', 'goals': st['goals']?['total'] ?? 0, 'assists': st['goals']?['assists'] ?? 0});
       }
       all.sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
       final Map<String, List<Map<String, dynamic>>> byPos = {'G': [], 'D': [], 'M': [], 'F': []};
@@ -2409,7 +2398,18 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
         final pos = rawPos == 'Goalkeeper' ? 'G' : rawPos == 'Defender' ? 'D' : rawPos == 'Midfielder' ? 'M' : rawPos == 'Attacker' ? 'F' : '';
         if (pos.isNotEmpty && byPos.containsKey(pos) && byPos[pos]!.length < 10) byPos[pos]!.add(p);
       }
-      return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'top10': all.take(10).toList(), 'byPos': byPos};
+      return {
+        'best': all.isNotEmpty ? all[0] : <String, dynamic>{},
+        'top10': all.take(10).toList(),
+        'byPos': byPos,
+      };
+    } catch (e) {
+      return {'best': <String, dynamic>{}, 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
+    }
+  }
+            if (pos.isNotEmpty && byPos.containsKey(pos) && byPos[pos]!.length < 10) byPos[pos]!.add(p);
+      }
+      return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'top10': all.take(10).toList()};
     } catch (e) {
       return {'best': <String, dynamic>{}, 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
     }
