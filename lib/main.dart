@@ -121,6 +121,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  bool _esPremium = false;
   int _selectedIndex = 0;
   bool _showDashboard = true;
   bool _showTorneos = false;
@@ -872,7 +873,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   final List<Map<String, dynamic>> _sections = [
-    {'icon': Icons.sports_soccer, 'label': 'Resultados'},
+    {'icon': Icons.sports_soccer, 'label': 'Partidos de Hoy'},
     {'icon': Icons.table_chart, 'label': 'Tablas'},
     {'icon': Icons.sports_soccer, 'label': 'Goleadores'},
     {'icon': Icons.sports_handball, 'label': 'Arqueros'},
@@ -1302,7 +1303,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
             crossAxisSpacing: 8,
             childAspectRatio: 0.9,
             children: [
-              _ligaBoton('⚽', 'Resultados', 0),
+              _ligaBoton('⚽', 'Partidos de Hoy', 0),
               _ligaBoton('📊', 'Tablas', 1),
               _ligaBoton('📅', 'Fixture', 4),
               _ligaBoton('🔮', 'Predicciones', 6),
@@ -1712,7 +1713,7 @@ case 13: return _buildExpulsados();
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _sectionTitle('HOY - LIGA PROFESIONAL'),
+            _sectionTitle('PARTIDOS DE HOY'),
             const SizedBox(height: 12),
             ...ligaPartidos.map(buildCard),
           ],
@@ -2291,7 +2292,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               Tab(text: 'GRUPOS'),
               Tab(text: 'FIXTURE'),
               Tab(text: 'GOLEADORES'),
-              Tab(text: 'CRUCES 32'),
+              Tab(text: 'CRUCES 32'),  
             ],
           ),
         ),
@@ -2299,7 +2300,6 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           _tabMundialGrupos(),
           _tabMundialFixture(),
           _tabMundialGoleadores(),
-          _tabMundialCruces(),
         ])),
       ]),
     );
@@ -4666,17 +4666,41 @@ Widget _tabTiempo(String tipo) {
         final todos = snapshot.data!;
         final todosOrdenados = List<Map<String, dynamic>>.from(todos);
         todosOrdenados.sort((a, b) => (a['fixture']['id'] as int).compareTo(b['fixture']['id'] as int));
-        final mitad = todosOrdenados.length ~/ 2;
-        final apertura = todosOrdenados.take(mitad).toList();
-        final clausura = todosOrdenados.skip(mitad).toList();
+        final apertura = todosOrdenados.where((p) {
+          final round = (p['league']['round'] as String? ?? '').toLowerCase();
+          return round.contains('apertura');
+        }).toList();
+        final clausura = todosOrdenados.where((p) {
+          final round = (p['league']['round'] as String? ?? '').toLowerCase();
+          return round.contains('clausura');
+        }).toList();
         final filtrados = _torneoActual == 'APERTURA' ? apertura : clausura;
         Map<int, List<Map<String, dynamic>>> porFecha = {};
+        final Map<int, String> labelPorFecha = {};
         for (var p in filtrados) {
           final st = p['fixture']['status']['short'];
           if (st == 'PST' || st == 'CANC' || st == 'TBD') continue;
           final round = p['league']['round'] as String;
-          final num = int.tryParse(round.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          final roundNorm = round.toLowerCase();
+          int num;
+          String? label;
+          if (roundNorm.contains('round of 16') || roundNorm.contains('octavos') || roundNorm.contains('1/8') || roundNorm.contains('eighth')) {
+            num = 100;
+            label = 'ROUND OF 16';
+          } else if (roundNorm.contains('quarter') || roundNorm.contains('cuartos') || roundNorm.contains('1/4')) {
+            num = 101;
+            label = 'QUARTER-FINALS';
+          } else if (roundNorm.contains('semi')) {
+            num = 102;
+            label = 'SEMI-FINALS';
+          } else if (roundNorm.contains('final')) {
+            num = 103;
+            label = 'FINAL';
+          } else {
+            num = int.tryParse(round.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          }
           porFecha.putIfAbsent(num, () => []).add(p);
+          if (label != null) labelPorFecha[num] = label;
         }
         final fechas = porFecha.keys.toList()..sort();
         if (_fechaActual == -1) {
@@ -4709,7 +4733,7 @@ Widget _tabTiempo(String tipo) {
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               IconButton(icon: const Icon(Icons.chevron_left, color: Color(0xFF00C853), size: 28), onPressed: _fechaActual > 0 ? () => setState(() => _fechaActual--) : null),
               Column(children: [
-                Text('FECHA $numFecha', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 2)),
+                Text(labelPorFecha[numFecha] ?? 'FECHA $numFecha', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 2)),
                 Text(hayJugados ? 'JUGADA' : 'PROXIMA', style: TextStyle(color: hayJugados ? Colors.white38 : const Color(0xFF00C853), fontSize: 11, letterSpacing: 1)),
               ]),
               IconButton(icon: const Icon(Icons.chevron_right, color: Color(0xFF00C853), size: 28), onPressed: _fechaActual < fechas.length - 1 ? () => setState(() => _fechaActual++) : null),

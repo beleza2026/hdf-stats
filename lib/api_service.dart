@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'racha_model.dart';
@@ -49,12 +49,20 @@ class ApiService {
         : <dynamic>[]);
     return _fixturesFuture!;
   }
+  static Future<List> _getFixturesAllData() async {
+  return (await http.get(
+    Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
+    headers: _headers,
+  ).then((r) => r.statusCode == 200
+      ? (jsonDecode(r.body)['response'] as List)
+      : <dynamic>[]));
+}
   // ─────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
   final hoy = DateTime.now().toLocal();
   final fecha = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-  final leagues = [_ligaArgentina, 13, 14]; // Liga + Libertadores + Sudamericana
+  final leagues = [_ligaArgentina, 13, 11]; // Liga + Libertadores + Sudamericana
   final List<Map<String, dynamic>> todos = [];
   try {
     for (final league in leagues) {
@@ -265,7 +273,6 @@ class ApiService {
   }
   static Future<List<Map<String, dynamic>>> getHeadToHead(int homeId, int awayId) async {
     try {
-      print('H2H llamada: $homeId vs $awayId');
       final response = await http.get(
         Uri.parse('$_baseUrl/fixtures/headtohead?h2h=$homeId-$awayId&last=10'),
         headers: _headers,
@@ -316,19 +323,30 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getFixture() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&timezone=America/Argentina/Buenos_Aires'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final fixtures = data['response'] as List;
-        final lista = fixtures.map((f) => f as Map<String, dynamic>).toList();
-        if (lista.isEmpty) return [];
-        final primerLeagueId = lista[0]['league']['id'];
-        return lista.where((f) => f['league']['id'] == primerLeagueId).toList();
+      Future<List<Map<String, dynamic>>> _fetchFixtures(String query) async {
+        final response = await http.get(
+          Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season$query&timezone=America/Argentina/Buenos_Aires'),
+          headers: _headers,
+        );
+        if (response.statusCode != 200) return [];
+        final fixtures = (jsonDecode(response.body)['response'] as List? ?? []);
+        return fixtures.map((f) => f as Map<String, dynamic>).toList();
       }
-      return [];
+
+      final allFixtures = await _fetchFixtures('');
+      final nsFixtures = await _fetchFixtures('&status=NS');
+      final nsRoundOf16 = await _fetchFixtures('&status=NS&round=Round%20of%2016');
+      final nsOctavos = await _fetchFixtures('&status=NS&round=Octavos%20de%20Final');
+
+      final Map<dynamic, Map<String, dynamic>> porFixtureId = {};
+      for (final fixture in [...allFixtures, ...nsFixtures, ...nsRoundOf16, ...nsOctavos]) {
+        final fixtureData = fixture['fixture'] as Map<String, dynamic>?;
+        final fixtureId = fixtureData?['id'];
+        if (fixtureId == null) continue;
+        porFixtureId[fixtureId] = fixture;
+      }
+
+      return porFixtureId.values.toList();
     } catch (e) {
       return [];
     }
@@ -1580,7 +1598,6 @@ class ApiService {
  
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
-      print('🔥 TABLA MORAL INICIANDO');
       // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
       final standData = await _getStandingsData();
       final allFixtures = await _getFixturesData();
@@ -1596,10 +1613,8 @@ class ApiService {
           if (grupo.isEmpty) continue;
           // Leer zona del campo 'group' real de la API
           final groupStr = (grupo[0]['group'] as String? ?? '').toLowerCase();
-          print('HDF_DEBUG ZONA: groupStr=$groupStr');
           if (!groupStr.contains('apertura')) continue;
-          print('DEBUG:'+groupStr); final zona = groupStr.contains('group b') ? 'Zona B' : 'Zona A';
-          print('HDF_DEBUG ZONA: zona=$zona equipos=${grupo.length}');
+          final zona = groupStr.contains('group b') ? 'Zona B' : 'Zona A';
           for (final e in grupo) {
             final id = e['team']['id'].toString();
             equipoZona[id] = zona;
@@ -1625,7 +1640,6 @@ class ApiService {
       // PASO 3: Para fixtures que faltan en Firestore → calcular con GOLES ÚNICAMENTE
       // (sin llamar a /fixtures/statistics — cero 429)
       if (jugados.isNotEmpty) {
-  print('JUGADOS TOTAL: ${jugados.length}');
         final batch = FirebaseFirestore.instance.batch();
         bool hayNuevos = false;
         for (final f in jugados) {
