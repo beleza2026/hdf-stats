@@ -9,6 +9,15 @@ class ApiService {
   static const int _ligaArgentina = 128;
   static const int _season = 2026;
 
+  /// Misma nómina que en copas (vivo): partidos de copa se filtran a estos clubes.
+  static const Set<String> _equiposArgTablaDT = {
+    '451', '435', '436', '453', '460', '445', '438', '440', '450', '434', '446', '449',
+    '1064', '452', '441', '456', '457', '463', '2432',
+  };
+
+  /// DT con al menos un partido (liga/copa) en esta ventana se considera en actividad.
+  static const int dtVentanaActividadDias = 45;
+
   static Map<String, String> get _headers => {
     'x-apisports-key': _apiKey,
   };
@@ -28,6 +37,8 @@ class ApiService {
     _tiemposFuture = null;
     _rachasCache = null;
     _tablaDTsCache = null;
+    _tablaPosesionCache = null;
+    _tablaPosesionCacheTime = null;
     _fixturesPrevFuture = null;
     _tablasCache = null;
   }
@@ -38,6 +49,28 @@ class ApiService {
       headers: _headers,
     ).then((r) => r.statusCode == 200 ? jsonDecode(r.body) : null);
     return _standingsFuture!;
+  }
+
+  /// IDs de clubes en la Liga Profesional (todos los grupos del standings).
+  static Future<Set<int>> _teamIdsLigaProfesional() async {
+    try {
+      final data = await _getStandingsData();
+      if (data == null) return {};
+      final standings = data['response']?[0]?['league']?['standings'] as List?;
+      if (standings == null) return {};
+      final ids = <int>{};
+      for (final group in standings) {
+        final zona = group as List;
+        for (final row in zona) {
+          final m = row as Map<String, dynamic>;
+          final tid = m['team']?['id'] as int?;
+          if (tid != null) ids.add(tid);
+        }
+      }
+      return ids;
+    } catch (_) {
+      return {};
+    }
   }
 
   static Future<List> _getFixturesData() {
@@ -1153,22 +1186,197 @@ class ApiService {
   // Cache para TablaDTs
   static List<Map<String, dynamic>>? _tablaDTsCache;
 
+  static List<Map<String, dynamic>>? _tablaPosesionCache;
+  static DateTime? _tablaPosesionCacheTime;
+
+  static double? _parseBallPossessionBlock(Map<String, dynamic> block) {
+    final stats = block['statistics'] as List? ?? [];
+    for (final s in stats) {
+      if (s['type'] == 'Ball Possession') {
+        final v = s['value']?.toString().replaceAll('%', '').trim() ?? '';
+        return double.tryParse(v);
+      }
+    }
+    return null;
+  }
+
+  /// Promedio de posesión acumulada solo Liga Profesional (estadísticas por partido).
+  static Future<List<Map<String, dynamic>>> getTablaPosesion({bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        _tablaPosesionCache != null &&
+        _tablaPosesionCacheTime != null &&
+        DateTime.now().difference(_tablaPosesionCacheTime!).inMinutes < 60) {
+      return _tablaPosesionCache!;
+    }
+    try {
+      final resFix = await http.get(
+        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
+        headers: _headers,
+      );
+      if (resFix.statusCode != 200) return _tablaPosesionCache ?? [];
+
+      final todos = (jsonDecode(resFix.body)['response'] as List? ?? [])
+          .cast<Map<String, dynamic>>();
+      final jugados = todos.where((f) {
+        final s = f['fixture']?['status']?['short'] as String? ?? '';
+        return s == 'FT' || s == 'AET' || s == 'PEN';
+      }).toList()
+        ..sort((a, b) {
+          final da = DateTime.tryParse(a['fixture']?['date'] as String? ?? '') ??
+              DateTime(2000);
+          final db = DateTime.tryParse(b['fixture']?['date'] as String? ?? '') ??
+              DateTime(2000);
+          return da.compareTo(db);
+        });
+
+      final Map<int, Map<String, dynamic>> acum = {};
+
+      const loteSize = 8;
+      for (int i = 0; i < jugados.length; i += loteSize) {
+        final lote = jugados.skip(i).take(loteSize).toList();
+        await Future.wait(lote.map((f) async {
+          final fxId = f['fixture']?['id'] as int?;
+          if (fxId == null) return;
+          try {
+            final res = await http.get(
+              Uri.parse('$_baseUrl/fixtures/statistics?fixture=$fxId'),
+              headers: _headers,
+            );
+            if (res.statusCode != 200) return;
+            final blocks =
+                (jsonDecode(res.body)['response'] as List? ?? []).cast<Map<String, dynamic>>();
+            if (blocks.length < 1) return;
+
+            for (final block in blocks) {
+              final team = block['team'] as Map<String, dynamic>?;
+              if (team == null) continue;
+              final tid = team['id'] as int?;
+              if (tid == null) continue;
+              final pct = _parseBallPossessionBlock(block);
+              if (pct == null) continue;
+
+              acum.putIfAbsent(
+                tid,
+                () => {
+                  'sum': 0.0,
+                  'n': 0,
+                  'nombre': team['name'] as String? ?? '',
+                  'logo': team['logo'] as String? ?? '',
+                },
+              );
+              acum[tid]!['sum'] = (acum[tid]!['sum'] as double) + pct;
+              acum[tid]!['n'] = (acum[tid]!['n'] as int) + 1;
+              acum[tid]!['nombre'] = team['name'] as String? ?? acum[tid]!['nombre'];
+              acum[tid]!['logo'] = team['logo'] as String? ?? acum[tid]!['logo'];
+            }
+          } catch (_) {}
+        }));
+        if (i + loteSize < jugados.length) {
+          await Future.delayed(const Duration(milliseconds: 220));
+        }
+      }
+
+      final List<Map<String, dynamic>> rows = [];
+      for (final e in acum.entries) {
+        final n = e.value['n'] as int;
+        if (n == 0) continue;
+        final sum = e.value['sum'] as double;
+        final prom = sum / n;
+        final int colorValue;
+        final String zonaCorta;
+        if (prom >= 55) {
+          colorValue = 0xFF2196F3;
+          zonaCorta = 'Dominante';
+        } else if (prom >= 48) {
+          colorValue = 0xFFFFC107;
+          zonaCorta = 'Equilibrado';
+        } else if (prom >= 42) {
+          colorValue = 0xFFFF9800;
+          zonaCorta = 'Defensivo';
+        } else {
+          colorValue = 0xFFE53935;
+          zonaCorta = 'Muy defensivo';
+        }
+        rows.add({
+          'teamId': e.key,
+          'nombre': e.value['nombre'],
+          'logo': e.value['logo'],
+          'promedio': double.parse(prom.toStringAsFixed(1)),
+          'partidos': n,
+          'zonaCorta': zonaCorta,
+          'zonaColor': colorValue,
+        });
+      }
+      rows.sort((a, b) =>
+          (b['promedio'] as double).compareTo(a['promedio'] as double));
+
+      _tablaPosesionCache = rows;
+      _tablaPosesionCacheTime = DateTime.now();
+      return rows;
+    } catch (_) {
+      return _tablaPosesionCache ?? [];
+    }
+  }
+
+  /// Liga + Libertadores + Sudamericana + Copa Argentina (solo duelos con argentinos en copas).
+  static Future<List<Map<String, dynamic>>> _fixturesLigaYCopasArgParaDTs() async {
+    final byId = <int, Map<String, dynamic>>{};
+
+    void ingest(Map<String, dynamic> m) {
+      final id = m['fixture']?['id'] as int?;
+      if (id == null) return;
+      final s = m['fixture']?['status']?['short'] as String? ?? '';
+      if (s != 'FT' && s != 'AET' && s != 'PEN') return;
+      byId[id] = m;
+    }
+
+    try {
+      final ligaRaw = await _getFixturesAllData();
+      for (final f in ligaRaw) {
+        ingest(f as Map<String, dynamic>);
+      }
+    } catch (_) {}
+
+    Future<void> fetchCup(int leagueId, List<int> seasons) async {
+      for (final sea in seasons) {
+        try {
+          final r = await http.get(
+            Uri.parse('$_baseUrl/fixtures?league=$leagueId&season=$sea'),
+            headers: _headers,
+          );
+          if (r.statusCode != 200) continue;
+          final resp = (jsonDecode(r.body)['response'] as List?) ?? [];
+          for (final f in resp) {
+            final m = f as Map<String, dynamic>;
+            final hId = m['teams']?['home']?['id']?.toString() ?? '';
+            final aId = m['teams']?['away']?['id']?.toString() ?? '';
+            if (!_equiposArgTablaDT.contains(hId) && !_equiposArgTablaDT.contains(aId)) {
+              continue;
+            }
+            ingest(m);
+          }
+        } catch (_) {}
+      }
+    }
+
+    await fetchCup(13, [_season, 2025]);
+    await fetchCup(11, [_season, 2025]);
+    await fetchCup(_copaArgentina, [_season, 2025]);
+
+    final list = byId.values.toList();
+    list.sort((a, b) {
+      final da = DateTime.tryParse(a['fixture']?['date'] as String? ?? '') ?? DateTime(2000);
+      final db = DateTime.tryParse(b['fixture']?['date'] as String? ?? '') ?? DateTime(2000);
+      return da.compareTo(db);
+    });
+    return list;
+  }
+
   static Future<List<Map<String, dynamic>>> getTablaDTs({bool forceRefresh = false}) async {
     if (!forceRefresh && _tablaDTsCache != null) return _tablaDTsCache!;
     try {
-      // Fixtures terminados, ordenados cronologicamente (asc)
-      final allFixtures = await _getFixturesData();
-      final fixtures = allFixtures
-          .cast<Map<String, dynamic>>()
-          .where((f) {
-            final s = f['fixture']['status']['short'] as String? ?? '';
-            return s == 'FT' || s == 'AET' || s == 'PEN';
-          }).toList()
-        ..sort((a, b) {
-          final da = DateTime.tryParse(a['fixture']['date'] as String? ?? '') ?? DateTime(2000);
-          final db = DateTime.tryParse(b['fixture']['date'] as String? ?? '') ?? DateTime(2000);
-          return da.compareTo(db);
-        });
+      // Liga + copas (argentinos), terminados, orden cronológico ascendente
+      final fixtures = await _fixturesLigaYCopasArgParaDTs();
 
       // coachId -> stats acumulados
       final Map<String, Map<String, dynamic>> dts = {};
@@ -1199,6 +1407,14 @@ class ApiService {
 
               final luTeamId = lu['team']?['id'] as int?;
               if (luTeamId == null) continue;
+              // Solo DT de clubes argentinos: LPF y Copa Arg. cuentan todos; en Libertadores/Sudamericana solo el bando argentino.
+              final leagueF = f['league']?['id'] as int? ?? 0;
+              final esCompetenciaSoloArg =
+                  leagueF == _ligaArgentina || leagueF == _copaArgentina;
+              if (!esCompetenciaSoloArg &&
+                  !_equiposArgTablaDT.contains(luTeamId.toString())) {
+                continue;
+              }
               final isHome   = luTeamId == homeId;
               final teamName = (isHome ? f['teams']['home']['name'] : f['teams']['away']['name']) as String;
               final teamLogo = (isHome ? f['teams']['home']['logo'] : f['teams']['away']['logo']) as String? ?? '';
@@ -1229,6 +1445,15 @@ class ApiService {
               else if (empato) dts[coachId]!['empates']   = (dts[coachId]!['empates']   as int) + 1;
               else             dts[coachId]!['derrotas']  = (dts[coachId]!['derrotas']  as int) + 1;
               (dts[coachId]!['racha'] as List<String>).add(res2);
+
+              final fechaStr = f['fixture']?['date'] as String? ?? '';
+              final fechaPartido = DateTime.tryParse(fechaStr);
+              if (fechaPartido != null) {
+                final prev = dts[coachId]!['_ultimaFecha'] as DateTime?;
+                if (prev == null || fechaPartido.isAfter(prev)) {
+                  dts[coachId]!['_ultimaFecha'] = fechaPartido;
+                }
+              }
             }
           } catch (_) {}
         }));
@@ -1259,12 +1484,39 @@ class ApiService {
           rachaActual = '$count$ultimo';
         }
 
+        int trailingSinGanar = 0;
+        for (int j = racha.length - 1; j >= 0; j--) {
+          if (racha[j] == 'W') break;
+          trailingSinGanar++;
+        }
+        final alertaSinGanar5 = trailingSinGanar >= 5;
+
+        int trailingL = 0;
+        for (int j = racha.length - 1; j >= 0; j--) {
+          if (racha[j] != 'L') break;
+          trailingL++;
+        }
+        final alertaTresDerrotas = trailingL >= 3;
+        final alertaRoja = alertaSinGanar5 || alertaTresDerrotas;
+
+        final ultima = dt['_ultimaFecha'] as DateTime?;
+        final limite = DateTime.now().toUtc().subtract(const Duration(days: dtVentanaActividadDias));
+        final dtEnActividad =
+            ultima != null && ultima.toUtc().isAfter(limite);
+
+        final limpio = Map<String, dynamic>.from(dt)..remove('_ultimaFecha');
+
         return <String, dynamic>{
-          ...dt,
+          ...limpio,
           'puntos':      puntos,
           'pctPuntos':   pctPuntos,
           'rachaActual': rachaActual,
           'ultimos5':    ultimos5,
+          'alertaSinGanar5': alertaSinGanar5,
+          'alertaTresDerrotas': alertaTresDerrotas,
+          'alertaRoja': alertaRoja,
+          'ultimaFechaPartido': ultima?.toIso8601String(),
+          'dtEnActividad': dtEnActividad,
         };
       }).toList()
         ..sort((a, b) => (b['pctPuntos'] as double).compareTo(a['pctPuntos'] as double));
@@ -1276,7 +1528,148 @@ class ApiService {
     }
   }
 
-  /// Carga la carrera completa de un DT bajo demanda (al tocar en la tabla)
+  /// Color ARGB para UI según índice de presión (0–100).
+  static int _presionColorValue(double p) {
+    if (p >= 72) return 0xFFFF5252;
+    if (p >= 55) return 0xFFFF7043;
+    if (p >= 40) return 0xFFFF9800;
+    if (p >= 25) return 0xFFFFC107;
+    return 0xFF00C853;
+  }
+
+  /// Combina % de puntos, racha actual y últimos 5 en un índice 0–100 (más = más presión).
+  static Map<String, dynamic> _metadataPresionDT(Map<String, dynamic> dt) {
+    final pct = (dt['pctPuntos'] as num?)?.toDouble() ?? 0;
+    final rachaActual = dt['rachaActual'] as String? ?? '';
+    final ultimos5 = (dt['ultimos5'] as List?)?.cast<String>() ?? [];
+    final partidos = (dt['partidos'] as int?) ?? 0;
+
+    double presion = (100.0 - pct) * 0.40;
+
+    if (rachaActual.isNotEmpty) {
+      final last = rachaActual[rachaActual.length - 1];
+      final nStr = rachaActual.substring(0, rachaActual.length - 1);
+      final n = int.tryParse(nStr) ?? 1;
+      if (last == 'L') {
+        presion += (n * 8.0).clamp(0, 42);
+      } else if (last == 'W') {
+        presion -= (n * 6.5).clamp(0, 32);
+      } else if (last == 'D') {
+        presion += (n * 1.8).clamp(0, 10);
+      }
+    }
+
+    for (final r in ultimos5) {
+      if (r == 'L') presion += 4.8;
+      if (r == 'W') presion -= 3.2;
+      if (r == 'D') presion += 1.2;
+    }
+
+    if (partidos < 4) {
+      presion *= (partidos / 4).clamp(0.35, 1.0);
+    }
+
+    if (dt['alertaSinGanar5'] == true) presion += 16;
+    if (dt['alertaTresDerrotas'] == true) presion += 12;
+
+    presion = presion.clamp(0.0, 100.0);
+
+    String label;
+    if (presion >= 80) {
+      label = 'Cuerda floja';
+    } else if (presion >= 62) {
+      label = 'Riesgo alto';
+    } else if (presion >= 45) {
+      label = 'Caliente';
+    } else if (presion >= 28) {
+      label = 'En observación';
+    } else {
+      label = 'Relativamente estable';
+    }
+
+    var color = _presionColorValue(presion);
+    if (dt['alertaRoja'] == true) color = 0xFFFF5252;
+
+    return {
+      'presion': presion,
+      'presionLabel': label,
+      'presionColor': color,
+    };
+  }
+
+  /// Solo DT de clubes de la Liga Profesional (standings), en actividad; presión y orden por riesgo.
+  /// Los datos (PJ, racha, alertas) ya incluyen Liga + Copa Arg. + copas int. del lado argentino.
+  static Future<List<Map<String, dynamic>>> getCuerdaFloja({bool forceRefresh = false}) async {
+    final dts = await getTablaDTs(forceRefresh: forceRefresh);
+    final lpfIds = await _teamIdsLigaProfesional();
+    final activos = dts.where((d) {
+      if (d['dtEnActividad'] != true) return false;
+      if (lpfIds.isEmpty) return true;
+      final raw = d['equipoId'];
+      final id = raw is int ? raw : int.tryParse(raw.toString());
+      if (id == null) return false;
+      return lpfIds.contains(id);
+    }).toList();
+    final withP = activos.map((dt) {
+      final meta = _metadataPresionDT(dt);
+      return <String, dynamic>{...dt, ...meta};
+    }).toList();
+    withP.sort((a, b) =>
+        ((b['presion'] as num?)?.toDouble() ?? 0).compareTo((a['presion'] as num?)?.toDouble() ?? 0));
+    await _enriquecerFotosCuerdaFloja(withP);
+    return withP;
+  }
+
+  static int _intFromApi(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  /// True si el endpoint /coachs devolvió algo útil para mostrar (carrera, edad, etc.).
+  static bool carreraDTTieneValor(Map<String, dynamic> m) {
+    if (m.isEmpty) return false;
+    final career = m['carrera'];
+    if (career is List && career.isNotEmpty) return true;
+    if (_intFromApi(m['edad']) > 0) return true;
+    final nat = (m['nacionalidad'] as String?)?.trim() ?? '';
+    if (nat.isNotEmpty) return true;
+    final foto = (m['foto'] as String?)?.trim() ?? '';
+    if (foto.isNotEmpty) return true;
+    if (_intFromApi(m['aniosExp']) > 0) return true;
+    return _intFromApi(m['totalClubes']) > 0;
+  }
+
+  /// Lineups a veces vienen sin `photo`; el detalle por id suele traerla.
+  static Future<void> _enriquecerFotosCuerdaFloja(List<Map<String, dynamic>> lista) async {
+    const lote = 5;
+    for (var i = 0; i < lista.length; i += lote) {
+      final chunk = lista.skip(i).take(lote).toList();
+      await Future.wait(chunk.map((dt) async {
+        final f = dt['foto'] as String?;
+        if (f != null && f.isNotEmpty) return;
+        final cid = dt['id'] as String? ?? '';
+        if (cid.isEmpty) return;
+        try {
+          final r = await http.get(
+            Uri.parse('$_baseUrl/coachs?id=$cid'),
+            headers: _headers,
+          );
+          if (r.statusCode != 200) return;
+          final list = jsonDecode(r.body)['response'] as List?;
+          if (list == null || list.isEmpty) return;
+          final coach = list[0] as Map<String, dynamic>;
+          final ph = coach['photo'] as String?;
+          if (ph != null && ph.isNotEmpty) dt['foto'] = ph;
+        } catch (_) {}
+      }));
+      if (i + lote < lista.length) {
+        await Future.delayed(const Duration(milliseconds: 140));
+      }
+    }
+  }
+
+  /// Carga perfil y carrera del DT actual del club [teamId] (ID de equipo, no de coach).
   static Future<Map<String, dynamic>> getCarreraDT(String teamId) async {
     try {
       final res = await http.get(
@@ -1310,14 +1703,16 @@ class ApiService {
             ? (primero['start'] as String).substring(0, 4) : '';
       }
       final anioInicio = int.tryParse(primerAnio) ?? 0;
+      final ph = coach['photo'] as String? ?? '';
+      final nat = coach['nationality'];
 
       return {
-        'edad':        coach['age'] ?? 0,
-        'nacionalidad': coach['nationality'] ?? '',
-        'foto':        coach['photo'] ?? '',
-        'aniosExp':    anioInicio > 0 ? (2026 - anioInicio) : 0,
-        'totalClubes': career.length,
-        'carrera':     career,
+        'edad':         _intFromApi(coach['age']),
+        'nacionalidad': nat == null ? '' : nat.toString(),
+        'foto':         ph,
+        'aniosExp':     anioInicio > 0 ? (_season - anioInicio) : 0,
+        'totalClubes':  career.length,
+        'carrera':      career,
       };
     } catch (e) {
       return {};
@@ -1595,7 +1990,21 @@ class ApiService {
     };
   }
 
- 
+  /// Tabla moral = solo fase de liga por fechas. Excluye play-offs bajo el mismo league id.
+  /// API-Sports: a veces `Regular Season - N`, en LPF 2026 suele ser `Apertura - N` / `Clausura - N`;
+  /// excluye `Apertura - Round of 16`, etc.
+  static bool _fixtureCuentaParaTablaMoral(Map<String, dynamic> f) {
+    final round = (f['league']?['round'] as String? ?? '').trim();
+    if (round.isEmpty) return false;
+    final lower = round.toLowerCase();
+    if (lower.contains('play-off') || lower.contains('playoff')) return false;
+    if (lower.contains('round of')) return false;
+    if (lower.contains('relegation') || lower.contains('descenso')) return false;
+    if (round.contains('Regular Season')) return true;
+    if (RegExp(r'^(Apertura|Clausura) - \d+$').hasMatch(round)) return true;
+    return false;
+  }
+
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
     try {
       // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
@@ -1625,8 +2034,10 @@ class ApiService {
       }
 
       final jugados = allFixtures.where((f) {
-        final s = f['fixture']['status']['short'];
-        return s == 'FT' || s == 'AET' || s == 'PEN';
+        final m = Map<String, dynamic>.from(f as Map);
+        final s = m['fixture']['status']['short'];
+        if (s != 'FT' && s != 'AET' && s != 'PEN') return false;
+        return _fixtureCuentaParaTablaMoral(m);
       }).toList();
 
       // PASO 2: Leer Firestore

@@ -16,6 +16,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
 import 'paywall_screen.dart';
+import 'device_trial_service.dart';
+import 'match_follow_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -44,13 +46,30 @@ class PremiumService {
 
   static Future<bool> comprarPremium() async {
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('comprarPremium: sin usuario Firebase');
+        return false;
+      }
+      final gate = await DeviceTrialService.verifyTrialAllowedForUser(user);
+      if (!gate.allowed) {
+        debugPrint('comprarPremium bloqueado: ${gate.blockMessage}');
+        return false;
+      }
       final offerings = await Purchases.getOfferings();
-      final current = offerings.current;
-      if (current == null) return false;
-      final package = current.monthly ?? current.availablePackages.firstOrNull;
+      final oferta = offerings.getOffering('default_matchgol') ?? offerings.current;
+      if (oferta == null) return false;
+      final package = oferta.monthly ?? oferta.annual ?? oferta.availablePackages.firstOrNull;
       if (package == null) return false;
       final result = await Purchases.purchasePackage(package);
-      return result.customerInfo.entitlements.active.containsKey(_entitlement);
+      final ok = result.customerInfo.entitlements.active.containsKey(_entitlement);
+      if (ok) {
+        await DeviceTrialService.registerTrialIfApplicable(
+          user: user,
+          customerInfo: result.customerInfo,
+        );
+      }
+      return ok;
     } catch (e) {
       debugPrint('RevenueCat comprar error: $e');
       return false;
@@ -92,9 +111,33 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // Auth anónimo — requerido por reglas de Firestore (auth != null)
-  try { await FirebaseAuth.instance.signInAnonymously(); } catch (_) {}
+  try {
+    await FirebaseAuth.instance.signInAnonymously();
+  } catch (e) {
+    debugPrint('Firebase Auth anónimo falló: $e');
+  }
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  if (!kIsWeb) await PremiumService.init();
+  if (!kIsWeb) {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      debugPrint('FCM Token: $fcmToken');
+    } catch (e, st) {
+      debugPrint('FCM getToken en main() falló: $e');
+      debugPrint('$st');
+    }
+    FirebaseMessaging.instance.onTokenRefresh.listen((t) {
+      debugPrint('FCM Token: $t');
+    });
+    await PremiumService.init();
+    final u = FirebaseAuth.instance.currentUser;
+    if (u != null) {
+      try {
+        await Purchases.logIn(u.uid);
+      } catch (e) {
+        debugPrint('Purchases.logIn: $e');
+      }
+    }
+  }
   runApp(const HDFStatsApp());
 }
 
@@ -128,6 +171,8 @@ class _MainScreenState extends State<MainScreen> {
   bool _showLiga = false;
   int _fechaActual = -1;
   int _predicFechaOffset = 0; // 0 = fecha actual/siguiente, 1 = la de después
+  int _tablaPosesionRefreshKey = 0;
+  int _cuerdaFlojaRefreshGen = 0;
   int? _equipoFavoritoId;
   String? _equipoFavoritoNombre;
   Future<Map<String, List<Map<String, dynamic>>>>? _futureTablaMoral;
@@ -135,12 +180,23 @@ class _MainScreenState extends State<MainScreen> {
   List<Map<String, dynamic>> _partidosEnVivo = [];
   Timer? _timerEnVivo;
   bool _hayEnVivo = false;
+  StreamSubscription<User?>? _authPurchasesSub;
 
   @override
   void initState() {
     super.initState();
     ApiService.clearCache(); // Reset cache en cada inicio de sesion
     if (!kIsWeb) _inicializarFCM();
+    if (!kIsWeb) {
+      _authPurchasesSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
+        if (user == null) return;
+        try {
+          await Purchases.logIn(user.uid);
+        } catch (e) {
+          debugPrint('Purchases.logIn (authState): $e');
+        }
+      });
+    }
     _actualizarEnVivo();
     _timerEnVivo = Timer.periodic(const Duration(seconds: 60), (_) => _actualizarEnVivo());
     _cargarFavorito();
@@ -165,7 +221,10 @@ class _MainScreenState extends State<MainScreen> {
     if (kIsWeb) return;
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
-    if (settings.authorizationStatus != AuthorizationStatus.authorized) return;
+    if (settings.authorizationStatus != AuthorizationStatus.authorized) {
+      debugPrint('FCM: permiso notificaciones = ${settings.authorizationStatus} (initState no guarda token en Firestore)');
+      return;
+    }
     final localNotif = FlutterLocalNotificationsPlugin();
     const channelId = 'hdf_partidos';
     const channelName = 'Partidos HDF Stats';
@@ -193,11 +252,13 @@ class _MainScreenState extends State<MainScreen> {
       await messaging.subscribeToTopic('equipo_$equipoId');
       debugPrint('FCM: suscripto a equipo_$equipoId');
     }
+    await MatchFollowService.subscribeAllSavedTopics();
     await messaging.subscribeToTopic('todos');
     debugPrint('FCM: suscripto a todos');
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       final notif = message.notification;
-      if (notif != null && message.notification?.android != null) {
+      // Admin SDK / HTTP v1 pueden traer solo title/body sin objeto android anidado.
+      if (notif != null && defaultTargetPlatform == TargetPlatform.android) {
         await localNotif.show(notif.hashCode, notif.title, notif.body,
             const NotificationDetails(android: AndroidNotificationDetails(channelId, channelName,
                 importance: Importance.high, priority: Priority.high, icon: '@mipmap/ic_launcher')),
@@ -859,6 +920,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _timerEnVivo?.cancel();
+    _authPurchasesSub?.cancel();
     super.dispose();
   }
 
@@ -882,7 +944,6 @@ class _MainScreenState extends State<MainScreen> {
     {'icon': Icons.auto_graph, 'label': 'Predicción'},
     {'icon': Icons.public, 'label': 'Mundial'},
     {'icon': Icons.newspaper, 'label': 'Noticias'},
-    {'icon': Icons.poll, 'label': 'Encuestas'},
   ];
 
   @override
@@ -920,6 +981,12 @@ class _MainScreenState extends State<MainScreen> {
                 ]),
               ),
             ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFFD700)),
+              tooltip: 'MatchGol Premium',
+              onPressed: () => _abrirPaywallPremium(context),
+            ),
           Builder(
             builder: (ctx) => IconButton(
               icon: const Icon(Icons.person_outline, color: Colors.white70),
@@ -944,8 +1011,14 @@ class _MainScreenState extends State<MainScreen> {
   void _irTorneos() => setState(() { _showDashboard = false; _showTorneos = true; _showLiga = false; });
   void _irLiga() => setState(() { _showDashboard = false; _showTorneos = false; _showLiga = true; });
   void _irInicio() => setState(() { _showDashboard = true; _showTorneos = false; _showLiga = false; });
-  void _irLibertadores() => _irSeccion(10);
-void _irSudamericana() => _irSeccion(11);
+  void _irLibertadores() => _irSeccion(9);
+  void _irSudamericana() => _irSeccion(10);
+
+  Future<void> _abrirPaywallPremium(BuildContext context) async {
+    if (kIsWeb) return;
+    final ok = await PaywallScreen.open(context);
+    if (ok == true && mounted) setState(() {});
+  }
 
   Widget _buildIndiceMatchgol() {
     return FutureBuilder<Map<String, dynamic>>(
@@ -1122,8 +1195,6 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
                 _dashBoton('🌍', 'Mundial 2026', 'Junio · USA, México, Canadá', const Color(0xFF2196F3), () => _irSeccion(7)),
                 const SizedBox(height: 12),
                 _dashBoton('📰', 'Noticias', 'Fútbol argentino', Colors.white54, () => _irSeccion(8)),
-                const SizedBox(height: 12),
-                _dashBoton('📢', 'Encuestas', 'Tu opinión importa', Colors.amber, () => _irSeccion(9)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1169,6 +1240,14 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           onPressed: _irInicio,
         ),
         title: const Text('TORNEOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5)),
+        actions: [
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFFD700)),
+              tooltip: 'MatchGol Premium',
+              onPressed: () => _abrirPaywallPremium(context),
+            ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -1228,6 +1307,12 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
         ),
         title: const Text('LIGA PROFESIONAL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1)),
         actions: [
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFFD700)),
+              tooltip: 'MatchGol Premium',
+              onPressed: () => _abrirPaywallPremium(context),
+            ),
           IconButton(
             icon: const Icon(Icons.home_rounded, color: Colors.white38),
             onPressed: _irInicio,
@@ -1310,9 +1395,10 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               _ligaBoton('👟', 'Goleadores', 2),
               _ligaBoton('🧤', 'Arqueros', 3),
               _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
-              _ligaBoton('📢', 'Encuestas', 9),
-              _ligaBoton('🟨', 'Al Filo', 12),
-_ligaBoton('🟥', 'Expulsados', 13),
+              _ligaBoton('🟨', 'Al Filo', 11),
+              _ligaBoton('🟥', 'Expulsados', 12),
+              _ligaBoton('📈', 'Tabla Posesión', 13),
+              _ligaBoton('🪢', 'Cuerda Floja', 14),
             ],
            
           ),
@@ -1500,11 +1586,12 @@ _ligaBoton('🟥', 'Expulsados', 13),
       case 6: return _buildPredicciones();
       case 7: return _buildMundial();
       case 8: return _buildNoticias();
-      case 9: return _buildEncuestas();
-     case 10: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
-case 11: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
-     case 12: return _buildAlFilo();
-case 13: return _buildExpulsados();
+      case 9: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
+      case 10: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto));
+      case 11: return _buildAlFilo();
+      case 12: return _buildExpulsados();
+      case 13: return _buildTablaPosesion();
+      case 14: return _buildCuerdaFloja();
       default: return _buildResultados();
     }
   }
@@ -1725,39 +1812,47 @@ case 13: return _buildExpulsados();
   Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false}) {
     final bool isLive = status.contains("'");
     final bool isFinished = status == 'FT';
-    return GestureDetector(
-      onTap: () => _mostrarDetalle(context, home, away, '$hScore - $aScore', jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1B2A3B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: esFavorito ? const Color(0xFFFFD700).withValues(alpha: 0.8) : isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
-            width: esFavorito ? 2.0 : 1.0,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _mostrarDetalle(context, home, away, '$hScore - $aScore', jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B2A3B),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: esFavorito ? const Color(0xFFFFD700).withValues(alpha: 0.8) : isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
+                  width: esFavorito ? 2.0 : 1.0,
+                ),
+              ),
+              child: Row(children: [
+                Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
+                  child: Text('$hScore - $aScore', style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(away, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.2) : isFinished ? Colors.white12 : const Color(0xFF1565C0).withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ]),
+            ),
           ),
         ),
-        child: Row(children: [
-          Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
-            child: Text('$hScore - $aScore', style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(away, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.2) : isFinished ? Colors.white12 : const Color(0xFF1565C0).withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
-          ),
-        ]),
-      ),
+        if (!kIsWeb && fixtureId != null) MatchFollowToggle(fixtureId: fixtureId),
+      ],
     );
   }
 
@@ -1982,47 +2077,226 @@ case 13: return _buildExpulsados();
   }
   // ── FIN TABLA ANUAL Y PROMEDIOS ───────────────────────────────────────────
 
-
-  // ══ SECCIÓN MUNDIAL 2026 ══════════════════════════════════════════════════
-  // ── ENCUESTAS ─────────────────────────────────────────────────────────────
-  Widget _buildEncuestas() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('encuestas')
-          .where('activa', isEqualTo: true)
-          .orderBy('creada', descending: true)
-          .snapshots(),
+  Widget _buildTablaPosesion() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      key: ValueKey(_tablaPosesionRefreshKey),
+      future: ApiService.getTablaPosesion(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Color(0xFF00C853)),
+                SizedBox(height: 14),
+                Text(
+                  'Calculando posesión promedio…',
+                  style: TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Puede tardar (estadísticas por partido)',
+                  style: TextStyle(color: Colors.white24, fontSize: 11),
+                ),
+              ],
+            ),
+          );
         }
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: const [
-            Icon(Icons.poll_outlined, color: Colors.white24, size: 48),
-            SizedBox(height: 16),
-            Text('No hay encuestas activas', style: TextStyle(color: Colors.white54, fontSize: 15)),
-            SizedBox(height: 8),
-            Text('Volvé pronto', style: TextStyle(color: Colors.white38, fontSize: 12)),
-          ]));
-        }
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(children: [
-              const Icon(Icons.poll, color: Color(0xFF00C853), size: 18),
-              const SizedBox(width: 8),
-              const Text('ENCUESTAS', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.5)),
-            ]),
-            const SizedBox(height: 4),
-            const Text('Tu opinión importa', style: TextStyle(color: Colors.white38, fontSize: 11)),
-            const SizedBox(height: 16),
-            ...docs.map((doc) => _encuestaCard(doc)),
-          ],
+        final filas = snapshot.data ?? [];
+        return RefreshIndicator(
+          color: const Color(0xFF00C853),
+          onRefresh: () async {
+            await ApiService.getTablaPosesion(forceRefresh: true);
+            if (context.mounted) setState(() => _tablaPosesionRefreshKey++);
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text(
+                'POSESIÓN PROMEDIO',
+                style: TextStyle(
+                  color: Color(0xFF00C853),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Solo Liga Profesional · API: Ball Possession por partido',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: const [
+                  _PosesionLeyendaChip(label: '≥55% Dominante', color: Color(0xFF2196F3)),
+                  _PosesionLeyendaChip(label: '48–54% Equilibrado', color: Color(0xFFFFC107)),
+                  _PosesionLeyendaChip(label: '42–47% Defensivo', color: Color(0xFFFF9800)),
+                  _PosesionLeyendaChip(label: '<42% Muy defensivo', color: Color(0xFFE53935)),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if (filas.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: Text(
+                      'Sin datos de posesión suficientes',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  ),
+                )
+              else
+                ...filas.asMap().entries.map((e) => _tablaPosesionRow(e.key + 1, e.value)),
+            ],
+          ),
         );
       },
     );
-  }// ── AL FILO ──────────────────────────────────────────────────
+  }
+
+  Widget _tablaPosesionRow(int pos, Map<String, dynamic> row) {
+    final nombre = row['nombre'] as String? ?? '';
+    final logo = row['logo'] as String? ?? '';
+    final promedio = (row['promedio'] as num).toDouble();
+    final zonaCorta = row['zonaCorta'] as String? ?? '';
+    final zonaColor = Color(row['zonaColor'] as int);
+    final partidos = row['partidos'] as int? ?? 0;
+    final barW = (promedio / 100.0).clamp(0.0, 1.0);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text(
+                  '$pos',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              if (logo.isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.network(logo, width: 36, height: 36, fit: BoxFit.cover),
+                ),
+              if (logo.isNotEmpty) const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nombre,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: zonaColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: zonaColor.withValues(alpha: 0.55)),
+                      ),
+                      child: Text(
+                        zonaCorta.toUpperCase(),
+                        style: TextStyle(
+                          color: zonaColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    if (partidos > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '$partidos partidos',
+                          style: const TextStyle(color: Colors.white24, fontSize: 10),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 10,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Container(color: Colors.white.withValues(alpha: 0.08)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: barW,
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    zonaColor.withValues(alpha: 0.85),
+                                    zonaColor,
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 48,
+                child: Text(
+                  '${promedio.toStringAsFixed(1)}%',
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+// ── AL FILO ──────────────────────────────────────────────────
 Widget _buildAlFilo() {
   return FutureBuilder<List<Map<String, dynamic>>>(
     future: ApiService.getAlFilo(),
@@ -2151,131 +2425,6 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     ]),
   );
 }
-  Widget _encuestaCard(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final pregunta = data['pregunta'] as String? ?? '';
-    final foto = data['foto'] as String? ?? '';
-    final opciones = List<Map<String, dynamic>>.from(data['opciones'] ?? []);
-    final votos = Map<String, dynamic>.from(data['votos'] ?? {});
-    final totalVotos = (data['totalVotos'] as num?)?.toInt() ?? 0;
-    final tipo = data['tipo'] as String? ?? 'diaria';
-
-    // Chequear si el usuario ya votó
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final yaVoto = (data['votantes'] as Map<String, dynamic>? ?? {}).containsKey(uid);
-    final miVoto = yaVoto ? (data['votantes'] as Map<String, dynamic>)[uid] as String? : null;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B2A3B),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.2)),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Foto
-        if (foto.isNotEmpty)
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            child: Image.network(foto, width: double.infinity, height: 160, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-          ),
-        // Badge tipo
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: tipo == 'diaria' ? const Color(0xFF00C853).withValues(alpha: 0.15) : Colors.amber.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(tipo == 'diaria' ? '📅 DIARIA' : '📆 SEMANAL',
-                style: TextStyle(color: tipo == 'diaria' ? const Color(0xFF00C853) : Colors.amber,
-                  fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            ),
-            const SizedBox(width: 8),
-            Text('$totalVotos votos', style: const TextStyle(color: Colors.white38, fontSize: 10)),
-          ]),
-        ),
-        // Pregunta
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
-          child: Text(pregunta, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-        ),
-        // Opciones
-        ...opciones.map((op) {
-          final id = op['id'] as String;
-          final texto = op['texto'] as String? ?? '';
-          final cantVotos = (votos[id] as num?)?.toInt() ?? 0;
-          final pct = totalVotos > 0 ? cantVotos / totalVotos : 0.0;
-          final esMiVoto = miVoto == id;
-
-          if (yaVoto) {
-            // Mostrar resultados
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  if (esMiVoto) const Icon(Icons.check_circle, color: Color(0xFF00C853), size: 14),
-                  if (!esMiVoto) const SizedBox(width: 14),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(texto,
-                    style: TextStyle(color: esMiVoto ? const Color(0xFF00C853) : Colors.white70, fontSize: 13,
-                      fontWeight: esMiVoto ? FontWeight.bold : FontWeight.normal))),
-                  Text('${(pct * 100).toStringAsFixed(0)}%',
-                    style: TextStyle(color: esMiVoto ? const Color(0xFF00C853) : Colors.white38,
-                      fontSize: 12, fontWeight: FontWeight.bold)),
-                ]),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    backgroundColor: Colors.white10,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      esMiVoto ? const Color(0xFF00C853) : Colors.white24),
-                    minHeight: 5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ]),
-            );
-          } else {
-            // Mostrar botones para votar
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: GestureDetector(
-                onTap: () async {
-                  if (uid.isEmpty) return;
-                  try {
-                    await FirebaseFirestore.instance.collection('encuestas').doc(doc.id).update({
-                      'votos.$id': FieldValue.increment(1),
-                      'totalVotos': FieldValue.increment(1),
-                      'votantes.$uid': id,
-                    });
-                  } catch (_) {}
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D1B2A),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Text(texto, style: const TextStyle(color: Colors.white, fontSize: 13),
-                    textAlign: TextAlign.center),
-                ),
-              ),
-            );
-          }
-        }),
-        const SizedBox(height: 6),
-      ]),
-    );
-  }
-
   Widget _buildMundial() {
     return DefaultTabController(
       length: 5,
@@ -3107,9 +3256,9 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               Tab(text: 'ULTIMOS 5'),
               Tab(text: '1ER TIEMPO'),
               Tab(text: '2DO TIEMPO'),
-          Tab(text: 'ÁRBITROS'),
+              Tab(text: 'ÁRBITROS'),
               Tab(text: 'MORAL ✨'),
-          Tab(text: 'CRUCES 🏆'),
+              Tab(text: 'CRUCES 🏆'),
               Tab(text: 'ANUAL 📅'),
               Tab(text: 'PROMEDIOS 📉'),
               Tab(text: 'FECHA ⭐'),
@@ -3435,60 +3584,85 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     );
   }
 
-  Widget _tabDTs() {
+  Widget _buildCuerdaFloja() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: ApiService.getTablaDTs(),
+      key: ValueKey(_cuerdaFlojaRefreshGen),
+      future: ApiService.getCuerdaFloja(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             CircularProgressIndicator(color: Color(0xFF00C853)),
             SizedBox(height: 16),
-            Text('Cargando t\xc3\xa9cnicos...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+            Text('Cargando técnicos en actividad…', style: TextStyle(color: Colors.white54, fontSize: 13)),
             SizedBox(height: 6),
             Text('Puede tardar unos segundos', style: TextStyle(color: Colors.white24, fontSize: 11)),
           ]),
         );
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.person_off, color: Colors.white24, size: 48),
-            SizedBox(height: 12),
-            Text('Sin datos de t\xc3\xa9cnicos', style: TextStyle(color: Colors.white54, fontSize: 13)),
-          ]),
+        if (!snapshot.hasData || snapshot.data!.isEmpty) return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.person_off, color: Colors.white24, size: 48),
+              const SizedBox(height: 12),
+              const Text(
+                'No hay técnicos en actividad',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Solo DT de la Liga Profesional con partido en los últimos ${ApiService.dtVentanaActividadDias} días (racha contando también copas).',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12, height: 1.35),
+              ),
+            ]),
+          ),
         );
         final dts = snapshot.data!;
         return Column(children: [
-          // Encabezado tabla
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A1810),
+              border: Border(bottom: BorderSide(color: const Color(0xFFFF9800).withValues(alpha: 0.35))),
+            ),
+            child: Text(
+              'Solo DT de la Liga Profesional en actividad (últimos ${ApiService.dtVentanaActividadDias} días). Racha y números: Liga + Copa Arg. + copas internacionales (bando argentino). Alertas: 5+ sin ganar o 3+ derrotas seguidas.',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 11, height: 1.35),
+            ),
+          ),
           Container(
             color: const Color(0xFF0D1B2A),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(children: [
-              const SizedBox(width: 28),
-              const Expanded(flex: 5, child: Text('T\xc3\x89CNICO', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1))),
-              _dtHeaderCol('PJ'),
-              _dtHeaderCol('G'),
-              _dtHeaderCol('E'),
-              _dtHeaderCol('P'),
+              const SizedBox(width: 26),
+              const Expanded(flex: 5, child: Text('TÉCNICO', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1))),
               _dtHeaderCol('Pts'),
               _dtHeaderCol('%'),
               _dtHeaderCol('Racha'),
-              const SizedBox(width: 90),
             ]),
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async { ApiService.clearCache(); },
+              color: const Color(0xFF00C853),
+              onRefresh: () async {
+                ApiService.clearCache();
+                await ApiService.getCuerdaFloja(forceRefresh: true);
+                if (!mounted) return;
+                setState(() => _cuerdaFlojaRefreshGen++);
+              },
               child: ListView.builder(
                 itemCount: dts.length,
                 itemBuilder: (ctx, i) => _dtRow(i + 1, dts[i]),
               ),
             ),
           ),
-          // Leyenda
           Container(
             color: const Color(0xFF0D1B2A),
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text('Toc\xc3\xa1 un t\xc3\xa9cnico para ver su carrera completa', style: TextStyle(color: Colors.white24, fontSize: 10)),
+              Text('Tocá un técnico para ver carrera y datos (API)', style: TextStyle(color: Colors.white24, fontSize: 10)),
             ]),
           ),
         ]);
@@ -3498,10 +3672,63 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _dtHeaderCol(String label) {
     return SizedBox(
-      width: 32,
+      width: 28,
       child: Text(label, textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        style: const TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
     );
+  }
+
+  (String, String) _nombreYApellidoEnLineas(String nombre) {
+    final p = nombre.trim().split(RegExp(r'\s+'));
+    if (p.isEmpty) return ('', '');
+    if (p.length == 1) return (p.first, '');
+    return (p.sublist(0, p.length - 1).join(' '), p.last);
+  }
+
+  Widget _avatarCoachCuerda(String? url, double size) {
+    final borderW = 1.5;
+    return Container(
+      width: size + borderW * 2,
+      height: size + borderW * 2,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.35), width: borderW),
+      ),
+      child: ClipOval(
+        child: Container(
+          color: const Color(0xFF0D1B2A),
+          width: size,
+          height: size,
+          child: url != null && url.isNotEmpty
+              ? Image.network(
+                  url,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Icon(Icons.person, color: const Color(0xFF00C853), size: size * 0.5),
+                )
+              : Icon(Icons.person, color: const Color(0xFF00C853), size: size * 0.5),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onTapCarreraDT(BuildContext context, Map<String, dynamic> dt) async {
+    final raw = dt['equipoId'];
+    final teamId = raw is int ? '$raw' : (raw?.toString() ?? '');
+    if (teamId.isEmpty) return;
+    final data = await ApiService.getCarreraDT(teamId);
+    if (!context.mounted) return;
+    if (!ApiService.carreraDTTieneValor(data)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay datos de carrera para este técnico en la API.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    _mostrarCarreraDTSheet(context, dt, data);
   }
 
   Widget _dtRow(int pos, Map<String, dynamic> dt) {
@@ -3509,15 +3736,17 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     final foto       = dt['foto']       as String?;
     final equipo     = dt['equipo']     as String;
     final equipoLogo = dt['equipoLogo'] as String? ?? '';
-    final partidos   = dt['partidos']   as int;
-    final victorias  = dt['victorias']  as int;
-    final empates    = dt['empates']    as int;
-    final derrotas   = dt['derrotas']   as int;
     final puntos     = dt['puntos']     as int;
     final pct        = dt['pctPuntos']  as double;
     final rachaActual= dt['rachaActual'] as String;
     final ultimos5   = (dt['ultimos5']  as List).cast<String>();
-    final coachId    = dt['id']         as String;
+    final (nomLinea1, nomLinea2) = _nombreYApellidoEnLineas(nombre);
+    final presion    = (dt['presion'] as num?)?.toDouble() ?? 0;
+    final presionLabel = dt['presionLabel'] as String? ?? '';
+    final presionColor = Color((dt['presionColor'] as int?) ?? 0xFF00C853);
+    final alertaRoja = (dt['alertaRoja'] as bool?) == true;
+    final sin5 = (dt['alertaSinGanar5'] as bool?) == true;
+    final tresL = (dt['alertaTresDerrotas'] as bool?) == true;
 
     Color rachaColor = Colors.white54;
     if (rachaActual.endsWith('W')) rachaColor = const Color(0xFF00C853);
@@ -3530,44 +3759,42 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
       return Colors.amber;
     }
 
-    // Color fondo alternado
-    final bg = pos.isOdd ? const Color(0xFF1B2A3B) : const Color(0xFF162030);
+    final bg = alertaRoja
+        ? (pos.isOdd ? const Color(0xFF321919) : const Color(0xFF2A1515))
+        : (pos.isOdd ? const Color(0xFF1B2A3B) : const Color(0xFF162030));
 
     return GestureDetector(
-      onTap: () => _mostrarCarreraDT(context, dt, coachId),
+      onTap: () => _onTapCarreraDT(context, dt),
       child: Container(
-        color: bg,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(children: [
+        decoration: BoxDecoration(
+          color: bg,
+          border: alertaRoja
+              ? const Border(left: BorderSide(color: Color(0xFFFF5252), width: 3))
+              : null,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             // Posicion
-            SizedBox(width: 20, child: Text('$pos',
+            SizedBox(width: 18, child: Text('$pos',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: pos <= 3 ? const Color(0xFF00C853) : Colors.white38,
+                color: pos <= 3 ? const Color(0xFFFF7043) : Colors.white38,
                 fontSize: 11, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 8),
-            // Foto DT
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF0D1B2A),
-                border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3), width: 1.5),
-                image: foto != null && foto.isNotEmpty
-                    ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover)
-                    : null,
-              ),
-              child: (foto == null || foto.isEmpty)
-                  ? const Icon(Icons.person, color: Color(0xFF00C853), size: 18)
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            // Nombre + equipo
+            const SizedBox(width: 6),
+            _avatarCoachCuerda(foto, 34),
+            const SizedBox(width: 6),
+            // Nombre (nombre / apellido) + equipo
             Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nombre,
+              Text(nomLinea1,
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis),
+              if (nomLinea2.isNotEmpty)
+                Text(nomLinea2,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
               Row(children: [
                 if (equipoLogo.isNotEmpty) ...[
                   Image.network(equipoLogo, width: 12, height: 12,
@@ -3576,42 +3803,108 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 ],
                 Flexible(child: Text(equipo,
                   style: const TextStyle(color: Color(0xFF00C853), fontSize: 10),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis)),
               ]),
             ])),
-            // Columnas numericas
-            _dtNumCol('$partidos', Colors.white54),
-            _dtNumCol('$victorias', const Color(0xFF00C853)),
-            _dtNumCol('$empates', Colors.amber),
-            _dtNumCol('$derrotas', const Color(0xFFFF5252)),
             _dtNumCol('$puntos', Colors.white),
             _dtNumCol('${pct.toStringAsFixed(0)}%',
               pct >= 60 ? const Color(0xFF00C853) : pct >= 40 ? Colors.amber : const Color(0xFFFF5252)),
             // Racha
             SizedBox(width: 32,
               child: Center(child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                 decoration: BoxDecoration(
                   color: rachaColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: rachaColor.withValues(alpha: 0.5))),
                 child: Text(rachaActual,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: rachaColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                  style: TextStyle(color: rachaColor, fontSize: 8, fontWeight: FontWeight.bold)),
               ))),
-            // Ultimos 5
-            const SizedBox(width: 6),
-            Row(children: ultimos5.map((r) => Container(
-              width: 14, height: 14,
-              margin: const EdgeInsets.only(left: 2),
-              decoration: BoxDecoration(
-                color: resultColor(r).withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-                border: Border.all(color: resultColor(r), width: 1)),
-              child: Center(child: Text(r,
-                style: TextStyle(color: resultColor(r), fontSize: 7, fontWeight: FontWeight.bold))),
-            )).toList()),
           ]),
+          if (ultimos5.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 64, top: 4),
+              child: Row(children: [
+                Text('Últ. 5', style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 8, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 6),
+                ...ultimos5.map((r) => Container(
+                  width: 13, height: 13,
+                  margin: const EdgeInsets.only(right: 3),
+                  decoration: BoxDecoration(
+                    color: resultColor(r).withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: resultColor(r), width: 1)),
+                  child: Center(child: Text(r,
+                    style: TextStyle(color: resultColor(r), fontSize: 7, fontWeight: FontWeight.bold))),
+                )),
+              ]),
+            ),
+          if (sin5 || tresL)
+            Padding(
+              padding: const EdgeInsets.only(left: 28, top: 6),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (sin5)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF5252).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFF5252)),
+                      ),
+                      child: const Text(
+                        '5+ sin ganar',
+                        style: TextStyle(color: Color(0xFFFF8A80), fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  if (tresL)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF5252).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFF5252)),
+                      ),
+                      child: const Text(
+                        '3+ derrotas seguidas',
+                        style: TextStyle(color: Color(0xFFFF8A80), fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (presionLabel.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 28, right: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Presión', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w600)),
+                    Text(
+                      '${presion.round()}% · $presionLabel',
+                      style: TextStyle(color: presionColor, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: (presion / 100).clamp(0.0, 1.0),
+                    backgroundColor: Colors.white10,
+                    valueColor: AlwaysStoppedAnimation<Color>(presionColor),
+                    minHeight: 5,
+                  ),
+                ),
+              ]),
+            ),
+          ],
         ]),
       ),
     );
@@ -3619,13 +3912,27 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _dtNumCol(String val, Color color) {
     return SizedBox(
-      width: 32,
+      width: 28,
       child: Text(val, textAlign: TextAlign.center,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
-  void _mostrarCarreraDT(BuildContext context, Map<String, dynamic> dt, String coachId) {
+  void _mostrarCarreraDTSheet(BuildContext context, Map<String, dynamic> dt, Map<String, dynamic> api) {
+    final nombre = dt['nombre'] as String;
+    final (n1, n2) = _nombreYApellidoEnLineas(nombre);
+    final fotoList = dt['foto'] as String?;
+    final fotoApi = (api['foto'] as String?)?.trim() ?? '';
+    final foto = fotoApi.isNotEmpty ? fotoApi : (fotoList ?? '');
+    final equipo = dt['equipo'] as String;
+    final puntos = dt['puntos'] as int;
+    final pct = (dt['pctPuntos'] as double).toStringAsFixed(1);
+    final carrera = api['carrera'] as List? ?? [];
+    final edad = api['edad'] is int ? api['edad'] as int : int.tryParse('${api['edad']}') ?? 0;
+    final nacionalidad = (api['nacionalidad'] as String?)?.trim() ?? '';
+    final aniosExp = api['aniosExp'] is int ? api['aniosExp'] as int : int.tryParse('${api['aniosExp']}') ?? 0;
+    final totalClubes = api['totalClubes'] is int ? api['totalClubes'] as int : int.tryParse('${api['totalClubes']}') ?? 0;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1B2A3B),
@@ -3635,101 +3942,82 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         expand: false,
         initialChildSize: 0.6,
         maxChildSize: 0.92,
-        builder: (_, ctrl) => FutureBuilder<Map<String, dynamic>>(
-          future: ApiService.getCarreraDT(coachId),
-          builder: (ctx, snap) {
-            final nombre   = dt['nombre']    as String;
-            final foto     = dt['foto']      as String?;
-            final equipo   = dt['equipo']    as String;
-            final partidos = dt['partidos']  as int;
-            final victorias= dt['victorias'] as int;
-            final empates  = dt['empates']   as int;
-            final derrotas = dt['derrotas']  as int;
-            final puntos   = dt['puntos']    as int;
-            final pct      = (dt['pctPuntos'] as double).toStringAsFixed(1);
-
-            final carrera = snap.hasData
-                ? (snap.data!['carrera'] as List? ?? [])
-                : <dynamic>[];
-            final edad          = snap.data?['edad']         as int?    ?? 0;
-            final nacionalidad  = snap.data?['nacionalidad'] as String? ?? '';
-            final aniosExp      = snap.data?['aniosExp']     as int?    ?? 0;
-            final totalClubes   = snap.data?['totalClubes']  as int?    ?? 0;
-
-            return ListView(controller: ctrl, padding: const EdgeInsets.all(20), children: [
-              // Handle
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              // Header DT
-              Row(children: [
-                Container(
-                  width: 64, height: 64,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF0D1B2A),
-                    border: Border.all(color: const Color(0xFF00C853), width: 2),
-                    image: foto != null ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover) : null,
-                  ),
-                  child: foto == null ? const Icon(Icons.person, color: Color(0xFF00C853), size: 30) : null,
-                ),
-                const SizedBox(width: 14),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        builder: (_, ctrl) => ListView(
+          controller: ctrl,
+          padding: const EdgeInsets.all(20),
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _avatarCoachCuerda(foto.isNotEmpty ? foto : null, 64),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(n1, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  if (n2.isNotEmpty)
+                    Text(n2, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                  const SizedBox(height: 2),
                   Text(equipo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12)),
                   if (edad > 0 || nacionalidad.isNotEmpty)
-                    Text([if (edad > 0) '\$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
-                      style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                  if (aniosExp > 0)
-                    Text('\$aniosExp años de experiencia · \$totalClubes clubes',
-                      style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                ])),
-              ]),
-              const SizedBox(height: 20),
-              // Stats torneo actual
-              const Text('TORNEO ACTUAL', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                  _statCol('\$partidos', 'PJ'),
-                  _statCol('\$victorias', 'G', color: const Color(0xFF00C853)),
-                  _statCol('\$empates', 'E', color: Colors.amber),
-                  _statCol('\$derrotas', 'P', color: const Color(0xFFFF5252)),
-                  _statCol('\$puntos', 'Pts', color: const Color(0xFF00C853)),
-                  _statCol('\$pct%', 'Efic.', color: const Color(0xFF00C853)),
+                    Text(
+                      [if (edad > 0) '$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                  if (aniosExp > 0 || totalClubes > 0)
+                    Text(() {
+                      final p = <String>[];
+                      if (aniosExp > 0) p.add('$aniosExp años como DT');
+                      if (totalClubes > 0) p.add('$totalClubes clubes');
+                      return p.join(' · ');
+                    }(), style: const TextStyle(color: Colors.white38, fontSize: 10)),
                 ]),
               ),
-              const SizedBox(height: 20),
-              // Carrera
-              const Text('CARRERA COMPLETA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-              const SizedBox(height: 8),
-              if (snap.connectionState == ConnectionState.waiting)
-                const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFF00C853))))
-              else if (carrera.isEmpty)
-                const Text('Sin datos de carrera disponibles', style: TextStyle(color: Colors.white38, fontSize: 12))
-              else
-                ...carrera.map((c) {
-                  final club   = (c['team']  as Map?)?['name']  as String? ?? '';
-                  final logo   = (c['team']  as Map?)?['logo']  as String?;
-                  final inicio = (c['start'] as String? ?? '').length >= 4 ? (c['start'] as String).substring(0, 4) : '?';
-                  final fin    = c['end']    as String?;
-                  final finStr = fin != null && fin.length >= 4 ? fin.substring(0, 4) : 'presente';
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
-                    child: Row(children: [
-                      if (logo != null) Image.network(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const SizedBox(width: 24))
-                      else const Icon(Icons.sports_soccer, color: Colors.white38, size: 24),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(club, style: const TextStyle(color: Colors.white, fontSize: 12))),
-                      Text('\$inicio – \$finStr', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                    ]),
-                  );
-                }),
-            ]);
-          },
+            ]),
+            const SizedBox(height: 20),
+            const Text('RESUMEN (LIGA + COPAS)', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
+              child: Wrap(
+                spacing: 24,
+                runSpacing: 10,
+                alignment: WrapAlignment.start,
+                children: [
+                  _statCol('$puntos', 'Pts', color: const Color(0xFF00C853)),
+                  _statCol('$pct%', 'Rendimiento', color: const Color(0xFF00C853)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('CARRERA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+            const SizedBox(height: 8),
+            if (carrera.isEmpty)
+              const Text('Sin trayectoria en la respuesta.', style: TextStyle(color: Colors.white38, fontSize: 12))
+            else
+              ...carrera.map((c) {
+                final club = (c['team'] as Map?)?['name'] as String? ?? '';
+                final logo = (c['team'] as Map?)?['logo'] as String?;
+                final inicio = (c['start'] as String? ?? '').length >= 4 ? (c['start'] as String).substring(0, 4) : '?';
+                final fin = c['end'] as String?;
+                final finStr = fin != null && fin.length >= 4 ? fin.substring(0, 4) : 'actualidad';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
+                  child: Row(children: [
+                    if (logo != null && logo.isNotEmpty)
+                      Image.network(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, color: Colors.white38, size: 24))
+                    else
+                      const Icon(Icons.sports_soccer, color: Colors.white38, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(club, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                    Text('$inicio – $finStr', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  ]),
+                );
+              }),
+          ],
         ),
       ),
     );
@@ -4760,15 +5048,19 @@ Widget _tabTiempo(String tipo) {
               final fechaStr = esJugado
                   ? '$golesL - $golesV'
                   : '$diaStr ${fecha.day}/${fecha.month}  ${fecha.hour.toString().padLeft(2,'0')}:${fecha.minute.toString().padLeft(2,'0')}';
-              return GestureDetector(
-                onTap: () => _mostrarDetalle(context, local, visitante, '$golesL - $golesV', esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B2A3B),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: esJugado ? Colors.transparent : const Color(0xFF00C853).withValues(alpha: 0.2))),
-                  child: Column(children: [
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _mostrarDetalle(context, local, visitante, '$golesL - $golesV', esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1B2A3B),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: esJugado ? Colors.transparent : const Color(0xFF00C853).withValues(alpha: 0.2))),
+                        child: Column(children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
                       child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
@@ -4865,7 +5157,15 @@ Widget _tabTiempo(String tipo) {
                         },
                       ),
                   ]),
-                ),
+                      ),
+                    ),
+                  ),
+                  if (!kIsWeb && fixtureId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: MatchFollowToggle(fixtureId: fixtureId),
+                    ),
+                ],
               );
             }).toList(),
           )),
@@ -4919,6 +5219,7 @@ Widget _tabTiempo(String tipo) {
     final teams = partido['teams'];
     final goals = partido['goals'];
     final fixture = partido['fixture'];
+    final fixtureIdLive = fixture['id'] as int?;
     final status = fixture['status'];
     final local = teams['home']['name'] as String;
     final visitante = teams['away']['name'] as String;
@@ -4988,17 +5289,20 @@ Widget _tabTiempo(String tipo) {
                 fontWeight: FontWeight.bold, fontSize: 13,
               )),
             ]),
-            FutureBuilder<Map<String, String>>(
-              future: _fetchClima(ciudad),
-              builder: (context, snapC) {
-                if (!snapC.hasData) return const SizedBox(width: 60);
-                return Row(children: [
-                  Text(snapC.data!['icono']!, style: const TextStyle(fontSize: 13)),
-                  const SizedBox(width: 4),
-                  Text(snapC.data!['temp']!, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                ]);
-              },
-            ),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              if (!kIsWeb && fixtureIdLive != null) MatchFollowToggle(fixtureId: fixtureIdLive),
+              FutureBuilder<Map<String, String>>(
+                future: _fetchClima(ciudad),
+                builder: (context, snapC) {
+                  if (!snapC.hasData) return const SizedBox(width: 60);
+                  return Row(children: [
+                    Text(snapC.data!['icono']!, style: const TextStyle(fontSize: 13)),
+                    const SizedBox(width: 4),
+                    Text(snapC.data!['temp']!, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                  ]);
+                },
+              ),
+            ]),
           ]),
         ),
 
@@ -8036,6 +8340,36 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
         const SizedBox(height: 6),
         Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
       ]),
+    );
+  }
+}
+
+class _PosesionLeyendaChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _PosesionLeyendaChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        ],
+      ),
     );
   }
 }

@@ -1,0 +1,13 @@
+{
+  "name": "hdf-stats-functions",
+  "description": "Notificaciones automáticas de goles (FCM) según partidos en vivo API-Sports",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

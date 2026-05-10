@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- FCM: el plugin firebase_messaging ya declara WAKE_LOCK en el merge; lo dejamos explícito por claridad -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
         android:label="MatchGol Stats"
@@ -43,13 +45,9 @@
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/notification_color"/>
 
-        <service
-            android:name="com.google.firebase.messaging.FirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
-            </intent-filter>
-        </service>
+        <!-- NO registrar FirebaseMessagingService aquí: firebase_messaging ya registra
+             FlutterFirebaseMessagingService con MESSAGING_EVENT. Un servicio duplicado
+             o la clase base equivocada suele impedir que lleguen los mensajes a Flutter. -->
 
         <meta-data
             android:name="flutterEmbedding"

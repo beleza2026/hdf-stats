@@ -1,0 +1,59 @@
+diff --git a/lib/paywall_screen.dart b/lib/paywall_screen.dart
+index 124d801..afa3797 100644
+--- a/lib/paywall_screen.dart
++++ b/lib/paywall_screen.dart
+@@ -1,6 +1,9 @@
++import 'package:firebase_auth/firebase_auth.dart';
+ import 'package:flutter/material.dart';
+ import 'package:purchases_flutter/purchases_flutter.dart';
+ 
++import 'device_trial_service.dart';
++
+ class PaywallScreen extends StatefulWidget {
+   const PaywallScreen({super.key});
+ 
+@@ -37,9 +40,33 @@ class _PaywallScreenState extends State<PaywallScreen> {
+   }
+ 
+   Future<void> _comprar(Package package) async {
++    final user = FirebaseAuth.instance.currentUser;
++    if (user == null) {
++      if (mounted) {
++        ScaffoldMessenger.of(context).showSnackBar(
++          const SnackBar(content: Text('Iniciá sesión para suscribirte.')),
++        );
++      }
++      return;
++    }
++
++    final gate = await DeviceTrialService.verifyTrialAllowedForUser(user);
++    if (!gate.allowed) {
++      if (mounted) {
++        ScaffoldMessenger.of(context).showSnackBar(
++          SnackBar(content: Text(gate.blockMessage ?? 'Prueba no disponible en este dispositivo.')),
++        );
++      }
++      return;
++    }
++
+     setState(() => _purchasing = true);
+     try {
+-      await Purchases.purchasePackage(package);
++      final result = await Purchases.purchasePackage(package);
++      await DeviceTrialService.registerTrialIfApplicable(
++        user: user,
++        customerInfo: result.customerInfo,
++      );
+       if (mounted) Navigator.pop(context, true);
+     } catch (e) {
+       if (mounted) {
+diff --git a/pubspec.yaml b/pubspec.yaml
+index fc41277..0f0b861 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -42,6 +42,8 @@ dependencies:
+   flutter_local_notifications: 17.2.4
+   purchases_flutter: ^10.0.1
+   firebase_auth: ^6.4.0
++  device_info_plus: ^13.1.0
++  crypto: ^3.0.7

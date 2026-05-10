@@ -1,4 +1,6 @@
-﻿build/
+﻿functions/node_modules/
+
+build/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies

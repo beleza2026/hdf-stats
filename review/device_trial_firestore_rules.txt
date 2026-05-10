@@ -1,0 +1,15 @@
+// Sugerencia para firestore.rules (ajustá nombres de proyecto).
+// Evita que un usuario sobrescriba el trial de otro en el mismo deviceId.
+
+match /device_trials/{deviceId} {
+  allow read: if request.auth != null;
+
+  // Alta: solo si no existe o el documento ya es del mismo uid.
+  allow create: if request.auth != null
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.hasUsedTrial == true;
+
+  allow update: if request.auth != null
+    && resource.data.uid == request.auth.uid
+    && request.resource.data.uid == request.auth.uid;
+}

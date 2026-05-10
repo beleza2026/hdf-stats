@@ -1,8 +1,21 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
+import 'device_trial_service.dart';
+
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key});
+
+  /// Abre el paywall a pantalla completa; devuelve `true` si hubo compra/restauración exitosa.
+  static Future<bool?> open(BuildContext context) {
+    return Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const PaywallScreen(),
+      ),
+    );
+  }
 
   @override
   State<PaywallScreen> createState() => _PaywallScreenState();
@@ -37,9 +50,33 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   Future<void> _comprar(Package package) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Iniciá sesión para suscribirte.')),
+        );
+      }
+      return;
+    }
+
+    final gate = await DeviceTrialService.verifyTrialAllowedForUser(user);
+    if (!gate.allowed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(gate.blockMessage ?? 'Prueba no disponible en este dispositivo.')),
+        );
+      }
+      return;
+    }
+
     setState(() => _purchasing = true);
     try {
-      await Purchases.purchasePackage(package);
+      final result = await Purchases.purchasePackage(package);
+      await DeviceTrialService.registerTrialIfApplicable(
+        user: user,
+        customerInfo: result.customerInfo,
+      );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {

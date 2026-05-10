@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'match_follow_service.dart';
 import 'copa_service.dart';
 
 typedef OnTapPartido = void Function(
@@ -133,65 +136,72 @@ Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTa
     displayStatus = status;
   }
 
-  return GestureDetector(
-  onTap: () => onTap(
-  context, home, away, '$hScore - $aScore', jugado,
-  fixtureId: fixtureId, homeId: homeId, awayId: awayId,
-  fechaPartido: fechaPartido, isLive: isLive,
-  minuto: isLive ? status : '',
-),
-    
-    child: Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B2A3B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
-          width: 1.5,
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Expanded(
+        child: GestureDetector(
+          onTap: () => onTap(
+            context, home, away, '$hScore - $aScore', jugado,
+            fixtureId: fixtureId, homeId: homeId, awayId: awayId,
+            fechaPartido: fechaPartido, isLive: isLive,
+            minuto: isLive ? status : '',
+          ),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B2A3B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(home,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D1B2A),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('$hScore - $aScore',
+                          style: TextStyle(
+                              color: isLive ? const Color(0xFF00C853) : Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(displayStatus,
+                        style: TextStyle(
+                            color: isLive ? const Color(0xFF00C853) : Colors.white38,
+                            fontSize: 11,
+                            fontWeight: isLive ? FontWeight.bold : FontWeight.normal)),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(away,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(home,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.right,
-                overflow: TextOverflow.ellipsis),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D1B2A),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text('$hScore - $aScore',
-                    style: TextStyle(
-                        color: isLive ? const Color(0xFF00C853) : Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16)),
-              ),
-              const SizedBox(height: 4),
-              Text(displayStatus,
-                  style: TextStyle(
-                      color: isLive ? const Color(0xFF00C853) : Colors.white38,
-                      fontSize: 11,
-                      fontWeight: isLive ? FontWeight.bold : FontWeight.normal)),
-            ],
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(away,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis),
-          ),
-        ],
-      ),
-    ),
+      if (!kIsWeb && fixtureId != null) MatchFollowToggle(fixtureId: fixtureId),
+    ],
   );
 }
 

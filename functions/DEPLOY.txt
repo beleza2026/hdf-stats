@@ -1,0 +1,25 @@
+Despliegue de notificaciones automáticas (goles en vivo)
+========================================================
+
+1) Firebase CLI instalado y login: firebase login
+2) Proyecto: firebase use hdf-stats
+3) Plan Blaze (requerido para Cloud Scheduler + Functions programadas)
+4) Crear el secreto con tu clave API-Sports (la misma que usa la app en servidor;
+   no subas la clave al repo):
+   firebase functions:secrets:set APISPORTS_KEY
+   (pegar la clave cuando lo pida)
+
+5) Instalar dependencias e implementar:
+   cd functions && npm install && cd ..
+
+6) Desplegar solo functions:
+   firebase deploy --only functions
+
+La función pollLiveGoals corre cada 2 minutos (Argentina) y envía FCM cuando
+cambia el marcador en partidos en vivo de:
+- Liga 128 (Argentina)
+- Libertadores / Sudamericana con al menos un club argentino
+
+Los mensajes llegan a quien esté en topics: mg_fixture_{id}, equipo_{local}, equipo_{visitante}.
+
+Estado en Firestore: colección auto_goal_notify (evita duplicar el mismo marcador).

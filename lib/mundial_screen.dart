@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'paywall_screen.dart';
 import 'mundial_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -856,14 +859,17 @@ class _TabMejoresState extends State<_TabMejores> {
                 style: TextStyle(color: Colors.white54, fontSize: 13),
                 textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00C853),
-                borderRadius: BorderRadius.circular(12),
+            GestureDetector(
+              onTap: kIsWeb ? null : () => PaywallScreen.open(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C853),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text('ACTIVAR PREMIUM',
+                    style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
               ),
-              child: const Text('ACTIVAR PREMIUM',
-                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
             ),
           ]),
         ),

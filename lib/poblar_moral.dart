@@ -40,24 +40,41 @@ void main(List<String> args) async {
     return s == 'FT' || s == 'AET' || s == 'PEN';
   }).toList();
 
+  bool cuentaLigaRegular(String? roundRaw) {
+    final round = (roundRaw ?? '').trim();
+    if (round.isEmpty) return false;
+    final lower = round.toLowerCase();
+    if (lower.contains('play-off') || lower.contains('playoff')) return false;
+    if (lower.contains('round of')) return false;
+    if (lower.contains('relegation') || lower.contains('descenso')) return false;
+    if (round.contains('Regular Season')) return true;
+    return RegExp(r'^(Apertura|Clausura) - \d+$').hasMatch(round);
+  }
+
   List jugados;
   if (soloUltima) {
-    int maxRound = 0;
+    int maxFecha = 0;
+    String? prefijoUltima;
     for (var f in todosJugados) {
       final round = f['league']['round'] as String? ?? '';
-      if (round.contains('Regular Season')) {
-        final parts = round.split('- ');
-        if (parts.length == 2) {
-          final n = int.tryParse(parts[1].trim()) ?? 0;
-          if (n > maxRound) maxRound = n;
-        }
+      if (!cuentaLigaRegular(round)) continue;
+      final parts = round.split('- ');
+      if (parts.length != 2) continue;
+      final n = int.tryParse(parts[1].trim()) ?? 0;
+      if (n > maxFecha) {
+        maxFecha = n;
+        prefijoUltima = parts[0].trim();
       }
     }
-    final roundStr = 'Regular Season - $maxRound';
-    jugados = todosJugados.where((f) => f['league']['round'] == roundStr).toList();
-    print('Última fecha: Fecha $maxRound — ${jugados.length} partidos\n');
+    if (maxFecha == 0 || prefijoUltima == null) {
+      jugados = [];
+    } else {
+      final roundStr = '$prefijoUltima - $maxFecha';
+      jugados = todosJugados.where((f) => f['league']['round'] == roundStr).toList();
+    }
+    print('Última fecha: $prefijoUltima fecha $maxFecha — ${jugados.length} partidos\n');
   } else {
-    jugados = todosJugados;
+    jugados = todosJugados.where((f) => cuentaLigaRegular(f['league']['round'] as String?)).toList();
   }
 
   print('${jugados.length} partidos a procesar');
