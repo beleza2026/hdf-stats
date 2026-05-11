@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'paywall_screen.dart';
+import 'mundial_partido_sheet.dart';
 import 'mundial_service.dart';
+import 'mundial_simulador_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MUNDIAL SCREEN
@@ -28,7 +30,7 @@ class _MundialScreenState extends State<MundialScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -74,6 +76,7 @@ class _MundialScreenState extends State<MundialScreen>
             const Tab(text: 'GRUPOS'),
             const Tab(text: 'GOLEADORES'),
             const Tab(text: 'CRUCES'),
+            const Tab(text: 'SIMULADOR'),
             Tab(text: widget.esPremium ? 'MEJORES ⭐' : 'MEJORES 🔒'),
           ],
         ),
@@ -86,6 +89,7 @@ class _MundialScreenState extends State<MundialScreen>
           _TabGrupos(),
           _TabGoleadores(),
           _TabCruces(),
+          const MundialSimuladorScreen(),
           _TabMejores(esPremium: widget.esPremium),
         ],
       ),
@@ -135,7 +139,7 @@ class _TabHoyState extends State<_TabHoy> {
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _partidos.length,
-        itemBuilder: (context, i) => _cardPartido(_partidos[i]),
+        itemBuilder: (context, i) => _cardPartido(context, _partidos[i]),
       ),
     );
   }
@@ -217,7 +221,7 @@ class _TabFixtureState extends State<_TabFixture> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: (_porRonda[_rondaSeleccionada] ?? [])
-              .map((p) => _cardPartido(p))
+              .map((p) => _cardPartido(context, p))
               .toList(),
         ),
       ),
@@ -688,7 +692,7 @@ class _TabCrucesState extends State<_TabCruces> {
 // ─────────────────────────────────────────────────────────────────────────────
 // CARD PARTIDO (compartida entre HOY y FIXTURE)
 // ─────────────────────────────────────────────────────────────────────────────
-Widget _cardPartido(Map<String, dynamic> partido) {
+Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
   final fixture = partido['fixture'] ?? {};
   final teams = partido['teams'] ?? {};
   final goals = partido['goals'] ?? {};
@@ -714,21 +718,26 @@ Widget _cardPartido(Map<String, dynamic> partido) {
   }
 
   final isLive = ['1H', '2H', 'HT', 'ET', 'P'].contains(status);
-  final isFinished = status == 'FT';
+  final isFinished = const {'FT', 'AET', 'PEN'}.contains(status);
 
-  return Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    decoration: BoxDecoration(
-      color: isLive
-          ? const Color(0xFF0D2137)
-          : const Color(0xFF1B2A3B),
+  return Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: () => showMundialPartidoSheet(context, partido),
       borderRadius: BorderRadius.circular(10),
-      border: isLive
-          ? Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4))
-          : null,
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isLive
+              ? const Color(0xFF0D2137)
+              : const Color(0xFF1B2A3B),
+          borderRadius: BorderRadius.circular(10),
+          border: isLive
+              ? Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4))
+              : null,
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       // Ronda
       if (ronda.isNotEmpty)
         Padding(
@@ -803,7 +812,10 @@ Widget _cardPartido(Map<String, dynamic> partido) {
           ]),
         ),
       ]),
-    ]),
+        ],
+      ),
+      ),
+    ),
   );
 }
 

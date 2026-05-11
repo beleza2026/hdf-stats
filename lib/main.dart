@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -16,8 +16,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
 import 'paywall_screen.dart';
-import 'device_trial_service.dart';
-import 'match_follow_service.dart';
+import 'mundial_simulador_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -46,30 +45,13 @@ class PremiumService {
 
   static Future<bool> comprarPremium() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        debugPrint('comprarPremium: sin usuario Firebase');
-        return false;
-      }
-      final gate = await DeviceTrialService.verifyTrialAllowedForUser(user);
-      if (!gate.allowed) {
-        debugPrint('comprarPremium bloqueado: ${gate.blockMessage}');
-        return false;
-      }
       final offerings = await Purchases.getOfferings();
-      final oferta = offerings.getOffering('default_matchgol') ?? offerings.current;
-      if (oferta == null) return false;
-      final package = oferta.monthly ?? oferta.annual ?? oferta.availablePackages.firstOrNull;
+      final current = offerings.current;
+      if (current == null) return false;
+      final package = current.monthly ?? current.availablePackages.firstOrNull;
       if (package == null) return false;
       final result = await Purchases.purchasePackage(package);
-      final ok = result.customerInfo.entitlements.active.containsKey(_entitlement);
-      if (ok) {
-        await DeviceTrialService.registerTrialIfApplicable(
-          user: user,
-          customerInfo: result.customerInfo,
-        );
-      }
-      return ok;
+      return result.customerInfo.entitlements.active.containsKey(_entitlement);
     } catch (e) {
       debugPrint('RevenueCat comprar error: $e');
       return false;
@@ -117,27 +99,7 @@ void main() async {
     debugPrint('Firebase Auth anónimo falló: $e');
   }
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  if (!kIsWeb) {
-    try {
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-      debugPrint('FCM Token: $fcmToken');
-    } catch (e, st) {
-      debugPrint('FCM getToken en main() falló: $e');
-      debugPrint('$st');
-    }
-    FirebaseMessaging.instance.onTokenRefresh.listen((t) {
-      debugPrint('FCM Token: $t');
-    });
-    await PremiumService.init();
-    final u = FirebaseAuth.instance.currentUser;
-    if (u != null) {
-      try {
-        await Purchases.logIn(u.uid);
-      } catch (e) {
-        debugPrint('Purchases.logIn: $e');
-      }
-    }
-  }
+  if (!kIsWeb) await PremiumService.init();
   runApp(const HDFStatsApp());
 }
 
@@ -180,23 +142,11 @@ class _MainScreenState extends State<MainScreen> {
   List<Map<String, dynamic>> _partidosEnVivo = [];
   Timer? _timerEnVivo;
   bool _hayEnVivo = false;
-  StreamSubscription<User?>? _authPurchasesSub;
-
   @override
   void initState() {
     super.initState();
     ApiService.clearCache(); // Reset cache en cada inicio de sesion
     if (!kIsWeb) _inicializarFCM();
-    if (!kIsWeb) {
-      _authPurchasesSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
-        if (user == null) return;
-        try {
-          await Purchases.logIn(user.uid);
-        } catch (e) {
-          debugPrint('Purchases.logIn (authState): $e');
-        }
-      });
-    }
     _actualizarEnVivo();
     _timerEnVivo = Timer.periodic(const Duration(seconds: 60), (_) => _actualizarEnVivo());
     _cargarFavorito();
@@ -221,10 +171,7 @@ class _MainScreenState extends State<MainScreen> {
     if (kIsWeb) return;
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
-    if (settings.authorizationStatus != AuthorizationStatus.authorized) {
-      debugPrint('FCM: permiso notificaciones = ${settings.authorizationStatus} (initState no guarda token en Firestore)');
-      return;
-    }
+    if (settings.authorizationStatus != AuthorizationStatus.authorized) return;
     final localNotif = FlutterLocalNotificationsPlugin();
     const channelId = 'hdf_partidos';
     const channelName = 'Partidos HDF Stats';
@@ -252,13 +199,11 @@ class _MainScreenState extends State<MainScreen> {
       await messaging.subscribeToTopic('equipo_$equipoId');
       debugPrint('FCM: suscripto a equipo_$equipoId');
     }
-    await MatchFollowService.subscribeAllSavedTopics();
     await messaging.subscribeToTopic('todos');
     debugPrint('FCM: suscripto a todos');
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       final notif = message.notification;
-      // Admin SDK / HTTP v1 pueden traer solo title/body sin objeto android anidado.
-      if (notif != null && defaultTargetPlatform == TargetPlatform.android) {
+      if (notif != null && message.notification?.android != null) {
         await localNotif.show(notif.hashCode, notif.title, notif.body,
             const NotificationDetails(android: AndroidNotificationDetails(channelId, channelName,
                 importance: Importance.high, priority: Priority.high, icon: '@mipmap/ic_launcher')),
@@ -920,7 +865,6 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _timerEnVivo?.cancel();
-    _authPurchasesSub?.cancel();
     super.dispose();
   }
 
@@ -981,12 +925,6 @@ class _MainScreenState extends State<MainScreen> {
                 ]),
               ),
             ),
-          if (!kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFFD700)),
-              tooltip: 'MatchGol Premium',
-              onPressed: () => _abrirPaywallPremium(context),
-            ),
           Builder(
             builder: (ctx) => IconButton(
               icon: const Icon(Icons.person_outline, color: Colors.white70),
@@ -1013,12 +951,6 @@ class _MainScreenState extends State<MainScreen> {
   void _irInicio() => setState(() { _showDashboard = true; _showTorneos = false; _showLiga = false; });
   void _irLibertadores() => _irSeccion(9);
   void _irSudamericana() => _irSeccion(10);
-
-  Future<void> _abrirPaywallPremium(BuildContext context) async {
-    if (kIsWeb) return;
-    final ok = await PaywallScreen.open(context);
-    if (ok == true && mounted) setState(() {});
-  }
 
   Widget _buildIndiceMatchgol() {
     return FutureBuilder<Map<String, dynamic>>(
@@ -1240,14 +1172,6 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           onPressed: _irInicio,
         ),
         title: const Text('TORNEOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5)),
-        actions: [
-          if (!kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFFD700)),
-              tooltip: 'MatchGol Premium',
-              onPressed: () => _abrirPaywallPremium(context),
-            ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -1307,12 +1231,6 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
         ),
         title: const Text('LIGA PROFESIONAL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1)),
         actions: [
-          if (!kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFFD700)),
-              tooltip: 'MatchGol Premium',
-              onPressed: () => _abrirPaywallPremium(context),
-            ),
           IconButton(
             icon: const Icon(Icons.home_rounded, color: Colors.white38),
             onPressed: _irInicio,
@@ -1812,47 +1730,39 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
   Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false}) {
     final bool isLive = status.contains("'");
     final bool isFinished = status == 'FT';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => _mostrarDetalle(context, home, away, '$hScore - $aScore', jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1B2A3B),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: esFavorito ? const Color(0xFFFFD700).withValues(alpha: 0.8) : isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
-                  width: esFavorito ? 2.0 : 1.0,
-                ),
-              ),
-              child: Row(children: [
-                Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
-                  child: Text('$hScore - $aScore', style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(away, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.2) : isFinished ? Colors.white12 : const Color(0xFF1565C0).withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ]),
-            ),
+    return GestureDetector(
+      onTap: () => _mostrarDetalle(context, home, away, '$hScore - $aScore', jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B2A3B),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: esFavorito ? const Color(0xFFFFD700).withValues(alpha: 0.8) : isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
+            width: esFavorito ? 2.0 : 1.0,
           ),
         ),
-        if (!kIsWeb && fixtureId != null) MatchFollowToggle(fixtureId: fixtureId),
-      ],
+        child: Row(children: [
+          Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
+            child: Text('$hScore - $aScore', style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(away, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.2) : isFinished ? Colors.white12 : const Color(0xFF1565C0).withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ]),
+      ),
     );
   }
 
@@ -2441,7 +2351,8 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               Tab(text: 'GRUPOS'),
               Tab(text: 'FIXTURE'),
               Tab(text: 'GOLEADORES'),
-              Tab(text: 'CRUCES 32'),  
+              Tab(text: 'CRUCES 32'),
+              Tab(text: 'SIMULADOR'),
             ],
           ),
         ),
@@ -2449,6 +2360,8 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           _tabMundialGrupos(),
           _tabMundialFixture(),
           _tabMundialGoleadores(),
+          _tabMundialCruces(),
+          const MundialSimuladorScreen(),
         ])),
       ]),
     );
@@ -3611,7 +3524,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               ),
               const SizedBox(height: 10),
               Text(
-                'Solo DT de la Liga Profesional con partido en los últimos ${ApiService.dtVentanaActividadDias} días (racha contando también copas).',
+                'Solo se listan DT con partido oficial (liga o copas con argentinos) en los últimos ${ApiService.dtVentanaActividadDias} días.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12, height: 1.35),
               ),
@@ -3628,19 +3541,24 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               border: Border(bottom: BorderSide(color: const Color(0xFFFF9800).withValues(alpha: 0.35))),
             ),
             child: Text(
-              'Solo DT de la Liga Profesional en actividad (últimos ${ApiService.dtVentanaActividadDias} días). Racha y números: Liga + Copa Arg. + copas internacionales (bando argentino). Alertas: 5+ sin ganar o 3+ derrotas seguidas.',
+              'Solo técnicos en actividad (últimos ${ApiService.dtVentanaActividadDias} días). Racha = Liga + copas con equipos argentinos. Alertas: 5+ sin ganar o 3+ derrotas seguidas.',
               style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 11, height: 1.35),
             ),
           ),
           Container(
             color: const Color(0xFF0D1B2A),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(children: [
-              const SizedBox(width: 26),
+              const SizedBox(width: 28),
               const Expanded(flex: 5, child: Text('TÉCNICO', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1))),
+              _dtHeaderCol('PJ'),
+              _dtHeaderCol('G'),
+              _dtHeaderCol('E'),
+              _dtHeaderCol('P'),
               _dtHeaderCol('Pts'),
               _dtHeaderCol('%'),
               _dtHeaderCol('Racha'),
+              const SizedBox(width: 90),
             ]),
           ),
           Expanded(
@@ -3662,7 +3580,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
             color: const Color(0xFF0D1B2A),
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text('Tocá un técnico para ver carrera y datos (API)', style: TextStyle(color: Colors.white24, fontSize: 10)),
+              Text('Tocá un técnico para ver su carrera completa', style: TextStyle(color: Colors.white24, fontSize: 10)),
             ]),
           ),
         ]);
@@ -3672,63 +3590,10 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _dtHeaderCol(String label) {
     return SizedBox(
-      width: 28,
+      width: 32,
       child: Text(label, textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+        style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
     );
-  }
-
-  (String, String) _nombreYApellidoEnLineas(String nombre) {
-    final p = nombre.trim().split(RegExp(r'\s+'));
-    if (p.isEmpty) return ('', '');
-    if (p.length == 1) return (p.first, '');
-    return (p.sublist(0, p.length - 1).join(' '), p.last);
-  }
-
-  Widget _avatarCoachCuerda(String? url, double size) {
-    final borderW = 1.5;
-    return Container(
-      width: size + borderW * 2,
-      height: size + borderW * 2,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.35), width: borderW),
-      ),
-      child: ClipOval(
-        child: Container(
-          color: const Color(0xFF0D1B2A),
-          width: size,
-          height: size,
-          child: url != null && url.isNotEmpty
-              ? Image.network(
-                  url,
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Icon(Icons.person, color: const Color(0xFF00C853), size: size * 0.5),
-                )
-              : Icon(Icons.person, color: const Color(0xFF00C853), size: size * 0.5),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _onTapCarreraDT(BuildContext context, Map<String, dynamic> dt) async {
-    final raw = dt['equipoId'];
-    final teamId = raw is int ? '$raw' : (raw?.toString() ?? '');
-    if (teamId.isEmpty) return;
-    final data = await ApiService.getCarreraDT(teamId);
-    if (!context.mounted) return;
-    if (!ApiService.carreraDTTieneValor(data)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No hay datos de carrera para este técnico en la API.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    _mostrarCarreraDTSheet(context, dt, data);
   }
 
   Widget _dtRow(int pos, Map<String, dynamic> dt) {
@@ -3736,11 +3601,15 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     final foto       = dt['foto']       as String?;
     final equipo     = dt['equipo']     as String;
     final equipoLogo = dt['equipoLogo'] as String? ?? '';
+    final partidos   = dt['partidos']   as int;
+    final victorias  = dt['victorias']  as int;
+    final empates    = dt['empates']    as int;
+    final derrotas   = dt['derrotas']   as int;
     final puntos     = dt['puntos']     as int;
     final pct        = dt['pctPuntos']  as double;
     final rachaActual= dt['rachaActual'] as String;
     final ultimos5   = (dt['ultimos5']  as List).cast<String>();
-    final (nomLinea1, nomLinea2) = _nombreYApellidoEnLineas(nombre);
+    final coachId    = dt['id']         as String;
     final presion    = (dt['presion'] as num?)?.toDouble() ?? 0;
     final presionLabel = dt['presionLabel'] as String? ?? '';
     final presionColor = Color((dt['presionColor'] as int?) ?? 0xFF00C853);
@@ -3764,7 +3633,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         : (pos.isOdd ? const Color(0xFF1B2A3B) : const Color(0xFF162030));
 
     return GestureDetector(
-      onTap: () => _onTapCarreraDT(context, dt),
+      onTap: () => _mostrarCarreraDT(context, dt, coachId),
       child: Container(
         decoration: BoxDecoration(
           color: bg,
@@ -3772,29 +3641,37 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               ? const Border(left: BorderSide(color: Color(0xFFFF5252), width: 3))
               : null,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(children: [
           Row(children: [
             // Posicion
-            SizedBox(width: 18, child: Text('$pos',
+            SizedBox(width: 20, child: Text('$pos',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: pos <= 3 ? const Color(0xFFFF7043) : Colors.white38,
                 fontSize: 11, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 6),
-            _avatarCoachCuerda(foto, 34),
-            const SizedBox(width: 6),
-            // Nombre (nombre / apellido) + equipo
+            const SizedBox(width: 8),
+            // Foto DT
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF0D1B2A),
+                border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3), width: 1.5),
+                image: foto != null && foto.isNotEmpty
+                    ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover)
+                    : null,
+              ),
+              child: (foto == null || foto.isEmpty)
+                  ? const Icon(Icons.person, color: Color(0xFF00C853), size: 18)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            // Nombre + equipo
             Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nomLinea1,
+              Text(nombre,
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                maxLines: 1,
                 overflow: TextOverflow.ellipsis),
-              if (nomLinea2.isNotEmpty)
-                Text(nomLinea2,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
               Row(children: [
                 if (equipoLogo.isNotEmpty) ...[
                   Image.network(equipoLogo, width: 12, height: 12,
@@ -3803,44 +3680,42 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 ],
                 Flexible(child: Text(equipo,
                   style: const TextStyle(color: Color(0xFF00C853), fontSize: 10),
-                  maxLines: 1,
                   overflow: TextOverflow.ellipsis)),
               ]),
             ])),
+            // Columnas numericas
+            _dtNumCol('$partidos', Colors.white54),
+            _dtNumCol('$victorias', const Color(0xFF00C853)),
+            _dtNumCol('$empates', Colors.amber),
+            _dtNumCol('$derrotas', const Color(0xFFFF5252)),
             _dtNumCol('$puntos', Colors.white),
             _dtNumCol('${pct.toStringAsFixed(0)}%',
               pct >= 60 ? const Color(0xFF00C853) : pct >= 40 ? Colors.amber : const Color(0xFFFF5252)),
             // Racha
             SizedBox(width: 32,
               child: Center(child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: rachaColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: rachaColor.withValues(alpha: 0.5))),
                 child: Text(rachaActual,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: rachaColor, fontSize: 8, fontWeight: FontWeight.bold)),
+                  style: TextStyle(color: rachaColor, fontSize: 9, fontWeight: FontWeight.bold)),
               ))),
+            // Ultimos 5
+            const SizedBox(width: 6),
+            Row(children: ultimos5.map((r) => Container(
+              width: 14, height: 14,
+              margin: const EdgeInsets.only(left: 2),
+              decoration: BoxDecoration(
+                color: resultColor(r).withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+                border: Border.all(color: resultColor(r), width: 1)),
+              child: Center(child: Text(r,
+                style: TextStyle(color: resultColor(r), fontSize: 7, fontWeight: FontWeight.bold))),
+            )).toList()),
           ]),
-          if (ultimos5.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 64, top: 4),
-              child: Row(children: [
-                Text('Últ. 5', style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 8, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 6),
-                ...ultimos5.map((r) => Container(
-                  width: 13, height: 13,
-                  margin: const EdgeInsets.only(right: 3),
-                  decoration: BoxDecoration(
-                    color: resultColor(r).withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: resultColor(r), width: 1)),
-                  child: Center(child: Text(r,
-                    style: TextStyle(color: resultColor(r), fontSize: 7, fontWeight: FontWeight.bold))),
-                )),
-              ]),
-            ),
           if (sin5 || tresL)
             Padding(
               padding: const EdgeInsets.only(left: 28, top: 6),
@@ -3912,27 +3787,13 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _dtNumCol(String val, Color color) {
     return SizedBox(
-      width: 28,
+      width: 32,
       child: Text(val, textAlign: TextAlign.center,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 
-  void _mostrarCarreraDTSheet(BuildContext context, Map<String, dynamic> dt, Map<String, dynamic> api) {
-    final nombre = dt['nombre'] as String;
-    final (n1, n2) = _nombreYApellidoEnLineas(nombre);
-    final fotoList = dt['foto'] as String?;
-    final fotoApi = (api['foto'] as String?)?.trim() ?? '';
-    final foto = fotoApi.isNotEmpty ? fotoApi : (fotoList ?? '');
-    final equipo = dt['equipo'] as String;
-    final puntos = dt['puntos'] as int;
-    final pct = (dt['pctPuntos'] as double).toStringAsFixed(1);
-    final carrera = api['carrera'] as List? ?? [];
-    final edad = api['edad'] is int ? api['edad'] as int : int.tryParse('${api['edad']}') ?? 0;
-    final nacionalidad = (api['nacionalidad'] as String?)?.trim() ?? '';
-    final aniosExp = api['aniosExp'] is int ? api['aniosExp'] as int : int.tryParse('${api['aniosExp']}') ?? 0;
-    final totalClubes = api['totalClubes'] is int ? api['totalClubes'] as int : int.tryParse('${api['totalClubes']}') ?? 0;
-
+  void _mostrarCarreraDT(BuildContext context, Map<String, dynamic> dt, String coachId) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1B2A3B),
@@ -3942,82 +3803,101 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         expand: false,
         initialChildSize: 0.6,
         maxChildSize: 0.92,
-        builder: (_, ctrl) => ListView(
-          controller: ctrl,
-          padding: const EdgeInsets.all(20),
-          children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _avatarCoachCuerda(foto.isNotEmpty ? foto : null, 64),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(n1, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  if (n2.isNotEmpty)
-                    Text(n2, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
-                  const SizedBox(height: 2),
+        builder: (_, ctrl) => FutureBuilder<Map<String, dynamic>>(
+          future: ApiService.getCarreraDT(coachId),
+          builder: (ctx, snap) {
+            final nombre   = dt['nombre']    as String;
+            final foto     = dt['foto']      as String?;
+            final equipo   = dt['equipo']    as String;
+            final partidos = dt['partidos']  as int;
+            final victorias= dt['victorias'] as int;
+            final empates  = dt['empates']   as int;
+            final derrotas = dt['derrotas']  as int;
+            final puntos   = dt['puntos']    as int;
+            final pct      = (dt['pctPuntos'] as double).toStringAsFixed(1);
+
+            final carrera = snap.hasData
+                ? (snap.data!['carrera'] as List? ?? [])
+                : <dynamic>[];
+            final edad          = snap.data?['edad']         as int?    ?? 0;
+            final nacionalidad  = snap.data?['nacionalidad'] as String? ?? '';
+            final aniosExp      = snap.data?['aniosExp']     as int?    ?? 0;
+            final totalClubes   = snap.data?['totalClubes']  as int?    ?? 0;
+
+            return ListView(controller: ctrl, padding: const EdgeInsets.all(20), children: [
+              // Handle
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              // Header DT
+              Row(children: [
+                Container(
+                  width: 64, height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF0D1B2A),
+                    border: Border.all(color: const Color(0xFF00C853), width: 2),
+                    image: foto != null ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover) : null,
+                  ),
+                  child: foto == null ? const Icon(Icons.person, color: Color(0xFF00C853), size: 30) : null,
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                   Text(equipo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12)),
                   if (edad > 0 || nacionalidad.isNotEmpty)
-                    Text(
-                      [if (edad > 0) '$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
-                    ),
-                  if (aniosExp > 0 || totalClubes > 0)
-                    Text(() {
-                      final p = <String>[];
-                      if (aniosExp > 0) p.add('$aniosExp años como DT');
-                      if (totalClubes > 0) p.add('$totalClubes clubes');
-                      return p.join(' · ');
-                    }(), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                    Text([if (edad > 0) '\$edad años', if (nacionalidad.isNotEmpty) nacionalidad].join(' · '),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  if (aniosExp > 0)
+                    Text('\$aniosExp años de experiencia · \$totalClubes clubes',
+                      style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                ])),
+              ]),
+              const SizedBox(height: 20),
+              // Stats torneo actual
+              const Text('TORNEO ACTUAL', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                  _statCol('\$partidos', 'PJ'),
+                  _statCol('\$victorias', 'G', color: const Color(0xFF00C853)),
+                  _statCol('\$empates', 'E', color: Colors.amber),
+                  _statCol('\$derrotas', 'P', color: const Color(0xFFFF5252)),
+                  _statCol('\$puntos', 'Pts', color: const Color(0xFF00C853)),
+                  _statCol('\$pct%', 'Efic.', color: const Color(0xFF00C853)),
                 ]),
               ),
-            ]),
-            const SizedBox(height: 20),
-            const Text('RESUMEN (LIGA + COPAS)', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
-              child: Wrap(
-                spacing: 24,
-                runSpacing: 10,
-                alignment: WrapAlignment.start,
-                children: [
-                  _statCol('$puntos', 'Pts', color: const Color(0xFF00C853)),
-                  _statCol('$pct%', 'Rendimiento', color: const Color(0xFF00C853)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text('CARRERA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-            const SizedBox(height: 8),
-            if (carrera.isEmpty)
-              const Text('Sin trayectoria en la respuesta.', style: TextStyle(color: Colors.white38, fontSize: 12))
-            else
-              ...carrera.map((c) {
-                final club = (c['team'] as Map?)?['name'] as String? ?? '';
-                final logo = (c['team'] as Map?)?['logo'] as String?;
-                final inicio = (c['start'] as String? ?? '').length >= 4 ? (c['start'] as String).substring(0, 4) : '?';
-                final fin = c['end'] as String?;
-                final finStr = fin != null && fin.length >= 4 ? fin.substring(0, 4) : 'actualidad';
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
-                  child: Row(children: [
-                    if (logo != null && logo.isNotEmpty)
-                      Image.network(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, color: Colors.white38, size: 24))
-                    else
-                      const Icon(Icons.sports_soccer, color: Colors.white38, size: 24),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(club, style: const TextStyle(color: Colors.white, fontSize: 12))),
-                    Text('$inicio – $finStr', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                  ]),
-                );
-              }),
-          ],
+              const SizedBox(height: 20),
+              // Carrera
+              const Text('CARRERA COMPLETA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              if (snap.connectionState == ConnectionState.waiting)
+                const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFF00C853))))
+              else if (carrera.isEmpty)
+                const Text('Sin datos de carrera disponibles', style: TextStyle(color: Colors.white38, fontSize: 12))
+              else
+                ...carrera.map((c) {
+                  final club   = (c['team']  as Map?)?['name']  as String? ?? '';
+                  final logo   = (c['team']  as Map?)?['logo']  as String?;
+                  final inicio = (c['start'] as String? ?? '').length >= 4 ? (c['start'] as String).substring(0, 4) : '?';
+                  final fin    = c['end']    as String?;
+                  final finStr = fin != null && fin.length >= 4 ? fin.substring(0, 4) : 'presente';
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
+                    child: Row(children: [
+                      if (logo != null) Image.network(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const SizedBox(width: 24))
+                      else const Icon(Icons.sports_soccer, color: Colors.white38, size: 24),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(club, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                      Text('\$inicio – \$finStr', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    ]),
+                  );
+                }),
+            ]);
+          },
         ),
       ),
     );
@@ -5048,19 +4928,15 @@ Widget _tabTiempo(String tipo) {
               final fechaStr = esJugado
                   ? '$golesL - $golesV'
                   : '$diaStr ${fecha.day}/${fecha.month}  ${fecha.hour.toString().padLeft(2,'0')}:${fecha.minute.toString().padLeft(2,'0')}';
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _mostrarDetalle(context, local, visitante, '$golesL - $golesV', esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1B2A3B),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: esJugado ? Colors.transparent : const Color(0xFF00C853).withValues(alpha: 0.2))),
-                        child: Column(children: [
+              return GestureDetector(
+                onTap: () => _mostrarDetalle(context, local, visitante, '$golesL - $golesV', esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B2A3B),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: esJugado ? Colors.transparent : const Color(0xFF00C853).withValues(alpha: 0.2))),
+                  child: Column(children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
                       child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
@@ -5157,15 +5033,7 @@ Widget _tabTiempo(String tipo) {
                         },
                       ),
                   ]),
-                      ),
-                    ),
-                  ),
-                  if (!kIsWeb && fixtureId != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: MatchFollowToggle(fixtureId: fixtureId),
-                    ),
-                ],
+                ),
               );
             }).toList(),
           )),
@@ -5219,7 +5087,6 @@ Widget _tabTiempo(String tipo) {
     final teams = partido['teams'];
     final goals = partido['goals'];
     final fixture = partido['fixture'];
-    final fixtureIdLive = fixture['id'] as int?;
     final status = fixture['status'];
     final local = teams['home']['name'] as String;
     final visitante = teams['away']['name'] as String;
@@ -5289,20 +5156,17 @@ Widget _tabTiempo(String tipo) {
                 fontWeight: FontWeight.bold, fontSize: 13,
               )),
             ]),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              if (!kIsWeb && fixtureIdLive != null) MatchFollowToggle(fixtureId: fixtureIdLive),
-              FutureBuilder<Map<String, String>>(
-                future: _fetchClima(ciudad),
-                builder: (context, snapC) {
-                  if (!snapC.hasData) return const SizedBox(width: 60);
-                  return Row(children: [
-                    Text(snapC.data!['icono']!, style: const TextStyle(fontSize: 13)),
-                    const SizedBox(width: 4),
-                    Text(snapC.data!['temp']!, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                  ]);
-                },
-              ),
-            ]),
+            FutureBuilder<Map<String, String>>(
+              future: _fetchClima(ciudad),
+              builder: (context, snapC) {
+                if (!snapC.hasData) return const SizedBox(width: 60);
+                return Row(children: [
+                  Text(snapC.data!['icono']!, style: const TextStyle(fontSize: 13)),
+                  const SizedBox(width: 4),
+                  Text(snapC.data!['temp']!, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                ]);
+              },
+            ),
           ]),
         ),
 
