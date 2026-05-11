@@ -21,16 +21,39 @@ const apisportsKey = defineSecret("APISPORTS_KEY");
 const API_BASE = "https://v3.football.api-sports.io";
 const SEASON = 2026;
 
-/** Liga Profesional + copas */
+/** Liga Profesional + copas (130 = Copa Argentina, misma id que ApiService._copaArgentina) */
 const LEAGUE_LIGA_ARG = 128;
+const LEAGUE_COPA_ARGENTINA = 130;
 const LEAGUE_LIBERTADORES = 13;
 const LEAGUE_SUDAMERICANA = 14;
+/** La Liga (España) — playoffs y fase regular suelen compartir league id en API-Sports */
+const LEAGUE_LA_LIGA_ES = 140;
 
-/** IDs de clubes argentinos (misma nómina que ApiService para copas). */
+/**
+ * Clubes argentinos (LPF + copas). Debe incluir a todos los que juegan Libertadores/Sudamericana
+ * con filtro `filterArgentinaOnly`; si falta un id, ese partido NO entra al poll en vivo.
+ * Rosario Central = 437 (antes faltaba → no llegaban alertas en copas).
+ */
 const ARG_TEAM_IDS = new Set([
-  451, 435, 436, 453, 460, 445, 438, 440, 450, 434, 446, 449, 1064, 452, 441, 456,
-  457, 463, 2432,
+  434, 435, 436, 437, 438, 440, 441, 442, 445, 446, 449, 450, 451, 452, 453, 455, 456, 457, 458,
+  460, 463, 473, 474, 476, 478, 1064, 1065, 1066, 2424, 2432,
 ]);
+
+/**
+ * Varias competencias usan el año calendario del torneo distinto al nuestro (SEASON).
+ * - Liga Profesional (128) y Copa Argentina (130): playoffs a veces quedan bajo season anterior.
+ * - La Liga ES (140): en Europa season = año de inicio (p. ej. 2025 para 25/26).
+ */
+function seasonsForLeague(leagueId) {
+  if (
+    leagueId === LEAGUE_LIGA_ARG ||
+    leagueId === LEAGUE_COPA_ARGENTINA ||
+    leagueId === LEAGUE_LA_LIGA_ES
+  ) {
+    return [SEASON, SEASON - 1];
+  }
+  return [SEASON];
+}
 
 const STATE_COLLECTION = "auto_goal_notify";
 const PRE_MATCH_COLLECTION = "pre_match_notified";
@@ -119,9 +142,17 @@ async function fetchLiveForLeague(leagueId, season, apiKey, filterArgentinaOnly)
 async function fetchAllLiveFixtures(apiKey) {
   const seen = new Map();
   const chunks = [
-    fetchLiveForLeague(LEAGUE_LIGA_ARG, SEASON, apiKey, false),
+    ...seasonsForLeague(LEAGUE_LIGA_ARG).map((sea) =>
+      fetchLiveForLeague(LEAGUE_LIGA_ARG, sea, apiKey, false)
+    ),
+    ...seasonsForLeague(LEAGUE_COPA_ARGENTINA).map((sea) =>
+      fetchLiveForLeague(LEAGUE_COPA_ARGENTINA, sea, apiKey, false)
+    ),
     fetchLiveForLeague(LEAGUE_LIBERTADORES, SEASON, apiKey, true),
     fetchLiveForLeague(LEAGUE_SUDAMERICANA, SEASON, apiKey, true),
+    ...seasonsForLeague(LEAGUE_LA_LIGA_ES).map((sea) =>
+      fetchLiveForLeague(LEAGUE_LA_LIGA_ES, sea, apiKey, false)
+    ),
   ];
   const results = await Promise.all(chunks);
   for (const arr of results) {
@@ -157,6 +188,109 @@ async function fetchFixtureLineups(fixtureId, apiKey) {
   return data.response || [];
 }
 
+/** Un fixture puntual (para cuando ya no está en live=all pero pasó a FT). */
+async function fetchFixtureById(fixtureId, apiKey) {
+  const url = `${API_BASE}/fixtures?id=${fixtureId}`;
+  const res = await fetch(url, { headers: { "x-apisports-key": apiKey } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const list = data.response || [];
+  return list[0] ?? null;
+}
+
+/**
+ * Partidos que seguíamos en vivo y desaparecieron del endpoint live=all (típico al pasar a FT).
+ * Sin esto nunca se envía "Fin del partido" ni el último gol si el cron cae entre el gol y el cierre.
+ */
+async function reconcileFinishedNotInLive(col, liveIds, apiKey) {
+  const cutoff = Date.now() - 4 * 60 * 60 * 1000;
+  let snapshot;
+  try {
+    snapshot = await col.orderBy("updatedAt", "desc").limit(45).get();
+  } catch (e) {
+    console.error("reconcileFinishedNotInLive orderBy", e);
+    return;
+  }
+
+  for (const doc of snapshot.docs) {
+    const prev = doc.data();
+    const fid = parseInt(doc.id, 10);
+    if (!Number.isFinite(fid)) continue;
+    const ts = prev.updatedAt?.toMillis?.() ?? 0;
+    if (ts < cutoff) break;
+    if (prev.status === "FT") continue;
+    if (liveIds.has(fid)) continue;
+
+    const row = await fetchFixtureById(fid, apiKey);
+    if (!row) continue;
+
+    const status = row.fixture?.status?.short;
+    const gh = Number(row.goals?.home ?? 0);
+    const ga = Number(row.goals?.away ?? 0);
+    const hid = row.teams?.home?.id;
+    const aid = row.teams?.away?.id;
+    const homeName = row.teams?.home?.name ?? "Local";
+    const awayName = row.teams?.away?.name ?? "Visitante";
+    if (hid == null || aid == null) continue;
+
+    const ref = col.doc(String(fid));
+    const prevStatus = prev.status;
+    const ph = Number(prev.home ?? 0);
+    const pa = Number(prev.away ?? 0);
+    const resumeSent = prev.resumeSent ?? false;
+
+    if (status === "FT" && prevStatus !== "FT") {
+      if (gh !== ph || ga !== pa) {
+        const dh = gh - ph;
+        const da = ga - pa;
+        let title = "⚽ Gol";
+        if (dh > 0 && da > 0) title = "⚽ Goles · Actualización";
+        else if (dh > 0) title = `⚽ Gol · ${homeName}`;
+        else if (da > 0) title = `⚽ Gol · ${awayName}`;
+        await sendFreeNotification(fid, hid, aid, title, `${homeName} ${gh} - ${ga} ${awayName}`, { type: "goal" });
+      }
+      await sendFreeNotification(fid, hid, aid,
+        "🏁 ¡Fin del partido!",
+        `${homeName} ${gh} - ${ga} ${awayName}`,
+        { type: "fulltime" }
+      );
+      console.log(`pollLiveGoals: FT detectado vía fixtures?id= fixture=${fid}`);
+    }
+
+    if (status === "FT" && !resumeSent) {
+      try {
+        const stats = await fetchFixtureStatistics(fid, apiKey.trim());
+        const homeStats = stats.find((s) => s.team?.id === hid)?.statistics || [];
+        const awayStats = stats.find((s) => s.team?.id === aid)?.statistics || [];
+        const getStat = (statArr, name) =>
+          statArr.find((s) => s.type === name)?.value ?? "-";
+        const homePoss = getStat(homeStats, "Ball Possession");
+        const awayPoss = getStat(awayStats, "Ball Possession");
+        const homeShotsOn = getStat(homeStats, "Shots on Goal");
+        const awayShotsOn = getStat(awayStats, "Shots on Goal");
+        const body =
+          `${homeName} ${gh} - ${ga} ${awayName}\n` +
+          `Posesión: ${homePoss} - ${awayPoss} | ` +
+          `Tiros al arco: ${homeShotsOn} - ${awayShotsOn}`;
+        await sendPremiumNotification(fid, hid, aid, "📊 Resumen del partido", body, { type: "summary" });
+        await ref.set({ resumeSent: true }, { merge: true });
+      } catch (e) {
+        console.error(`Resumen FT (reconcile) falló fixture=${fid}`, e);
+      }
+    }
+
+    await ref.set(
+      {
+        home: gh,
+        away: ga,
+        status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+}
+
 // ─── FUNCIÓN PRINCIPAL: cada 2 minutos ───────────────────────────────────────
 // Detecta: Goles (FREE), Inicio/Final (FREE), Tarjeta Roja (PREMIUM), Resumen FT (PREMIUM)
 
@@ -184,17 +318,18 @@ exports.pollLiveGoals = onSchedule(
       return;
     }
 
-    if (fixtures.length === 0) {
-      console.log("pollLiveGoals: sin partidos en vivo (ligas 128/13/14)");
-      return;
-    }
-
     const db = admin.firestore();
     const col = db.collection(STATE_COLLECTION);
+    const liveIds = new Set();
+
+    if (fixtures.length === 0) {
+      console.log("pollLiveGoals: sin partidos en live=all; revisando cierres recientes en Firestore");
+    }
 
     for (const row of fixtures) {
       const fid = row.fixture?.id;
       if (fid == null) continue;
+      liveIds.add(fid);
 
       const gh = Number(row.goals?.home ?? 0);
       const ga = Number(row.goals?.away ?? 0);
@@ -221,13 +356,26 @@ exports.pollLiveGoals = onSchedule(
           resumeSent: false,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        // Si ya estaba en vivo cuando empezamos a trackearlo
-        if (status === "1H") {
+        // Arranque 0-0: aviso de inicio. Si ya hay goles, el tracker llegó tarde: aviso de marcador
+        // (si no, ese primer gol nunca generaba push porque antes hacíamos `continue` sin comparar).
+        if (gh === 0 && ga === 0 && status === "1H") {
           await sendFreeNotification(fid, hid, aid,
             "🟢 ¡Arranca el partido!",
             `${homeName} vs ${awayName}`,
             { type: "kickoff" }
           );
+        } else if (gh > 0 || ga > 0) {
+          const dh = gh;
+          const da = ga;
+          let title = "⚽ Gol";
+          if (dh > 0 && da > 0) title = "⚽ Goles · Marcador";
+          else if (dh > 0) title = `⚽ Gol · ${homeName}`;
+          else if (da > 0) title = `⚽ Gol · ${awayName}`;
+          await sendFreeNotification(fid, hid, aid, title,
+            `${homeName} ${gh} - ${ga} ${awayName}`,
+            { type: "goal" }
+          );
+          console.log(`pollLiveGoals: primer visto fixture=${fid} con marcador ${gh}-${ga} (push recuperado)`);
         }
         continue;
       }
@@ -353,6 +501,8 @@ exports.pollLiveGoals = onSchedule(
         { merge: true }
       );
     }
+
+    await reconcileFinishedNotInLive(col, liveIds, apiKey.trim());
   }
 );
 
@@ -381,10 +531,17 @@ exports.pollPreMatch = onSchedule(
     const windowTo = now + 20 * 60 * 1000;   // 20 min desde ahora
 
     const today = new Date().toISOString().split("T")[0];
-    const leagueIds = [LEAGUE_LIGA_ARG, LEAGUE_LIBERTADORES, LEAGUE_SUDAMERICANA];
+    const leagueIds = [
+      LEAGUE_LIGA_ARG,
+      LEAGUE_COPA_ARGENTINA,
+      LEAGUE_LIBERTADORES,
+      LEAGUE_SUDAMERICANA,
+      LEAGUE_LA_LIGA_ES,
+    ];
 
     for (const leagueId of leagueIds) {
-      const url = `${API_BASE}/fixtures?league=${leagueId}&season=${SEASON}&date=${today}`;
+      for (const season of seasonsForLeague(leagueId)) {
+      const url = `${API_BASE}/fixtures?league=${leagueId}&season=${season}&date=${today}`;
       try {
         const res = await fetch(url, { headers: { "x-apisports-key": apiKey.trim() } });
         if (!res.ok) continue;
@@ -462,7 +619,8 @@ exports.pollPreMatch = onSchedule(
           });
         }
       } catch (e) {
-        console.error(`pollPreMatch league=${leagueId}`, e);
+        console.error(`pollPreMatch league=${leagueId} season=${season}`, e);
+      }
       }
     }
   }

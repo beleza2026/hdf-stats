@@ -9,6 +9,17 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    - build/**
+    - .dart_tool/**
+    - backup/**
+    - review/**
+    - api_service_47.dart
+    - lib/api_service_BACKUP_0405.dart
+    - lib/api_service_STABLE_2804.dart
+    - lib/main_STABLE_2804.dart
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`
@@ -21,8 +32,11 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
+    avoid_print: false # scripts poblar_* y herramientas locales
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
+#
+# `flutter analyze` marca exit 1 si hay infos/warnings. Para fallar solo con
+# errores de compilación (p. ej. CI): flutter analyze --no-fatal-infos --no-fatal-warnings

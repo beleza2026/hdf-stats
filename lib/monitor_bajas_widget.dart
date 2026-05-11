@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'api_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -17,12 +18,14 @@ class _MonitorBajasWidgetState extends State<MonitorBajasWidget> {
   List<Map<String, dynamic>> _alFilo = [];
   List<Map<String, dynamic>> _suspendidos = [];
   bool _cargando = true;
+  bool _playoffsLigaArg = false;
 
   @override
   void initState() { super.initState(); _cargarDatos(); }
 
   Future<void> _cargarDatos() async {
     try {
+      final playoffs = await ApiService.ligaArgentinaHayPlayoffs();
       final response = await http.get(
         Uri.parse('$_baseUrl/players/topyellowcards?league=$_leagueId&season=$_season'),
         headers: _headers,
@@ -38,10 +41,17 @@ class _MonitorBajasWidgetState extends State<MonitorBajasWidget> {
           final yellowred = cards?['yellowred'] as int? ?? 0;
           final red = cards?['red'] as int? ?? 0;
           if (yellow == 4) alFilo.add({...item, '_tipo': 'filo'});
-          if (yellow >= 5) suspendidos.add({...item, '_tipo': 'amarillas'});
+          if (!playoffs && yellow >= 5) suspendidos.add({...item, '_tipo': 'amarillas'});
           if (yellowred >= 1 || red >= 1) suspendidos.add({...item, '_tipo': 'roja'});
         }
-        if (mounted) setState(() { _alFilo = alFilo; _suspendidos = suspendidos; _cargando = false; });
+        if (mounted) {
+          setState(() {
+            _alFilo = alFilo;
+            _suspendidos = suspendidos;
+            _cargando = false;
+            _playoffsLigaArg = playoffs;
+          });
+        }
       } else { if (mounted) setState(() => _cargando = false); }
     } catch (e) { if (mounted) setState(() => _cargando = false); }
   }
@@ -65,7 +75,11 @@ class _MonitorBajasWidgetState extends State<MonitorBajasWidget> {
             const SizedBox(height: 2),
             if (_cargando) const Text('Cargando...', style: TextStyle(color: Colors.white38, fontSize: 11))
             else if (_total == 0) const Text('Sin jugadores en riesgo', style: TextStyle(color: Colors.white38, fontSize: 11))
-            else Text('${_alFilo.length} jugadores en riesgo · datos según acumulado de temporada', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            else Text(
+                _playoffsLigaArg
+                    ? '${_alFilo.length} al filo · ${_suspendidos.length} por roja (en playoffs no suspende acumulación de amarillas)'
+                    : '${_alFilo.length} jugadores en riesgo · datos según acumulado de temporada',
+                style: const TextStyle(color: Colors.white38, fontSize: 11)),
           ])),
           if (!_cargando && _total > 0) ...[
             Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

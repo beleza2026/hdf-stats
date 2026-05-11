@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -15,8 +16,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
+import 'copa_service.dart';
 import 'paywall_screen.dart';
 import 'mundial_simulador_screen.dart';
+import 'nationality_flags.dart';
+import 'player_career_sheet.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -133,6 +137,8 @@ class _MainScreenState extends State<MainScreen> {
   bool _showLiga = false;
   int _fechaActual = -1;
   int _predicFechaOffset = 0; // 0 = fecha actual/siguiente, 1 = la de después
+  /// 0 = dashboard, 1 = torneos, 2 = hub Liga — antes de abrir una sección con `_irSeccion`.
+  int _parentBeforeSection = 0;
   int _tablaPosesionRefreshKey = 0;
   int _cuerdaFlojaRefreshGen = 0;
   int? _equipoFavoritoId;
@@ -892,53 +898,79 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showDashboard) return _buildDashboard();
-    if (_showTorneos) return _buildTorneos();
-    if (_showLiga) return _buildLigaHub();
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D1B2A),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.home_rounded, color: Color(0xFF00C853)),
-          tooltip: 'Inicio',
-          onPressed: () => setState(() => _showLiga = true),
-        ),
-        title: RichText(
-          text: const TextSpan(children: [
-            TextSpan(text: 'MATCHGOL', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
-            TextSpan(text: ' STATS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
-          ]),
-        ),
-        actions: [
-          if (_hayEnVivo)
-            GestureDetector(
-              onTap: () => _irSeccion(5),
-              child: Container(
-                margin: const EdgeInsets.only(right: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF00C853), shape: BoxShape.circle)),
-                  const SizedBox(width: 4),
-                  const Text('EN VIVO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold)),
-                ]),
+    final Widget shell;
+    if (_showDashboard) {
+      shell = _buildDashboard();
+    } else if (_showTorneos) {
+      shell = _buildTorneos();
+    } else if (_showLiga) {
+      shell = _buildLigaHub();
+    } else {
+      shell = Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0D1B2A),
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF00C853), size: 20),
+            tooltip: 'Atrás',
+            onPressed: _atrasJerarquico,
+          ),
+          title: RichText(
+            text: const TextSpan(children: [
+              TextSpan(text: 'MATCHGOL', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
+              TextSpan(text: ' STATS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 1.5)),
+            ]),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.home_outlined, color: Colors.white54),
+              tooltip: 'Inicio',
+              onPressed: _irInicio,
+            ),
+            if (_hayEnVivo)
+              GestureDetector(
+                onTap: () => _irSeccion(5),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF00C853), shape: BoxShape.circle)),
+                    const SizedBox(width: 4),
+                    const Text('EN VIVO', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              ),
+            Builder(
+              builder: (ctx) => IconButton(
+                icon: const Icon(Icons.person_outline, color: Colors.white70),
+                onPressed: () => _mostrarPanelCodigo(ctx),
               ),
             ),
-          Builder(
-            builder: (ctx) => IconButton(
-              icon: const Icon(Icons.person_outline, color: Colors.white70),
-              onPressed: () => _mostrarPanelCodigo(ctx),
-            ),
-          ),
-        ],
-      ),
-      body: _buildBody(),
+          ],
+        ),
+        body: _buildBody(),
+      );
+    }
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        _atrasJerarquico();
+      },
+      child: shell,
     );
   }
 
   void _irSeccion(int index) {
     setState(() {
+      if (_showDashboard) {
+        _parentBeforeSection = 0;
+      } else if (_showTorneos) {
+        _parentBeforeSection = 1;
+      } else if (_showLiga) {
+        _parentBeforeSection = 2;
+      }
       _selectedIndex = index;
       _showDashboard = false;
       _showTorneos = false;
@@ -946,11 +978,44 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+  void _atrasJerarquico() {
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+      return;
+    }
+    if (_showLiga) {
+      _irTorneos();
+      return;
+    }
+    if (_showTorneos) {
+      _irInicio();
+      return;
+    }
+    if (_showDashboard) {
+      SystemNavigator.pop();
+      return;
+    }
+    switch (_parentBeforeSection) {
+      case 1:
+        _irTorneos();
+        break;
+      case 2:
+        _irLiga();
+        break;
+      default:
+        _irInicio();
+        break;
+    }
+  }
+
   void _irTorneos() => setState(() { _showDashboard = false; _showTorneos = true; _showLiga = false; });
   void _irLiga() => setState(() { _showDashboard = false; _showTorneos = false; _showLiga = true; });
   void _irInicio() => setState(() { _showDashboard = true; _showTorneos = false; _showLiga = false; });
   void _irLibertadores() => _irSeccion(9);
   void _irSudamericana() => _irSeccion(10);
+  void _irCopaArgentina() => _irSeccion(15);
 
   Widget _buildIndiceMatchgol() {
     return FutureBuilder<Map<String, dynamic>>(
@@ -1177,7 +1242,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         padding: const EdgeInsets.all(16),
         children: [
           _torneoItem('🇦🇷', 'Liga Profesional', 'Zona A/B · 2026', true, _irLiga),
-          _torneoItem('🇦🇷', 'Copa Argentina', 'Próximamente', false, null),
+          _torneoItem('🇦🇷', 'Copa Argentina', 'AFA · fixture y tablas', true, _irCopaArgentina),
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1510,6 +1575,19 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
       case 12: return _buildExpulsados();
       case 13: return _buildTablaPosesion();
       case 14: return _buildCuerdaFloja();
+      case 15: return CopaScreen(
+            leagueId: CopaService.leagueCopaArgentina,
+            nombreCopa: 'Copa Argentina',
+            emoji: '🇦🇷',
+            onTapPartido: (ctx, local, visitante, resultado, jugado,
+                    {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = ''}) =>
+                _mostrarDetalle(ctx, local, visitante, resultado, jugado,
+                    fixtureId: fixtureId,
+                    homeId: homeId,
+                    awayId: awayId,
+                    fechaPartido: fechaPartido,
+                    isLive: isLive,
+                    minuto: minuto));
       default: return _buildResultados();
     }
   }
@@ -2981,13 +3059,34 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                   final players = snap.data ?? [];
                   if (players.isEmpty)
                     return const Center(child: Text('Sin datos de plantel', style: TextStyle(color: Colors.white54)));
-                  // Group by position
-                  final Map<String, List> byPos = {'Goalkeeper': [], 'Defender': [], 'Midfielder': [], 'Forward': []};
-                  for (final p in players) {
-                    final pos = p['position'] as String? ?? 'Midfielder';
-                    byPos[pos]?.add(p);
+                  // API-Football suele usar "Attacker" en squads; si no normalizamos, esos jugadores no entran en ningún bucket.
+                  String bucketPos(String? raw) {
+                    final s = (raw ?? '').toLowerCase();
+                    if (s.contains('goal')) return 'Goalkeeper';
+                    if (s.contains('defend')) return 'Defender';
+                    if (s.contains('mid')) return 'Midfielder';
+                    if (s.contains('attack') || s.contains('forward') || s.contains('strik') || s.contains('wing')) {
+                      return 'Forward';
+                    }
+                    return 'Other';
                   }
-                  final posLabels = {'Goalkeeper': '🧤 ARQUEROS', 'Defender': '🛡️ DEFENSORES', 'Midfielder': '⚙️ MEDIOCAMPISTAS', 'Forward': '⚡ DELANTEROS'};
+                  final Map<String, List<dynamic>> byPos = {
+                    'Goalkeeper': [],
+                    'Defender': [],
+                    'Midfielder': [],
+                    'Forward': [],
+                    'Other': [],
+                  };
+                  for (final p in players) {
+                    byPos[bucketPos(p['position'] as String?)]!.add(p);
+                  }
+                  final posLabels = {
+                    'Goalkeeper': '🧤 ARQUEROS',
+                    'Defender': '🛡️ DEFENSORES',
+                    'Midfielder': '⚙️ MEDIOCAMPISTAS',
+                    'Forward': '⚡ DELANTEROS',
+                    'Other': '📋 OTROS',
+                  };
                   return ListView(controller: sc, padding: const EdgeInsets.all(12), children: [
                     ...byPos.entries.where((e) => e.value.isNotEmpty).map((e) => Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3548,18 +3647,38 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           Container(
             color: const Color(0xFF0D1B2A),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(children: [
-              const SizedBox(width: 28),
-              const Expanded(flex: 5, child: Text('TÉCNICO', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1))),
-              _dtHeaderCol('PJ'),
-              _dtHeaderCol('G'),
-              _dtHeaderCol('E'),
-              _dtHeaderCol('P'),
-              _dtHeaderCol('Pts'),
-              _dtHeaderCol('%'),
-              _dtHeaderCol('Racha'),
-              const SizedBox(width: 90),
-            ]),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(width: 62),
+                const Expanded(
+                  flex: 3,
+                  child: Text(
+                    'TÉCNICO',
+                    style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _dtHeaderCol('PJ'),
+                        _dtHeaderCol('G'),
+                        _dtHeaderCol('E'),
+                        _dtHeaderCol('P'),
+                        _dtHeaderCol('Pts'),
+                        _dtHeaderCol('%'),
+                        _dtHeaderCol('Racha'),
+                        const SizedBox(width: 88, child: Center(child: Text('Últ. 5', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)))),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: RefreshIndicator(
@@ -3590,9 +3709,9 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _dtHeaderCol(String label) {
     return SizedBox(
-      width: 32,
+      width: 28,
       child: Text(label, textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        style: const TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
     );
   }
 
@@ -3643,17 +3762,25 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Column(children: [
-          Row(children: [
-            // Posicion
-            SizedBox(width: 20, child: Text('$pos',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: pos <= 3 ? const Color(0xFFFF7043) : Colors.white38,
-                fontSize: 11, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 8),
-            // Foto DT
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            SizedBox(
+              width: 18,
+              child: Text(
+                '$pos',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: pos <= 3 ? const Color(0xFFFF7043) : Colors.white38,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
             Container(
-              width: 36, height: 36,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFF0D1B2A),
@@ -3663,62 +3790,117 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                     : null,
               ),
               child: (foto == null || foto.isEmpty)
-                  ? const Icon(Icons.person, color: Color(0xFF00C853), size: 18)
+                  ? const Icon(Icons.person, color: Color(0xFF00C853), size: 16)
                   : null,
             ),
-            const SizedBox(width: 8),
-            // Nombre + equipo
-            Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nombre,
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis),
-              Row(children: [
-                if (equipoLogo.isNotEmpty) ...[
-                  Image.network(equipoLogo, width: 12, height: 12,
-                    errorBuilder: (_, __, ___) => const SizedBox(width: 12)),
-                  const SizedBox(width: 4),
-                ],
-                Flexible(child: Text(equipo,
-                  style: const TextStyle(color: Color(0xFF00C853), fontSize: 10),
-                  overflow: TextOverflow.ellipsis)),
-              ]),
-            ])),
-            // Columnas numericas
-            _dtNumCol('$partidos', Colors.white54),
-            _dtNumCol('$victorias', const Color(0xFF00C853)),
-            _dtNumCol('$empates', Colors.amber),
-            _dtNumCol('$derrotas', const Color(0xFFFF5252)),
-            _dtNumCol('$puntos', Colors.white),
-            _dtNumCol('${pct.toStringAsFixed(0)}%',
-              pct >= 60 ? const Color(0xFF00C853) : pct >= 40 ? Colors.amber : const Color(0xFFFF5252)),
-            // Racha
-            SizedBox(width: 32,
-              child: Center(child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: rachaColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: rachaColor.withValues(alpha: 0.5))),
-                child: Text(rachaActual,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: rachaColor, fontSize: 9, fontWeight: FontWeight.bold)),
-              ))),
-            // Ultimos 5
             const SizedBox(width: 6),
-            Row(children: ultimos5.map((r) => Container(
-              width: 14, height: 14,
-              margin: const EdgeInsets.only(left: 2),
-              decoration: BoxDecoration(
-                color: resultColor(r).withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-                border: Border.all(color: resultColor(r), width: 1)),
-              child: Center(child: Text(r,
-                style: TextStyle(color: resultColor(r), fontSize: 7, fontWeight: FontWeight.bold))),
-            )).toList()),
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    nombre,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Row(
+                    children: [
+                      if (equipoLogo.isNotEmpty) ...[
+                        Image.network(
+                          equipoLogo,
+                          width: 12,
+                          height: 12,
+                          errorBuilder: (_, __, ___) => const SizedBox(width: 12),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          equipo,
+                          style: const TextStyle(color: Color(0xFF00C853), fontSize: 10),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _dtNumCol('$partidos', Colors.white54),
+                    _dtNumCol('$victorias', const Color(0xFF00C853)),
+                    _dtNumCol('$empates', Colors.amber),
+                    _dtNumCol('$derrotas', const Color(0xFFFF5252)),
+                    _dtNumCol('$puntos', Colors.white),
+                    _dtNumCol(
+                      '${pct.toStringAsFixed(0)}%',
+                      pct >= 60
+                          ? const Color(0xFF00C853)
+                          : pct >= 40
+                              ? Colors.amber
+                              : const Color(0xFFFF5252),
+                    ),
+                    SizedBox(
+                      width: 30,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: rachaColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: rachaColor.withValues(alpha: 0.5)),
+                          ),
+                          child: Text(
+                            rachaActual,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: rachaColor, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: ultimos5
+                          .map(
+                            (r) => Container(
+                              width: 13,
+                              height: 13,
+                              margin: const EdgeInsets.only(left: 2),
+                              decoration: BoxDecoration(
+                                color: resultColor(r).withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: resultColor(r), width: 1),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  r,
+                                  style: TextStyle(color: resultColor(r), fontSize: 6.5, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ]),
           if (sin5 || tresL)
             Padding(
-              padding: const EdgeInsets.only(left: 28, top: 6),
+              padding: const EdgeInsets.only(left: 62, top: 6),
               child: Wrap(
                 spacing: 6,
                 runSpacing: 4,
@@ -3755,7 +3937,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           if (presionLabel.isNotEmpty) ...[
             const SizedBox(height: 8),
             Padding(
-              padding: const EdgeInsets.only(left: 28, right: 4),
+              padding: const EdgeInsets.only(left: 62, right: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3787,9 +3969,14 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _dtNumCol(String val, Color color) {
     return SizedBox(
-      width: 32,
-      child: Text(val, textAlign: TextAlign.center,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      width: 28,
+      child: Text(
+        val,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
@@ -4723,20 +4910,32 @@ Widget _tabTiempo(String tipo) {
           return mB.compareTo(mA);
         });
 
+        final porRachaLiga = List<Map<String, dynamic>>.from(todos);
+        porRachaLiga.sort((a, b) {
+          final rA = (a['rachaMinSinGolLiga'] as num?)?.toInt() ?? 0;
+          final rB = (b['rachaMinSinGolLiga'] as num?)?.toInt() ?? 0;
+          if (rB != rA) return rB.compareTo(rA);
+          final cA = (a['statistics'][0]['goals']?['conceded'] as num?)?.toInt() ?? 999;
+          final cB = (b['statistics'][0]['goals']?['conceded'] as num?)?.toInt() ?? 999;
+          return cA.compareTo(cB);
+        });
+
         return DefaultTabController(
-          length: 3,
+          length: 4,
           child: Column(children: [
             Container(
               color: const Color(0xFF0D1B2A),
               child: const TabBar(
+                isScrollable: true,
                 labelColor: Color(0xFF00C853),
                 unselectedLabelColor: Colors.white38,
                 indicatorColor: Color(0xFF00C853),
-                labelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                labelStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 tabs: [
                   Tab(text: 'PROMEDIO'),
-                  Tab(text: 'VALLAS INVICTAS'),
+                  Tab(text: 'VALLAS'),
                   Tab(text: 'MIN/GOL'),
+                  Tab(text: 'RACHA LIGA'),
                 ],
               ),
             ),
@@ -4784,6 +4983,33 @@ Widget _tabTiempo(String tipo) {
                   final minutos = stats['games']?['minutes'] as int? ?? 0;
                   return _arqueroCard((e.key + 1).toString(), player['name'], stats['team']['name'],
                     '${minSinGol}m', '$minutos min totales', '', player['photo'] as String?, Colors.amber);
+                }),
+              ]),
+              ListView(padding: const EdgeInsets.all(16), children: [
+                _sectionTitle('RACHA EN LIGA (MIN SIN RECIBIR GOL)'),
+                const SizedBox(height: 4),
+                const Text(
+                  'Ventana actual del arquero; usa eventos + fixture. Puede ser 0 si faltan datos.',
+                  style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.3),
+                ),
+                const SizedBox(height: 12),
+                ...porRachaLiga.asMap().entries.map((e) {
+                  final a = e.value;
+                  final stats = a['statistics'][0];
+                  final player = a['player'];
+                  final racha = (a['rachaMinSinGolLiga'] as num?)?.toInt() ?? 0;
+                  final conc = stats['goals']?['conceded'] as int? ?? 0;
+                  final apps = stats['games']?['appearences'] as int? ?? 0;
+                  return _arqueroCard(
+                    (e.key + 1).toString(),
+                    player['name'] as String? ?? '',
+                    stats['team']['name'] as String? ?? '',
+                    '${racha}′',
+                    '$conc GC · $apps PJ',
+                    '',
+                    player['photo'] as String?,
+                    const Color(0xFF2196F3),
+                  );
                 }),
               ]),
             ])),
@@ -7016,21 +7242,55 @@ Widget _tabTiempo(String tipo) {
             Text('Analizando próxima fecha...', style: TextStyle(color: Colors.white54, fontSize: 13)),
           ]),
         );
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white38, size: 40),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No se pudieron cargar las predicciones.\n${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white54, fontSize: 13, height: 1.35),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () {
+                      ApiService.clearCache();
+                      setState(() {});
+                    },
+                    child: const Text('Reintentar', style: TextStyle(color: Color(0xFF00C853))),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(
           child: Text('No hay partidos para predecir', style: TextStyle(color: Colors.white54)),
         );
         final todas = snapshot.data!;
-        final fecha = todas.first['fecha'] as int;
-        // Agrupar por fecha para navegación
+        // Agrupar por fecha (liga) o 0 = copas / liguilla sin número de fecha
         final Map<int, List<Map<String, dynamic>>> porFecha = {};
         for (final p in todas) {
-          final f = p['fecha'] as int;
+          final f = (p['fecha'] as num?)?.toInt() ?? 0;
           porFecha.putIfAbsent(f, () => []).add(p);
         }
-        final fechas = porFecha.keys.toList()..sort();
+        final fechas = porFecha.keys.toList()
+          ..sort((a, b) {
+            if (a == 0 && b != 0) return 1;
+            if (b == 0 && a != 0) return -1;
+            return a.compareTo(b);
+          });
         final idxActual = (_predicFechaOffset).clamp(0, fechas.length - 1);
         final fechaActual = fechas[idxActual];
         final predicciones = porFecha[fechaActual]!;
+        final tituloGrupo = fechaActual == 0
+            ? 'PREDICCIONES — COPAS / ELIMINATORIAS'
+            : 'PREDICCIONES — FECHA $fechaActual';
 
         return Column(children: [
           // Header con navegación
@@ -7042,8 +7302,9 @@ Widget _tabTiempo(String tipo) {
                 icon: const Icon(Icons.chevron_left, color: Color(0xFF00C853), size: 28),
                 onPressed: idxActual > 0 ? () => setState(() => _predicFechaOffset--) : null),
               Column(children: [
-                Text('PREDICCIONES — FECHA $fechaActual',
-                  style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1)),
+                Text(tituloGrupo,
+                  style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
+                  textAlign: TextAlign.center),
                 const Text('IA MatchGol Stats', style: TextStyle(color: Colors.white38, fontSize: 10)),
               ]),
               IconButton(
@@ -7480,6 +7741,14 @@ class _PlantelTabState extends State<_PlantelTab> {
   List<dynamic> _plantel = [];
   bool _loading = true;
   bool _error = false;
+  final Map<int, Future<Map<String, dynamic>>> _careerPorJugador = {};
+
+  Future<Map<String, dynamic>> _careerSnapshot(int playerId) {
+    return _careerPorJugador.putIfAbsent(
+      playerId,
+      () => ApiService.getPlayerCareerSnapshot(playerId: playerId, clubTeamId: widget.teamId),
+    );
+  }
 
   @override
   void initState() {
@@ -7533,41 +7802,217 @@ class _PlantelTabState extends State<_PlantelTab> {
       ));
       for (final j in lista) {
         final p = j['player'] as Map<String, dynamic>? ?? {};
-        final stats = (j['statistics'] as List?)?.first ?? {};
+        final stats = (j['statistics'] as List?)?.first as Map<String, dynamic>? ?? {};
+        final games = stats['games'] as Map<String, dynamic>?;
         final nombre = p['name'] as String? ?? '';
         final foto = p['photo'] as String?;
-        final edad = p['age'] ?? 0;
-        final numero = p['number'];
-        final partidos = stats['games']?['appearences'] as int? ?? 0;
-        final goles = stats['goals']?['total'] as int? ?? 0;
-        final asist = stats['goals']?['assists'] as int? ?? 0;
-        final ratingStr = stats['games']?['rating'] as String? ?? '0';
+        final edad = p['age'];
+        final nacionalidad = (p['nationality'] as String?)?.trim() ?? '';
+        final flag = flagEmojiFromCountryName(nacionalidad);
+        final numRaw = games?['number'];
+        final dorsal = numRaw is int
+            ? numRaw
+            : int.tryParse('$numRaw') ??
+                (p['number'] is int ? p['number'] as int : int.tryParse('${p['number'] ?? ''}')) ??
+                0;
+        final partidos =
+            (games?['appearences'] as num?)?.toInt() ?? (games?['appearances'] as num?)?.toInt() ?? 0;
+        final goles = (stats['goals'] as Map?)?['total'] as int? ?? 0;
+        final asist = (stats['goals'] as Map?)?['assists'] as int? ?? 0;
+        final ratingStr = games?['rating']?.toString() ?? '0';
         final rating = double.tryParse(ratingStr) ?? 0.0;
-        items.add(Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(color: const Color(0xFF1A2D3F), borderRadius: BorderRadius.circular(8)),
-          child: Row(children: [
-            CircleAvatar(radius: 20,
-              backgroundImage: foto != null ? NetworkImage(foto) : null,
-              backgroundColor: const Color(0xFF0D1B2A),
-              child: foto == null ? const Icon(Icons.person, color: Colors.white38, size: 20) : null),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('$edad años${numero != null ? " · #$numero" : ""}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-            ])),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('$partidos PJ', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold)),
-              if (goles > 0 || asist > 0)
-                Text('${goles}G ${asist}A', style: const TextStyle(color: Colors.white54, fontSize: 10)),
-              if (rating > 0)
-                Text(rating.toStringAsFixed(1), style: TextStyle(
-                  color: rating >= 7 ? const Color(0xFF00C853) : rating >= 6 ? const Color(0xFFFFD700) : Colors.white38,
-                  fontSize: 10, fontWeight: FontWeight.bold)),
-            ]),
-          ]),
-        ));
+        final playerId = (p['id'] as num?)?.toInt() ?? 0;
+
+        items.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Material(
+              color: const Color(0xFF1A2D3F),
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.antiAlias,
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                iconColor: Colors.white54,
+                collapsedIconColor: Colors.white38,
+                title: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (flag.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10, right: 4),
+                        child: Text(flag, style: const TextStyle(fontSize: 20, height: 1)),
+                      ),
+                    ],
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: foto != null ? NetworkImage(foto!) : null,
+                      backgroundColor: const Color(0xFF0D1B2A),
+                      child: foto == null ? const Icon(Icons.person, color: Colors.white38, size: 20) : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              nombre,
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              [
+                                if (edad != null) '$edad años',
+                                if (dorsal > 0) '#$dorsal',
+                              ].join(' · '),
+                              style: const TextStyle(color: Colors.white54, fontSize: 11),
+                            ),
+                            if (nacionalidad.isNotEmpty)
+                              Text(
+                                nacionalidad,
+                                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (rating > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: (rating >= 7.5
+                                      ? const Color(0xFF00C853)
+                                      : rating >= 6.5
+                                          ? const Color(0xFFFFD700)
+                                          : Colors.white24)
+                                  .withValues(alpha: 0.22),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: rating >= 7.5
+                                    ? const Color(0xFF00C853)
+                                    : rating >= 6.5
+                                        ? const Color(0xFFFFD700)
+                                        : Colors.white24,
+                              ),
+                            ),
+                            child: Text(
+                              '★ ${rating.toStringAsFixed(1)}',
+                              style: TextStyle(
+                                color: rating >= 7.5
+                                    ? const Color(0xFF00C853)
+                                    : rating >= 6.5
+                                        ? const Color(0xFFFFD700)
+                                        : Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 2),
+                        const Text('rating torneo', style: TextStyle(color: Colors.white38, fontSize: 9)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$partidos PJ',
+                          style: const TextStyle(color: Color(0xFFFFD700), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        if (goles > 0 || asist > 0)
+                          Text(
+                            '${goles}G ${asist}A',
+                            style: const TextStyle(color: Colors.white54, fontSize: 10),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                children: [
+                  if (playerId <= 0)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('Sin id de jugador', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                    )
+                  else
+                    FutureBuilder<Map<String, dynamic>>(
+                      future: _careerSnapshot(playerId),
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 10),
+                            child: Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C853)),
+                              ),
+                            ),
+                          );
+                        }
+                        if (snap.hasError || !snap.hasData) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: const Text(
+                              'No se pudo cargar la carrera',
+                              style: TextStyle(color: Colors.white38, fontSize: 11),
+                            ),
+                          );
+                        }
+                        final d = snap.data!;
+                        final pjC = d['pjClub'] as int? ?? 0;
+                        final gC = d['golesClub'] as int? ?? 0;
+                        final pjT = d['pjCarrera'] as int? ?? 0;
+                        final gT = d['golesCarrera'] as int? ?? 0;
+                        final muestras = d['temporadasMuestra'] as int? ?? 0;
+                        final tot = d['temporadasTotal'] as int? ?? 0;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'CARRERA (API)',
+                              style: TextStyle(
+                                color: Color(0xFF00C853),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'En este club (suma consultada): $pjC PJ · $gC goles',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.25),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Total carrera (aprox.): $pjT PJ · $gT goles · $muestras de $tot temporadas en historial',
+                              style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.3),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () => showPlayerCareerSheet(
+                                  context,
+                                  playerId: playerId,
+                                  clubTeamId: widget.teamId,
+                                  playerName: nombre,
+                                ),
+                                child: const Text('Ficha completa', style: TextStyle(color: Color(0xFF00C853))),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
       }
     });
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'match_follow_service.dart';
 import 'copa_service.dart';
+import 'player_career_sheet.dart';
 
 typedef OnTapPartido = void Function(
   BuildContext context,
@@ -24,12 +25,17 @@ class CopaScreen extends StatefulWidget {
   final String emoji;
   final OnTapPartido onTapPartido;
 
+  /// Cuando la pantalla está embebida en el home (no hay ruta encima), usar esto
+  /// en lugar de [Navigator.pop] para no vaciar el stack del [MaterialApp].
+  final VoidCallback? onBack;
+
   const CopaScreen({
     Key? key,
     required this.leagueId,
     required this.nombreCopa,
     required this.emoji,
     required this.onTapPartido,
+    this.onBack,
   }) : super(key: key);
 
   @override
@@ -40,11 +46,14 @@ class _CopaScreenState extends State<CopaScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  bool get _esCopaArgentina =>
+      widget.leagueId == CopaService.leagueCopaArgentina;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
-_tabController.index = 1; // arranca en FIXTURE
+    _tabController.index = 1; // arranca en FIXTURE
   }
 
   @override
@@ -54,8 +63,7 @@ _tabController.index = 1; // arranca en FIXTURE
   }
 
   @override
- @override
-Widget build(BuildContext context) {
+  Widget build(BuildContext context) {
   return Scaffold(
     backgroundColor: const Color(0xFF0D1B2A),
     appBar: AppBar(
@@ -63,7 +71,13 @@ Widget build(BuildContext context) {
       elevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: () {
+          if (widget.onBack != null) {
+            widget.onBack!();
+          } else if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        },
       ),
       title: Text('${widget.emoji} ${widget.nombreCopa}',
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
@@ -79,12 +93,12 @@ Widget build(BuildContext context) {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white38,
             labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            tabs: const [
-              Tab(text: 'HOY'),
-              Tab(text: 'FIXTURE'),
-              Tab(text: 'GRUPOS'),
-              Tab(text: 'GOLEADORES'),
-              Tab(text: 'PLANTELES'),
+            tabs: [
+              const Tab(text: 'HOY'),
+              const Tab(text: 'FIXTURE'),
+              Tab(text: _esCopaArgentina ? 'PRÓX. RONDA' : 'GRUPOS'),
+              const Tab(text: 'GOLEADORES'),
+              const Tab(text: 'PLANTELES'),
             ],
           ),
         ),
@@ -94,7 +108,10 @@ Widget build(BuildContext context) {
             children: [
               _TabHoy(leagueId: widget.leagueId, onTapPartido: widget.onTapPartido),
               _TabFixture(leagueId: widget.leagueId, onTapPartido: widget.onTapPartido),
-              _TabGrupos(leagueId: widget.leagueId),
+              if (_esCopaArgentina)
+                _TabProximaRonda(leagueId: widget.leagueId, onTapPartido: widget.onTapPartido)
+              else
+                _TabGrupos(leagueId: widget.leagueId),
               _TabGoleadores(leagueId: widget.leagueId),
               _TabPlanteles(leagueId: widget.leagueId),
             ],
@@ -221,8 +238,11 @@ class _TabHoy extends StatelessWidget {
         }
         final partidos = snapshot.data ?? [];
         if (partidos.isEmpty) {
-          return const Center(
-            child: Text('No hay partidos argentinos hoy', style: TextStyle(color: Colors.white54)),
+          final msg = leagueId == CopaService.leagueCopaArgentina
+              ? 'No hay partidos de Copa Argentina hoy'
+              : 'No hay partidos argentinos hoy';
+          return Center(
+            child: Text(msg, style: const TextStyle(color: Colors.white54)),
           );
         }
         return ListView.builder(
@@ -249,6 +269,14 @@ class _TabFixtureState extends State<_TabFixture> {
   String? _roundSeleccionado;
 
   @override
+  void didUpdateWidget(covariant _TabFixture oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.leagueId != widget.leagueId) {
+      _roundSeleccionado = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: CopaService.getFixture(widget.leagueId),
@@ -266,7 +294,19 @@ class _TabFixtureState extends State<_TabFixture> {
           final ronda = p['league']?['round'] as String? ?? 'Sin ronda';
           porRonda.putIfAbsent(ronda, () => []).add(p);
         }
-        final rondas = porRonda.keys.toList();
+        DateTime _firstKickoff(List<Map<String, dynamic>> list) {
+          var best = DateTime(2100);
+          for (final p in list) {
+            final d = DateTime.tryParse(
+                    p['fixture']?['date']?.toString() ?? '') ??
+                DateTime(2100);
+            if (d.isBefore(best)) best = d;
+          }
+          return best;
+        }
+        final rondas = porRonda.keys.toList()
+          ..sort((a, b) =>
+              _firstKickoff(porRonda[a]!).compareTo(_firstKickoff(porRonda[b]!)));
         _roundSeleccionado ??= rondas.first;
 
         return Column(
@@ -311,6 +351,107 @@ class _TabFixtureState extends State<_TabFixture> {
             ),
           ],
         );
+      },
+    );
+  }
+}
+
+// ─── TAB PRÓXIMA RONDA (Copa Argentina y copas sin fase de grupos) ──
+class _TabProximaRonda extends StatelessWidget {
+  final int leagueId;
+  final OnTapPartido onTapPartido;
+  const _TabProximaRonda({required this.leagueId, required this.onTapPartido});
+
+  static String? _statusShort(Map<String, dynamic>? p) {
+    final st = p?['fixture']?['status'];
+    if (st is! Map) return null;
+    final raw = st['short'];
+    if (raw is String) return raw;
+    if (raw != null) return raw.toString();
+    return null;
+  }
+
+  /// Próximos o en curso (la API a veces deja partidos vivos fuera de NS).
+  static bool _esPendienteOEnVivo(String? status) {
+    if (status == null || status.isEmpty) return false;
+    return status == 'NS' ||
+        status == 'TBD' ||
+        status == 'PST' ||
+        status == '1H' ||
+        status == 'HT' ||
+        status == '2H' ||
+        status == 'LIVE' ||
+        status == 'ET' ||
+        status == 'BT' ||
+        status == 'INT' ||
+        status == 'P';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: CopaService.getFixture(leagueId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'No se pudo cargar el fixture.\n${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+            ),
+          );
+        }
+        final partidos = snapshot.data ?? [];
+        if (partidos.isEmpty) {
+          return const Center(child: Text('Sin datos de fixture', style: TextStyle(color: Colors.white54)));
+        }
+        final upcoming = partidos.where((p) {
+          final s = _statusShort(p);
+          return _esPendienteOEnVivo(s);
+        }).toList();
+        upcoming.sort((a, b) {
+          final da = DateTime.tryParse(a['fixture']?['date']?.toString() ?? '') ??
+              DateTime(2100);
+          final db = DateTime.tryParse(b['fixture']?['date']?.toString() ?? '') ??
+              DateTime(2100);
+          return da.compareTo(db);
+        });
+        if (upcoming.isEmpty) {
+          return const Center(
+            child: Text('No hay próxima ronda programada (o ya están todos jugados)',
+                textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
+          );
+        }
+
+        final children = <Widget>[];
+        String? rondaActual;
+        for (final p in upcoming) {
+          final ronda = p['league']?['round'] as String? ?? 'Ronda';
+          if (ronda != rondaActual) {
+            rondaActual = ronda;
+            children.add(Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(children: [
+                const Icon(Icons.flag_outlined, color: Color(0xFF00C853), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(ronda,
+                      style: const TextStyle(
+                          color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ]),
+            ));
+          }
+          children.add(buildCardPartido(p, context, onTapPartido, leagueId));
+        }
+
+        return ListView(padding: const EdgeInsets.only(bottom: 16), children: children);
       },
     );
   }
@@ -434,11 +575,14 @@ class _TabGoleadores extends StatelessWidget {
   }
 
   Widget _cardGoleador(Map<String, dynamic> data, int pos) {
-    final player = data['player'];
-    final stats = (data['statistics'] as List).first;
-    final goals = stats['goals']['total'] as int? ?? 0;
-    final assists = stats['goals']['assists'] as int? ?? 0;
-    final team = stats['team']['name'] as String? ?? '';
+    final player = data['player'] as Map<String, dynamic>?;
+    if (player == null) return const SizedBox.shrink();
+    final statsList = data['statistics'] as List?;
+    if (statsList == null || statsList.isEmpty) return const SizedBox.shrink();
+    final stats = statsList.first as Map<String, dynamic>;
+    final goals = stats['goals']?['total'] as int? ?? 0;
+    final assists = stats['goals']?['assists'] as int? ?? 0;
+    final team = stats['team']?['name'] as String? ?? '';
     final nombre = player['name'] as String? ?? '';
     final foto = player['photo'] as String? ?? '';
 
@@ -623,6 +767,8 @@ class _TabPlantelesState extends State<_TabPlanteles> {
     final player = data['player'];
     final statsList = data['statistics'] as List? ?? [];
     final stats = statsList.isNotEmpty ? statsList.first as Map<String, dynamic> : <String, dynamic>{};
+    final playerId = player['id'] as int?;
+    final clubTeamId = stats['team']?['id'] as int?;
     final nombre = player['name'] as String? ?? '';
     final foto = player['photo'] as String? ?? '';
     final pos = stats['games']?['position'] as String? ?? '';
@@ -650,10 +796,19 @@ class _TabPlantelesState extends State<_TabPlanteles> {
           child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 18) : null,
         ),
         const SizedBox(width: 8),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12), overflow: TextOverflow.ellipsis),
-          if (posAbrev.isNotEmpty) Text(posAbrev, style: TextStyle(color: posColor, fontSize: 10, fontWeight: FontWeight.bold)),
-        ])),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: playerId != null && playerId > 0 && clubTeamId != null
+                ? () => showPlayerCareerSheet(context,
+                    playerId: playerId, clubTeamId: clubTeamId, playerName: nombre)
+                : null,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12), overflow: TextOverflow.ellipsis),
+              if (posAbrev.isNotEmpty) Text(posAbrev, style: TextStyle(color: posColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            ]),
+          ),
+        ),
         SizedBox(width: 32, child: Text('$partidos', style: const TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.center)),
         SizedBox(width: 32, child: Text('$goles', style: const TextStyle(color: Colors.white, fontSize: 12), textAlign: TextAlign.center)),
         SizedBox(width: 32, child: Text('$asistencias', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center)),

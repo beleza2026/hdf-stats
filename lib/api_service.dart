@@ -1,6 +1,7 @@
 ﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'copa_service.dart';
 import 'racha_model.dart';
 
 class ApiService {
@@ -8,6 +9,63 @@ class ApiService {
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
   static const int _ligaArgentina = 128;
   static const int _season = 2026;
+
+  /// Temporada principal de la app (Liga Profesional en `getFixture`, etc.).
+  static int get temporadaLigaPrincipal => _season;
+
+  /// Agrupa `league.round` de la Liga 128: 1–99 fecha regular, 200 octavos, 300 cuartos, 400 semis, 500 final, 999 otro.
+  static int ligaFixtureBucket(String roundRaw) {
+    final r = roundRaw.trim().toLowerCase();
+    if (r.isEmpty) return 0;
+    if (r.contains('round of 16') ||
+        r.contains('octavos') ||
+        r.contains('1/8') ||
+        r.contains('8th finals') ||
+        r.contains('8ths') ||
+        r.contains('16avos')) {
+      return 200;
+    }
+    if (r.contains('quarter') ||
+        r.contains('cuartos') ||
+        r.contains('4tos') ||
+        r.contains('4°') ||
+        r.contains('1/4') ||
+        r.contains('1/4 final') ||
+        r.contains('1/4 de final') ||
+        r.contains('cuarto de final') ||
+        r.contains('cuartos de final') ||
+        r == 'r8' ||
+        (RegExp(r'\br8\b').hasMatch(r) && !r.contains('group')) ||
+        RegExp(r'\bround\s+of\s+8\b').hasMatch(r) ||
+        RegExp(r'\bqf\b').hasMatch(r) ||
+        (RegExp(r'\bround[-\s]*8\b').hasMatch(r) && !r.contains('group')) ||
+        RegExp(r'\b4tos?\s*final').hasMatch(r)) {
+      return 300;
+    }
+    if (r.contains('semi')) return 400;
+    if (r.contains('final') && !r.contains('season') && !r.contains('quarter')) {
+      return 500;
+    }
+    final reg = RegExp(
+      r'(apertura|clausura|regular\s*season)\s*[-–]\s*(\d+)',
+      caseSensitive: false,
+    );
+    final m = reg.firstMatch(r);
+    if (m != null) {
+      final n = int.tryParse(m.group(2)!) ?? 0;
+      return n.clamp(0, 99);
+    }
+    final fe = RegExp(r'\bfecha\s*(\d+)', caseSensitive: false).firstMatch(r);
+    if (fe != null) {
+      return (int.tryParse(fe.group(1)!) ?? 0).clamp(0, 99);
+    }
+    final tail = RegExp(r'[-–]\s*(\d+)\s*$').firstMatch(r);
+    if (tail != null) {
+      final v = int.tryParse(tail.group(1)!) ?? 0;
+      if (v >= 1 && v <= 38) return v;
+    }
+    return 999;
+  }
 
   /// Misma nómina que en copas (vivo): partidos de copa se filtran a estos clubes.
   static const Set<String> _equiposArgTablaDT = {
@@ -30,18 +88,54 @@ class ApiService {
   static Future<Map<String, List<Map<String, dynamic>>>>? _tiemposFuture;
   static List<RachaEquipo>? _rachasCache;
   static Future<List>? _fixturesPrevFuture;
+  static final Map<int, List<Map<String, dynamic>>> _fixtureEventsCache = {};
+  static final Map<int, List<Map<String, dynamic>>> _fixturePlayersCache = {};
 
   static void clearCache() {
     _standingsFuture = null;
     _fixturesFuture = null;
     _tiemposFuture = null;
     _rachasCache = null;
+    _fixtureEventsCache.clear();
+    _fixturePlayersCache.clear();
+    _prediccionesCache = null;
+    _prediccionesCacheTime = null;
     _tablaDTsCache = null;
     _tablaPosesionCache = null;
     _tablaPosesionCacheTime = null;
     _fixturesPrevFuture = null;
     _tablasCache = null;
+    _fixtureFullListCache = null;
+    _fixtureFullListCacheTime = null;
+    _fixtureFullListInFlight = null;
+    _indiceMatchgolCache = null;
+    _indiceMatchgolCacheTime = null;
+    _indiceMatchgolInFlight = null;
+    _tablaMoralResultCache = null;
+    _tablaMoralResultCacheTime = null;
+    _tablaMoralInFlight = null;
+    _ultimos5Cache.clear();
+    _ultimos5CacheTime.clear();
+    _ultimos5InFlight.clear();
+    _tablaDTsEpoch++;
   }
+
+  // ─── Caché corta + una sola petición en vuelo (evita spam al cambiar de pestaña) ───
+  static List<Map<String, dynamic>>? _fixtureFullListCache;
+  static DateTime? _fixtureFullListCacheTime;
+  static Future<List<Map<String, dynamic>>>? _fixtureFullListInFlight;
+
+  static Map<String, dynamic>? _indiceMatchgolCache;
+  static DateTime? _indiceMatchgolCacheTime;
+  static Future<Map<String, dynamic>>? _indiceMatchgolInFlight;
+
+  static Map<String, List<Map<String, dynamic>>>? _tablaMoralResultCache;
+  static DateTime? _tablaMoralResultCacheTime;
+  static Future<Map<String, List<Map<String, dynamic>>>>? _tablaMoralInFlight;
+
+  static final Map<int, List<Map<String, dynamic>>> _ultimos5Cache = {};
+  static final Map<int, DateTime> _ultimos5CacheTime = {};
+  static final Map<int, Future<List<Map<String, dynamic>>>> _ultimos5InFlight = {};
 
   static Future<dynamic> _getStandingsData() {
     _standingsFuture ??= http.get(
@@ -127,7 +221,116 @@ class ApiService {
   }
 }
 
+  static DateTime _dateOnlyLocal(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Sábado de la semana calendario que contiene [now] (hora local del dispositivo).
+  static DateTime _sabadoSemanaContiene(DateTime now) {
+    final d = _dateOnlyLocal(now);
+    final diasAtras = (d.weekday - DateTime.saturday + 7) % 7;
+    return d.subtract(Duration(days: diasAtras));
+  }
+
+  /// Partidos **finalizados** de Liga Profesional entre el sábado y el domingo de esa semana,
+  /// con ganador y etiqueta de fecha (p. ej. R8) según `league.round` de la API.
+  ///
+  /// Devuelve: `titulo`, `items` (lista de mapas con localName, awayName, gh, ga, winnerName, round),
+  /// `sabado`, `domingo` (yyyy-MM-dd).
+  static Future<Map<String, dynamic>> getLigaArgFinDeSemanaGanadores() async {
+    final now = DateTime.now();
+    final sab = _sabadoSemanaContiene(now);
+    final dom = sab.add(const Duration(days: 1));
+    String ymd(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final from = ymd(sab);
+    final to = ymd(dom);
+
+    final porId = <int, Map<String, dynamic>>{};
+    for (final season in [_season, _season - 1]) {
+      try {
+        final uri = Uri.parse(
+          '$_baseUrl/fixtures?league=$_ligaArgentina&season=$season&from=$from&to=$to&timezone=America/Argentina/Buenos_Aires',
+        );
+        final response = await http.get(uri, headers: _headers);
+        if (response.statusCode != 200) continue;
+        final data = jsonDecode(response.body);
+        final list = data['response'] as List? ?? [];
+        for (final raw in list) {
+          final f = raw as Map<String, dynamic>;
+          final id = f['fixture']?['id'];
+          final fid = id is int ? id : int.tryParse('$id') ?? 0;
+          if (fid <= 0) continue;
+          porId[fid] = f;
+        }
+      } catch (_) {}
+    }
+
+    int? numeroFecha(String? round) {
+      if (round == null || round.isEmpty) return null;
+      final m = RegExp(r'(\d+)\s*$').firstMatch(round.trim());
+      return m != null ? int.tryParse(m.group(1)!) : null;
+    }
+
+    String? roundMuestra;
+    final items = <Map<String, dynamic>>[];
+    for (final f in porId.values) {
+      final st = f['fixture']?['status']?['short'] as String? ?? '';
+      if (st != 'FT' && st != 'AET' && st != 'PEN') continue;
+      final teams = f['teams'] as Map<String, dynamic>?;
+      final goals = f['goals'] as Map<String, dynamic>?;
+      if (teams == null || goals == null) continue;
+      final home = teams['home'] as Map<String, dynamic>?;
+      final away = teams['away'] as Map<String, dynamic>?;
+      if (home == null || away == null) continue;
+      final gh = (goals['home'] as num?)?.toInt() ?? 0;
+      final ga = (goals['away'] as num?)?.toInt() ?? 0;
+      final localName = home['name'] as String? ?? '';
+      final awayName = away['name'] as String? ?? '';
+      String winnerName;
+      if (gh > ga) {
+        winnerName = localName;
+      } else if (ga > gh) {
+        winnerName = awayName;
+      } else {
+        winnerName = 'Empate';
+      }
+      final round = f['league']?['round'] as String? ?? '';
+      if (round.isNotEmpty) roundMuestra ??= round;
+      items.add({
+        'localName': localName,
+        'awayName': awayName,
+        'gh': gh,
+        'ga': ga,
+        'winnerName': winnerName,
+        'empate': gh == ga,
+        'round': round,
+        'fecha': f['fixture']?['date'] as String? ?? '',
+      });
+    }
+    items.sort((a, b) => (a['fecha'] as String).compareTo(b['fecha'] as String));
+
+    final n = numeroFecha(roundMuestra);
+    final titulo = n != null
+        ? 'LIGA PROFESIONAL — FECHA R$n — GANADORES (sáb.–dom.)'
+        : 'LIGA PROFESIONAL — GANADORES FIN DE SEMANA (sáb.–dom.)';
+
+    return {
+      'titulo': titulo,
+      'round': roundMuestra ?? '',
+      'numeroFecha': n,
+      'items': items,
+      'sabado': from,
+      'domingo': to,
+    };
+  }
+
   static Map<String, List<Map<String, dynamic>>>? _tablasCache;
+
+  static int? _idFromDynamic(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
 
   static Future<Map<String, List<Map<String, dynamic>>>> getTablas() async {
     try {
@@ -145,14 +348,25 @@ class ApiService {
           if (_tablasCache != null) {
             for (final zonaKey in zonas.keys) {
               final cached = _tablasCache![zonaKey] ?? [];
-              final nuevosIds = zonas[zonaKey]!.map((e) => e['team']['id'] as int).toSet();
+              final nuevosIds = zonas[zonaKey]!
+                  .map((e) => _idFromDynamic((e['team'] as Map<String, dynamic>?)?['id']))
+                  .whereType<int>()
+                  .toSet();
               for (final eq in cached) {
-                if (!nuevosIds.contains(eq['team']['id'] as int)) zonas[zonaKey]!.add(eq);
+                final tid = _idFromDynamic((eq['team'] as Map<String, dynamic>?)?['id']);
+                if (tid != null && !nuevosIds.contains(tid)) zonas[zonaKey]!.add(eq);
+              }
+              int pts(Map<String, dynamic> x) =>
+                  (x['points'] is num) ? (x['points'] as num).toInt() : int.tryParse('${x['points']}') ?? 0;
+              int gd(Map<String, dynamic> x) {
+                final g = x['goalsDiff'];
+                if (g is num) return g.toInt();
+                return int.tryParse('$g') ?? 0;
               }
               zonas[zonaKey]!.sort((a, b) {
-                final d = (b['points'] as int? ?? 0).compareTo(a['points'] as int? ?? 0);
+                final d = pts(b).compareTo(pts(a));
                 if (d != 0) return d;
-                return ((b['goalsDiff'] as int?) ?? 0).compareTo((a['goalsDiff'] as int?) ?? 0);
+                return gd(b).compareTo(gd(a));
               });
             }
           }
@@ -241,6 +455,9 @@ class ApiService {
         }
 
         for (var f in fixtures) {
+          final m = f as Map<String, dynamic>;
+          // Igual que tabla moral / condición local-visita: solo fase por fechas, hasta antes de playoffs.
+          if (!_fixtureCuentaParaTablaMoral(m)) continue;
           final status = f['fixture']?['status']?['short'] as String? ?? '';
           if (status != 'FT' && status != 'AET' && status != 'PEN') continue;
           final ft = f['score']?['fulltime'];
@@ -355,30 +572,147 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> getFixture() async {
+    const ttl = Duration(minutes: 2);
+    final now = DateTime.now();
+    if (_fixtureFullListCache != null &&
+        _fixtureFullListCacheTime != null &&
+        now.difference(_fixtureFullListCacheTime!) < ttl) {
+      return List<Map<String, dynamic>>.from(_fixtureFullListCache!);
+    }
+    if (_fixtureFullListInFlight != null) {
+      return List<Map<String, dynamic>>.from(await _fixtureFullListInFlight!);
+    }
+    _fixtureFullListInFlight = _getFixtureInternal().then((list) {
+      _fixtureFullListCache = list;
+      _fixtureFullListCacheTime = DateTime.now();
+      return list;
+    }).whenComplete(() => _fixtureFullListInFlight = null);
+    return List<Map<String, dynamic>>.from(await _fixtureFullListInFlight!);
+  }
+
+  static Future<List<Map<String, dynamic>>> _getFixtureInternal() async {
     try {
-      Future<List<Map<String, dynamic>>> _fetchFixtures(String query) async {
-        final response = await http.get(
-          Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season$query&timezone=America/Argentina/Buenos_Aires'),
-          headers: _headers,
-        );
-        if (response.statusCode != 200) return [];
-        final fixtures = (jsonDecode(response.body)['response'] as List? ?? []);
-        return fixtures.map((f) => f as Map<String, dynamic>).toList();
+      Future<List<Map<String, dynamic>>> _fetchFixturesPaginated(
+          int season, String query) async {
+        final acc = <Map<String, dynamic>>[];
+        var page = 1;
+        while (true) {
+          try {
+            final uri = page == 1
+                ? Uri.parse(
+                    '$_baseUrl/fixtures?league=$_ligaArgentina&season=$season$query&timezone=America/Argentina/Buenos_Aires')
+                : Uri.parse(
+                    '$_baseUrl/fixtures?league=$_ligaArgentina&season=$season$query&timezone=America/Argentina/Buenos_Aires&page=$page');
+            final response = await http.get(uri, headers: _headers);
+            if (response.statusCode != 200) break;
+            final decoded = jsonDecode(response.body);
+            if (decoded is! Map<String, dynamic>) break;
+            final data = decoded;
+            final errs = data['errors'];
+            if (errs is Map && errs.isNotEmpty) break;
+            final fixtures = data['response'] as List? ?? [];
+            for (final f in fixtures) {
+              acc.add(f as Map<String, dynamic>);
+            }
+            final paging = data['paging'];
+            final totalPages = paging is Map
+                ? (paging['total'] as num?)?.toInt() ?? 1
+                : 1;
+            if (page >= totalPages || fixtures.isEmpty) break;
+            page++;
+          } catch (_) {
+            break;
+          }
+        }
+        return acc;
       }
 
-      final allFixtures = await _fetchFixtures('');
-      final nsFixtures = await _fetchFixtures('&status=NS');
-      final nsRoundOf16 = await _fetchFixtures('&status=NS&round=Round%20of%2016');
-      final nsOctavos = await _fetchFixtures('&status=NS&round=Octavos%20de%20Final');
+      Future<List<Map<String, dynamic>>> _fetchFixtures(int season, String query) async {
+        try {
+          final response = await http.get(
+            Uri.parse(
+                '$_baseUrl/fixtures?league=$_ligaArgentina&season=$season$query&timezone=America/Argentina/Buenos_Aires'),
+            headers: _headers,
+          );
+          if (response.statusCode != 200) return [];
+          final decoded = jsonDecode(response.body);
+          if (decoded is! Map<String, dynamic>) return [];
+          final fixtures = (decoded['response'] as List? ?? []);
+          return fixtures.map((f) => f as Map<String, dynamic>).toList();
+        } catch (_) {
+          return [];
+        }
+      }
 
       final Map<dynamic, Map<String, dynamic>> porFixtureId = {};
-      for (final fixture in [...allFixtures, ...nsFixtures, ...nsRoundOf16, ...nsOctavos]) {
-        final fixtureData = fixture['fixture'] as Map<String, dynamic>?;
-        final fixtureId = fixtureData?['id'];
-        if (fixtureId == null) continue;
-        porFixtureId[fixtureId] = fixture;
-      }
+      // Solo la temporada configurada: mezclar 2025 completo traía el calendario del año pasado.
+      for (final season in [_season]) {
+        final allFixtures = await _fetchFixturesPaginated(season, '');
+        final nsFixtures = await _fetchFixtures(season, '&status=NS');
+        final proximos = await _fetchFixtures(season, '&next=50');
 
+        // ── Octavos (R16): modelo que ya funcionaba — el calendario global a veces no trae KO.
+        //    GET fixtures con status=NS y round en inglés O español (misma idea en ambos).
+        final koR16NsEn =
+            await _fetchFixtures(season, '&status=NS&round=Round%20of%2016');
+        final koR16NsEs =
+            await _fetchFixtures(season, '&status=NS&round=Octavos%20de%20Final');
+
+        // ── Cuartos (R8): MISMO MODELO que R16 + refuerzos FT/TBD/LIVE (a veces el dump no los lista).
+        //    Rondas genéricas API (inglés / español / alias) + Apertura/Clausura como en el fixture oficial.
+        Future<List<Map<String, dynamic>>> koR8Layer(
+            String status, List<String> rounds) async {
+          final acc = <Map<String, dynamic>>[];
+          for (final rd in rounds) {
+            acc.addAll(await _fetchFixtures(
+                season, '&status=$status&round=${Uri.encodeComponent(rd)}'));
+            await Future.delayed(const Duration(milliseconds: 70));
+          }
+          return acc;
+        }
+
+        const r8Statuses = ['NS', 'TBD', 'FT', 'LIVE'];
+        const r8RoundsGeneric = [
+          'Round of 8',
+          'Cuartos de Final',
+          'Quarter-finals',
+        ];
+        const r8RoundsFase = [
+          'Apertura - Round of 8',
+          'Clausura - Round of 8',
+          'Apertura - Quarter-finals',
+          'Clausura - Quarter-finals',
+          'Apertura - Cuartos de Final',
+          'Clausura - Cuartos de Final',
+          '1st Phase - Quarter-finals',
+        ];
+
+        final koR8 = <Map<String, dynamic>>[];
+        for (final st in r8Statuses) {
+          koR8.addAll(await koR8Layer(st, r8RoundsGeneric));
+          koR8.addAll(await koR8Layer(st, r8RoundsFase));
+        }
+        // Sin filtrar por status (por si la API solo devuelve algunos cruces así).
+        for (final rd in r8RoundsFase) {
+          koR8.addAll(await _fetchFixtures(
+              season, '&round=${Uri.encodeComponent(rd)}'));
+          await Future.delayed(const Duration(milliseconds: 70));
+        }
+
+        for (final fixture in [
+          ...allFixtures,
+          ...nsFixtures,
+          ...koR16NsEn,
+          ...koR16NsEs,
+          ...proximos,
+          ...koR8,
+        ]) {
+          final fixtureData = fixture['fixture'] as Map<String, dynamic>?;
+          final fixtureId = fixtureData?['id'];
+          if (fixtureId == null) continue;
+          porFixtureId[fixtureId] = fixture;
+        }
+      }
       return porFixtureId.values.toList();
     } catch (e) {
       return [];
@@ -401,6 +735,261 @@ class ApiService {
     }
   }
 
+  static int _golesEncajadosEquipoEnFixture(Map<String, dynamic> f, int teamId) {
+    final homeIdRaw = f['teams']?['home']?['id'];
+    final awayIdRaw = f['teams']?['away']?['id'];
+    final hid = homeIdRaw is int ? homeIdRaw : int.tryParse('$homeIdRaw') ?? 0;
+    final aid = awayIdRaw is int ? awayIdRaw : int.tryParse('$awayIdRaw') ?? 0;
+    final gh = (f['goals']?['home'] as num?)?.toInt();
+    final ga = (f['goals']?['away'] as num?)?.toInt();
+    if (gh == null || ga == null) return -1;
+    if (teamId == hid) return ga;
+    if (teamId == aid) return gh;
+    return -1;
+  }
+
+  static int? _oponenteTeamId(Map<String, dynamic> f, int teamId) {
+    final homeIdRaw = f['teams']?['home']?['id'];
+    final awayIdRaw = f['teams']?['away']?['id'];
+    final hid =
+        homeIdRaw is int ? homeIdRaw : int.tryParse('$homeIdRaw') ?? 0;
+    final aid =
+        awayIdRaw is int ? awayIdRaw : int.tryParse('$awayIdRaw') ?? 0;
+    if (teamId == hid) return aid;
+    if (teamId == aid) return hid;
+    return null;
+  }
+
+  /// Minuto efectivo del último gol que le hicieron al equipo [teamId] (rival [opponentTeamId] anota).
+  /// Usa `elapsed` + `extra` del evento (p. ej. 90+4 → 94).
+  static int? _ultimoMinutoGolRecibido(
+      List<Map<String, dynamic>> events, int opponentTeamId) {
+    var best = -1;
+    for (final e in events) {
+      if ((e['type'] as String?) != 'Goal') continue;
+      final tidRaw = e['team']?['id'];
+      final tid = tidRaw is int ? tidRaw : int.tryParse('$tidRaw') ?? 0;
+      if (tid != opponentTeamId) continue;
+      final t = e['time'];
+      if (t is! Map) continue;
+      final elRaw = t['elapsed'];
+      final exRaw = t['extra'];
+      final el = elRaw is int ? elRaw : (elRaw is num ? elRaw.toInt() : 0);
+      final ex = exRaw is int ? exRaw : (exRaw is num ? exRaw.toInt() : 0);
+      final score = el + ex;
+      if (score > best) best = score;
+    }
+    if (best < 0) return null;
+    return best;
+  }
+
+  /// Último gol del rival en [enteredAt, leftAt] (minutos de partido del arquero en cancha).
+  static int? _ultimoMinutoGolRecibidoEnVentana(
+    List<Map<String, dynamic>> events,
+    int opponentTeamId,
+    int enteredAt,
+    int leftAt,
+  ) {
+    var best = -1;
+    for (final e in events) {
+      if ((e['type'] as String?) != 'Goal') continue;
+      final tidRaw = e['team']?['id'];
+      final tid = tidRaw is int ? tidRaw : int.tryParse('$tidRaw') ?? 0;
+      if (tid != opponentTeamId) continue;
+      final t = e['time'];
+      if (t is! Map) continue;
+      final elRaw = t['elapsed'];
+      final exRaw = t['extra'];
+      final el = elRaw is int ? elRaw : (elRaw is num ? elRaw.toInt() : 0);
+      final ex = exRaw is int ? exRaw : (exRaw is num ? exRaw.toInt() : 0);
+      final g = el + ex;
+      if (g < enteredAt || g > leftAt) continue;
+      if (g > best) best = g;
+    }
+    if (best < 0) return null;
+    return best;
+  }
+
+  static Future<List<Map<String, dynamic>>> _eventosFixtureCached(
+      int fixtureId) async {
+    if (fixtureId <= 0) return [];
+    final hit = _fixtureEventsCache[fixtureId];
+    if (hit != null) return hit;
+    final list = await getEventosPartido(fixtureId);
+    _fixtureEventsCache[fixtureId] = list;
+    return list;
+  }
+
+  static Future<List<Map<String, dynamic>>> _jugadoresFixtureCached(
+      int fixtureId) async {
+    if (fixtureId <= 0) return [];
+    final hit = _fixturePlayersCache[fixtureId];
+    if (hit != null) return hit;
+    final list = await getPlayersPartido(fixtureId.toString());
+    _fixturePlayersCache[fixtureId] = list;
+    return list;
+  }
+
+  static Future<Map<String, dynamic>?> _filaArqueroEnPartido(
+    int fixtureId,
+    int teamId,
+    int playerId,
+  ) async {
+    if (fixtureId <= 0 || teamId <= 0 || playerId <= 0) return null;
+    final lista = await _jugadoresFixtureCached(fixtureId);
+    for (final j in lista) {
+      final pid = j['id'] is int ? j['id'] as int : int.tryParse('${j['id']}') ?? 0;
+      final tid =
+          j['equipoId'] is int ? j['equipoId'] as int : int.tryParse('${j['equipoId']}') ?? 0;
+      if (pid == playerId && tid == teamId) return j;
+    }
+    return null;
+  }
+
+  static int _minutosFixtureParaRacha(Map<String, dynamic> f) {
+    final status = f['fixture']?['status']?['short'] as String? ?? '';
+    final elapsedRaw = f['fixture']?['status']?['elapsed'];
+    final el = elapsedRaw is int
+        ? elapsedRaw
+        : (elapsedRaw is num ? elapsedRaw.toInt() : 0);
+    switch (status) {
+      case 'FT':
+        return el > 0 ? el : 90;
+      case 'AET':
+        return el > 0 ? el : 120;
+      case 'PEN':
+        return el > 0 ? el : 120;
+      case 'AWD':
+      case 'WO':
+        return 90;
+      case '1H':
+      case 'HT':
+      case '2H':
+      case 'ET':
+      case 'BT':
+      case 'INT':
+      case 'LIVE':
+        return el;
+      default:
+        if (status == 'NS' || status == 'TBD' || status == 'PST' || status == 'CANC') {
+          return 0;
+        }
+        return el > 0 ? el : 90;
+    }
+  }
+
+  /// Partidos del equipo en Liga Prof. (128), temporada actual, más reciente primero.
+  ///
+  /// `fixtures?player=` devuelve error en este plan de API ("Player field do not exist");
+  /// `team` + `league` sí funciona. Primer GET **sin** `&page=` (con timezone, `page=1` rompe).
+  static Future<List<Map<String, dynamic>>> _fixturesTeamLigaArgPaginated(
+      int teamId) async {
+    if (teamId <= 0) return [];
+    final acc = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final uri = page == 1
+          ? Uri.parse(
+              '$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&team=$teamId&timezone=America/Argentina/Buenos_Aires')
+          : Uri.parse(
+              '$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&team=$teamId&timezone=America/Argentina/Buenos_Aires&page=$page');
+      final response = await http.get(uri, headers: _headers);
+      if (response.statusCode != 200) break;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final errs = data['errors'];
+      if (errs is Map && errs.isNotEmpty) break;
+      final fixtures = data['response'] as List? ?? [];
+      for (final raw in fixtures) {
+        acc.add(raw as Map<String, dynamic>);
+      }
+      final paging = data['paging'];
+      final totalPages = paging is Map
+          ? (paging['total'] as num?)?.toInt() ?? 1
+          : 1;
+      if (page >= totalPages || fixtures.isEmpty) break;
+      page++;
+    }
+    acc.sort((a, b) {
+      final da = DateTime.tryParse(a['fixture']?['date']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final db = DateTime.tryParse(b['fixture']?['date']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final c = db.compareTo(da);
+      if (c != 0) return c;
+      final ida = a['fixture']?['id'];
+      final idb = b['fixture']?['id'];
+      final ia = ida is int ? ida : int.tryParse('$ida') ?? 0;
+      final ib = idb is int ? idb : int.tryParse('$idb') ?? 0;
+      return ib.compareTo(ia);
+    });
+    return acc;
+  }
+
+  /// Minutos sin gol **solo con este arquero en cancha** (`fixtures/players`: minutos,
+  /// titular/suplente). Partidos sin jugar no suman ni cortan. Goles fuera de su ventana
+  /// (otro arquero) no cuentan para cortar su racha en ese partido.
+  static Future<int> _rachaMinutosSinGolArqueroLiga(
+      int playerId, int teamId) async {
+    final fixtures = await _fixturesTeamLigaArgPaginated(teamId);
+    if (fixtures.isEmpty) return 0;
+    var sum = 0;
+    for (final f in fixtures) {
+      final homeIdRaw = f['teams']?['home']?['id'];
+      final awayIdRaw = f['teams']?['away']?['id'];
+      final hid =
+          homeIdRaw is int ? homeIdRaw : int.tryParse('$homeIdRaw') ?? 0;
+      final aid =
+          awayIdRaw is int ? awayIdRaw : int.tryParse('$awayIdRaw') ?? 0;
+      if (teamId != hid && teamId != aid) continue;
+
+      final status = f['fixture']?['status']?['short'] as String? ?? '';
+      if (status == 'PST' || status == 'CANC') continue;
+      if (status == 'NS' || status == 'TBD') continue;
+
+      final fidRaw = f['fixture']?['id'];
+      final fid = fidRaw is int ? fidRaw : int.tryParse('$fidRaw') ?? 0;
+
+      final fila = await _filaArqueroEnPartido(fid, teamId, playerId);
+      if (fila == null) continue;
+
+      final pos = (fila['posicion'] as String? ?? '').toUpperCase();
+      if (pos != 'G' && pos != 'GOALKEEPER') continue;
+
+      final minJug = (fila['minutos'] as num?)?.toInt() ?? 0;
+      if (minJug <= 0) continue;
+
+      final total = _minutosFixtureParaRacha(f);
+      final supl = fila['suplente'] == true;
+      final enteredAt =
+          supl ? (total - minJug).clamp(0, total) : 0;
+      final leftAt = (enteredAt + minJug).clamp(0, total);
+
+      final gc = _golesEncajadosEquipoEnFixture(f, teamId);
+      if (gc < 0) continue;
+
+      final opp = _oponenteTeamId(f, teamId);
+      if (opp == null) continue;
+
+      if (gc == 0) {
+        sum += minJug;
+        continue;
+      }
+
+      final events = await _eventosFixtureCached(fid);
+      final ultimoEnVentana =
+          _ultimoMinutoGolRecibidoEnVentana(events, opp, enteredAt, leftAt);
+      if (ultimoEnVentana == null) {
+        sum += minJug;
+        continue;
+      }
+
+      final resto = (leftAt - ultimoEnVentana).clamp(0, leftAt);
+      sum += resto;
+      break;
+    }
+    return sum;
+  }
+
   static Future<List<Map<String, dynamic>>> getArqueros() async {
     try {
       // 1. Traer equipos desde standings
@@ -416,7 +1005,7 @@ class ApiService {
       }
 
       // 2. Requests en lotes de 5 con delay para evitar rate limiting
-      final List<Map<String, dynamic>> arqueros = [];
+      var arqueros = <Map<String, dynamic>>[];
       final teamList = teamIds.toList();
       const loteSize = 5;
       for (int i = 0; i < teamList.length; i += loteSize) {
@@ -447,21 +1036,63 @@ class ApiService {
             }
           } catch (_) {}
         }));
-        // Delay entre lotes para no saturar la API
+        // Pausa corta entre lotes (antes 300 ms; demasiado lento en UI).
         if (i + loteSize < teamList.length) {
-          await Future.delayed(const Duration(milliseconds: 300));
+          await Future.delayed(const Duration(milliseconds: 90));
         }
       }
 
-      // 3. Calcular minutos sin goles
+      // 3. Un jugador puede repetirse entre páginas/equipos; quedarnos con una fila por id.
+      final byPlayerId = <int, Map<String, dynamic>>{};
+      for (var a in arqueros) {
+        final rawId = a['player']?['id'];
+        final id = rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+        if (id <= 0) continue;
+        byPlayerId[id] = a;
+      }
+      arqueros = byPlayerId.values.toList();
+
+      // 4. Promedio temporada: minutos jugados (capados) / goles encajados — no es "racha" ni minutos seguidos sin gol.
       for (var a in arqueros) {
         final stats = a['statistics'][0];
-        final conceded = stats['goals']?['conceded'] as int? ?? 0;
-        final minutos = stats['games']?['minutes'] as int? ?? 0;
+        final conceded = (stats['goals']?['conceded'] as num?)?.toInt() ?? 0;
+        final apps = (stats['games']?['appearences'] as num?)?.toInt() ?? 0;
+        var minutos = (stats['games']?['minutes'] as num?)?.toInt() ?? 0;
+        final partidosParaTope = apps <= 0 ? 1 : apps;
+        final maxRazonable = 102 * partidosParaTope;
+        if (minutos > maxRazonable) minutos = maxRazonable;
+        a['minutosCapArq'] = minutos;
+        a['minPorGolRecibido'] = conceded > 0 ? (minutos / conceded).round() : null;
+        // Compat. UI `main.dart` pestaña MIN/GOL (antes en api vieja era min/concedidos o minutos si 0 GC).
         a['minutosSinGol'] = conceded > 0 ? (minutos / conceded).round() : minutos;
       }
 
-      // 4. Ordenar por menor ratio goles concedidos/partido
+      // 5. Racha Liga: minutos sin gol solo con este arquero en cancha (eventos + fixtures/players).
+      const rachaLoteSize = 4;
+      for (int i = 0; i < arqueros.length; i += rachaLoteSize) {
+        final lote = arqueros.skip(i).take(rachaLoteSize).toList();
+        await Future.wait(lote.map((a) async {
+          final rawPid = a['player']?['id'];
+          final pid = rawPid is int ? rawPid : int.tryParse('$rawPid') ?? 0;
+          final rawTid = a['statistics']?[0]?['team']?['id'];
+          final tid = rawTid is int ? rawTid : int.tryParse('$rawTid') ?? 0;
+          if (pid <= 0 || tid <= 0) {
+            a['rachaMinSinGolLiga'] = 0;
+            return;
+          }
+          try {
+            a['rachaMinSinGolLiga'] =
+                await _rachaMinutosSinGolArqueroLiga(pid, tid);
+          } catch (_) {
+            a['rachaMinSinGolLiga'] = 0;
+          }
+        }));
+        if (i + rachaLoteSize < arqueros.length) {
+          await Future.delayed(const Duration(milliseconds: 80));
+        }
+      }
+
+      // 6. Ordenar por menor ratio goles concedidos/partido
       arqueros.sort((a, b) {
         final statsA = a['statistics'][0];
         final statsB = b['statistics'][0];
@@ -493,7 +1124,9 @@ class ApiService {
     } catch (e) {
       return [];
     }
-  }static Future<List<Map<String, dynamic>>> getLineupsPartido(int fixtureId) async {
+  }
+
+  static Future<List<Map<String, dynamic>>> getLineupsPartido(int fixtureId) async {
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl/fixtures/lineups?fixture=$fixtureId'),
@@ -533,7 +1166,10 @@ class ApiService {
       final players = team['players'] as List;
       for (var p in players) {
         final stats = p['statistics'][0];
-        final rating = stats['games']['rating'];
+        final games = stats['games'] as Map<String, dynamic>? ?? {};
+        final numRaw = games['number'];
+        final dorsalVal = numRaw is int ? numRaw : int.tryParse('$numRaw') ?? 0;
+        final rating = games['rating'];
         jugadores.add({
           'id': p['player']['id'],
           'nombre': p['player']['name'],
@@ -545,11 +1181,12 @@ class ApiService {
           'tieneRating': rating != null,
           'tiros': stats['shots']['on'] ?? 0,
           'pases': stats['passes']['accuracy'] ?? 0,
-          'minutos': stats['games']['minutes'] ?? 0,
-          'posicion': stats['games']['position'] ?? '',
-          'numero': stats['games']['number'] ?? 0,
-          'capitan': stats['games']['captain'] ?? false,
-          'suplente': stats['games']['substitute'] ?? false,
+          'minutos': games['minutes'] ?? 0,
+          'posicion': games['position'] ?? '',
+          'numero': dorsalVal,
+          'dorsal': dorsalVal,
+          'capitan': games['captain'] ?? false,
+          'suplente': games['substitute'] ?? false,
           'goles': stats['goals']['total'] ?? 0,
           'asistencias': stats['goals']['assists'] ?? 0,
           'saves': stats['goals']['saves'] ?? 0,
@@ -564,6 +1201,26 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> getUltimos5(int teamId) async {
+    if (teamId <= 0) return [];
+    const ttl = Duration(minutes: 2);
+    final now = DateTime.now();
+    final t = _ultimos5CacheTime[teamId];
+    if (t != null &&
+        now.difference(t) < ttl &&
+        _ultimos5Cache.containsKey(teamId)) {
+      return List<Map<String, dynamic>>.from(_ultimos5Cache[teamId]!);
+    }
+    final f = _ultimos5InFlight.putIfAbsent(teamId, () {
+      return _getUltimos5Internal(teamId).then((list) {
+        _ultimos5Cache[teamId] = list;
+        _ultimos5CacheTime[teamId] = DateTime.now();
+        return list;
+      }).whenComplete(() => _ultimos5InFlight.remove(teamId));
+    });
+    return List<Map<String, dynamic>>.from(await f);
+  }
+
+  static Future<List<Map<String, dynamic>>> _getUltimos5Internal(int teamId) async {
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl/fixtures?team=$teamId&season=$_season&last=10'),
@@ -698,6 +1355,26 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final fixtures = data['response'] as List;
+        return fixtures.map((f) => f as Map<String, dynamic>).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Partidos del Mundial (league id 1) en curso — para tabla de grupos proyectada.
+  static Future<List<Map<String, dynamic>>> getMundialPartidosEnVivo() async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+            '$_baseUrl/fixtures?league=$_mundialId&season=$_mundialSeason&live=all'),
+        headers: _headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final fixtures = data['response'] as List?;
+        if (fixtures == null) return [];
         return fixtures.map((f) => f as Map<String, dynamic>).toList();
       }
       return [];
@@ -890,6 +1567,39 @@ class ApiService {
   static List<Map<String, dynamic>>? _prediccionesCache;
   static DateTime? _prediccionesCacheTime;
 
+  static Future<List<Map<String, dynamic>>> _fetchPrediccionesLigaTodos() async {
+    final acc = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      try {
+        final uri = page == 1
+            ? Uri.parse(
+                '$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&timezone=America/Argentina/Buenos_Aires')
+            : Uri.parse(
+                '$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&timezone=America/Argentina/Buenos_Aires&page=$page');
+        final response = await http.get(uri, headers: _headers);
+        if (response.statusCode != 200) break;
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map<String, dynamic>) break;
+        final errs = decoded['errors'];
+        if (errs is Map && errs.isNotEmpty) break;
+        final fixtures = decoded['response'] as List? ?? [];
+        for (final f in fixtures) {
+          acc.add(f as Map<String, dynamic>);
+        }
+        final paging = decoded['paging'];
+        final totalPages = paging is Map
+            ? (paging['total'] as num?)?.toInt() ?? 1
+            : 1;
+        if (page >= totalPages || fixtures.isEmpty) break;
+        page++;
+      } catch (_) {
+        break;
+      }
+    }
+    return acc;
+  }
+
   static Future<List<Map<String, dynamic>>> getPredicciones() async {
     // Cache 45 min — evita recalcular y resultados cambiantes
     if (_prediccionesCache != null && _prediccionesCacheTime != null &&
@@ -897,31 +1607,37 @@ class ApiService {
       return _prediccionesCache!;
     }
     try {
-      // 1. Traer fixture completo
-      final resFixture = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&timezone=America/Argentina/Buenos_Aires'),
-        headers: _headers,
-      );
-      if (resFixture.statusCode != 200) return [];
-      final todos = (jsonDecode(resFixture.body)['response'] as List).cast<Map<String, dynamic>>();
+      final futCopaArg = CopaService.getFixture(CopaService.leagueCopaArgentina);
+      final futLib = CopaService.getFixture(CopaService.leagueLibertadores);
+      final futSud = CopaService.getFixture(CopaService.leagueSudamericana);
 
-      // 2. Filtrar solo Apertura (primera mitad) igual que _buildFixture
-      final todosOrdenados = List<Map<String, dynamic>>.from(todos)
-        ..sort((a, b) => (a['fixture']['id'] as int).compareTo(b['fixture']['id'] as int));
-      final mitad = todosOrdenados.length ~/ 2;
-      final apertura = todosOrdenados.take(mitad).toList();
+      final todos = await _fetchPrediccionesLigaTodos();
 
-      // 3. Encontrar proxima fecha no jugada del Apertura
+      int? proximaFecha;
       Map<int, List<Map<String, dynamic>>> porFecha = {};
-      for (var p in apertura) {
-        final st = p['fixture']['status']['short'] as String;
+      if (todos.isNotEmpty) {
+      int fixtureIdSort(Map<String, dynamic> p) {
+        final raw = p['fixture']?['id'];
+        if (raw is int) return raw;
+        if (raw is num) return raw.toInt();
+        return int.tryParse('$raw') ?? 0;
+      }
+
+      final todosOrdenados = List<Map<String, dynamic>>.from(todos)
+        ..sort((a, b) => fixtureIdSort(a).compareTo(fixtureIdSort(b)));
+
+      // Toda la temporada: fechas regulares solo buckets 1–99 (ligaFixtureBucket).
+      // Antes solo se miraba la mitad de los fixtures por id y se parseaba `round`
+      // quitando no-dígitos → mezclaba playoffs en clave 0 y se perdía la próxima fecha.
+      for (final p in todosOrdenados) {
+        final st = p['fixture']?['status']?['short'] as String? ?? '';
         if (st == 'PST' || st == 'CANC' || st == 'TBD') continue;
-        final round = p['league']['round'] as String;
-        final num = int.tryParse(round.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        porFecha.putIfAbsent(num, () => []).add(p);
+        final round = (p['league']?['round'] as String?)?.trim() ?? '';
+        final b = ligaFixtureBucket(round);
+        if (b < 1 || b > 99) continue;
+        porFecha.putIfAbsent(b, () => []).add(p);
       }
       final fechas = porFecha.keys.toList()..sort();
-      int? proximaFecha;
 
       // Fecha en curso = la más alta con al menos 1 partido activo o FT
       int fechaEnCurso = 0;
@@ -947,31 +1663,231 @@ class ApiService {
           }
         }
       }
-      if (proximaFecha == null) return _prediccionesCache ?? [];
-      final partidos = porFecha[proximaFecha]!.where((p) {
-        final s = p['fixture']['status']['short'] as String;
-        return s == 'NS';
-      }).toList();
+      }
 
-      // 3. Para cada partido calcular predicción
-      final resultados = await Future.wait(partidos.map((p) async {
-        final homeId = p['teams']['home']['id'] as int;
-        final awayId = p['teams']['away']['id'] as int;
-        final homeName = p['teams']['home']['name'] as String;
-        final awayName = p['teams']['away']['name'] as String;
-        final homeLogo = p['teams']['home']['logo'] as String?;
-        final awayLogo = p['teams']['away']['logo'] as String?;
-        final fechaHora = p['fixture']['date'] as String?;
-        final venueId = p['fixture']['venue']?['id'] as int?;
-        final venueName = p['fixture']['venue']?['name'] as String? ?? '';
-        final venueCity = p['fixture']['venue']?['city'] as String? ?? '';
+      List<Map<String, dynamic>> ligaPreds = [];
+      if (proximaFecha != null) {
+        final partidos = porFecha[proximaFecha]!.where((p) {
+          final s = p['fixture']['status']['short'] as String;
+          return s == 'NS';
+        }).toList();
+        final sortKey = 'A_${proximaFecha.toString().padLeft(4, '0')}';
+        final label = 'LIGA PROFESIONAL · Fecha $proximaFecha';
+        ligaPreds = await Future.wait(partidos.map((p) => _calcularPrediccionPartido(
+              p,
+              grupoSortKey: sortKey,
+              grupoLabel: label,
+              fechaLiga: proximaFecha,
+            )));
+      }
+
+      final yaLigaFids = <int>{
+        for (final pred in ligaPreds)
+          if ((pred['fixtureId'] as int?) != null &&
+              (pred['fixtureId'] as int) > 0)
+            pred['fixtureId'] as int
+      };
+      final ligaKoPreds =
+          await _prediccionesLigaArgPlayoffsNs(todos, yaLigaFids);
+
+      final caList = await futCopaArg;
+      final libList = await futLib;
+      final sudList = await futSud;
+      final cupPreds = <Map<String, dynamic>>[];
+      cupPreds.addAll(await _prediccionesCopaNs(caList,
+          tipoOrden: 1, nombreCorto: 'COPA ARGENTINA', soloArg: false));
+      cupPreds.addAll(await _prediccionesCopaNs(libList,
+          tipoOrden: 2, nombreCorto: 'LIBERTADORES', soloArg: true));
+      cupPreds.addAll(await _prediccionesCopaNs(sudList,
+          tipoOrden: 3, nombreCorto: 'SUDAMERICANA', soloArg: true));
+
+      final all = [...ligaPreds, ...ligaKoPreds, ...cupPreds];
+      all.sort((a, b) {
+        final c = (a['grupoSortKey'] as String).compareTo(b['grupoSortKey'] as String);
+        if (c != 0) return c;
+        final da = a['fechaHora'] as String? ?? '';
+        final db = b['fechaHora'] as String? ?? '';
+        return da.compareTo(db);
+      });
+
+      if (all.isEmpty) return _prediccionesCache ?? [];
+
+      _prediccionesCache = all;
+      _prediccionesCacheTime = DateTime.now();
+      return all;
+    } catch (e) {
+      return _prediccionesCache ?? [];
+    }
+  }
+
+  static bool _fixtureInvolucraArgentinoConmebol(Map<String, dynamic> p) {
+    final hId = '${p['teams']?['home']?['id'] ?? ''}';
+    final aId = '${p['teams']?['away']?['id'] ?? ''}';
+    if (_equiposArgTablaDT.contains(hId) || _equiposArgTablaDT.contains(aId)) {
+      return true;
+    }
+    final h = p['teams']?['home']?['country'] as String? ?? '';
+    final a = p['teams']?['away']?['country'] as String? ?? '';
+    return h == 'Argentina' || a == 'Argentina';
+  }
+
+  static String _labelDiaPrediccion(DateTime dt) {
+    const dias = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    return '${dias[dt.weekday]} ${dt.day}/${dt.month}';
+  }
+
+  static Future<List<Map<String, dynamic>>> _prediccionesCopaNs(
+    List<Map<String, dynamic>> fixtures, {
+    required int tipoOrden,
+    required String nombreCorto,
+    required bool soloArg,
+  }) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final candidatos = <Map<String, Object>>[];
+    final seen = <int>{};
+    for (final p in fixtures) {
+      if (soloArg && !_fixtureInvolucraArgentinoConmebol(p)) continue;
+      final st = p['fixture']?['status']?['short'] as String? ?? '';
+      if (st != 'NS') continue;
+      final idRaw = p['fixture']?['id'];
+      final id = idRaw is int ? idRaw : int.tryParse('$idRaw') ?? 0;
+      if (id == 0 || !seen.add(id)) continue;
+      final ds = p['fixture']?['date'] as String?;
+      if (ds == null) continue;
+      DateTime dt;
+      try {
+        dt = DateTime.parse(ds).toLocal();
+      } catch (_) {
+        continue;
+      }
+      final dOnly = DateTime(dt.year, dt.month, dt.day);
+      if (dOnly.isBefore(today)) continue;
+      final ymd =
+          '${dOnly.year}${dOnly.month.toString().padLeft(2, '0')}${dOnly.day.toString().padLeft(2, '0')}';
+      final sortKey = 'B_${ymd}_$tipoOrden';
+      final ronda = (p['league']?['round'] as String?)?.trim() ?? '';
+      final sufRonda = ronda.isNotEmpty ? ' · $ronda' : '';
+      final label = '$nombreCorto · ${_labelDiaPrediccion(dt)}$sufRonda';
+      candidatos.add({'p': p, 'sortKey': sortKey, 'label': label});
+    }
+    candidatos.sort((a, b) =>
+        (a['sortKey'] as String).compareTo(b['sortKey'] as String));
+    final out = <Map<String, dynamic>>[];
+    const batch = 3;
+    for (var i = 0; i < candidatos.length; i += batch) {
+      final slice = candidatos.skip(i).take(batch).toList();
+      out.addAll(await Future.wait(slice.map((c) => _calcularPrediccionPartido(
+            c['p'] as Map<String, dynamic>,
+            grupoSortKey: c['sortKey'] as String,
+            grupoLabel: c['label'] as String,
+            fechaLiga: null,
+          ))));
+      if (i + batch < candidatos.length) {
+        await Future.delayed(const Duration(milliseconds: 220));
+      }
+    }
+    return out;
+  }
+
+  /// Eliminatorias LPF (128): octavos/cuartos/semis/final — no entran en el reparto por "fecha" regular
+  /// (además `getPredicciones` solo miraba la mitad de los fixtures por id).
+  static Future<List<Map<String, dynamic>>> _prediccionesLigaArgPlayoffsNs(
+    List<Map<String, dynamic>> todos,
+    Set<int> excluirFixtureIds,
+  ) async {
+    const faseEtiqueta = <int, String>{
+      200: 'Octavos de final',
+      300: 'Cuartos de final',
+      400: 'Semifinales',
+      500: 'Final',
+      999: 'Eliminatorias',
+    };
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final candidatos = <Map<String, Object>>[];
+    for (final p in todos) {
+      final st = p['fixture']?['status']?['short'] as String? ?? '';
+      if (st != 'NS') continue;
+      final idRaw = p['fixture']?['id'];
+      final id = idRaw is int ? idRaw : int.tryParse('$idRaw') ?? 0;
+      if (id == 0 || excluirFixtureIds.contains(id)) continue;
+      final round = (p['league']?['round'] as String?)?.trim() ?? '';
+      final b = ligaFixtureBucket(round);
+      final fase = faseEtiqueta[b];
+      if (fase == null) continue;
+      final ds = p['fixture']?['date'] as String?;
+      if (ds == null) continue;
+      DateTime dt;
+      try {
+        dt = DateTime.parse(ds).toLocal();
+      } catch (_) {
+        continue;
+      }
+      final dOnly = DateTime(dt.year, dt.month, dt.day);
+      if (dOnly.isBefore(today)) continue;
+      final sortKey = 'A_LKO_${b.toString().padLeft(3, '0')}';
+      final label =
+          'LIGA PROFESIONAL · $fase · ${_labelDiaPrediccion(dt)}${round.isNotEmpty ? ' · $round' : ''}';
+      candidatos.add({'p': p, 'sortKey': sortKey, 'label': label});
+    }
+    candidatos.sort((a, b) {
+      final c = (a['sortKey'] as String).compareTo(b['sortKey'] as String);
+      if (c != 0) return c;
+      final da =
+          (a['p'] as Map<String, dynamic>)['fixture']?['date'] as String? ?? '';
+      final db =
+          (b['p'] as Map<String, dynamic>)['fixture']?['date'] as String? ?? '';
+      return da.compareTo(db);
+    });
+    final out = <Map<String, dynamic>>[];
+    const batch = 3;
+    for (var i = 0; i < candidatos.length; i += batch) {
+      final slice = candidatos.skip(i).take(batch).toList();
+      out.addAll(await Future.wait(slice.map((c) => _calcularPrediccionPartido(
+            c['p'] as Map<String, dynamic>,
+            grupoSortKey: c['sortKey'] as String,
+            grupoLabel: c['label'] as String,
+            fechaLiga: null,
+          ))));
+      if (i + batch < candidatos.length) {
+        await Future.delayed(const Duration(milliseconds: 220));
+      }
+    }
+    return out;
+  }
+
+  static Future<Map<String, dynamic>> _calcularPrediccionPartido(
+    Map<String, dynamic> p, {
+    required String grupoSortKey,
+    required String grupoLabel,
+    int? fechaLiga,
+  }) async {
+    final fidRaw = p['fixture']?['id'];
+    final fixtureId = fidRaw is int ? fidRaw : int.tryParse('$fidRaw') ?? 0;
+    final leagueStatId =
+        (p['league']?['id'] as num?)?.toInt() ?? _ligaArgentina;
+    final seasonStat = (p['league']?['season'] as num?)?.toInt() ?? _season;
+
+    final homeRaw = p['teams']?['home']?['id'];
+    final awayRaw = p['teams']?['away']?['id'];
+    final homeId = homeRaw is int ? homeRaw : int.tryParse('$homeRaw') ?? 0;
+    final awayId = awayRaw is int ? awayRaw : int.tryParse('$awayRaw') ?? 0;
+    final homeName = p['teams']?['home']?['name'] as String? ?? '';
+    final awayName = p['teams']?['away']?['name'] as String? ?? '';
+    final homeLogo = p['teams']?['home']?['logo'] as String?;
+    final awayLogo = p['teams']?['away']?['logo'] as String?;
+    final fechaHora = p['fixture']?['date'] as String?;
+    final venueId = p['fixture']?['venue']?['id'] as int?;
+    final venueName = p['fixture']?['venue']?['name'] as String? ?? '';
+    final venueCity = p['fixture']?['venue']?['city'] as String? ?? '';
 
         final results = await Future.wait([
           getUltimos5(homeId),
           getUltimos5(awayId),
           getHeadToHead(homeId, awayId),
-          getStatsEquipo(homeId),
-          getStatsEquipo(awayId),
+          getStatsEquipoTorneo(homeId, leagueStatId, seasonStat),
+          getStatsEquipoTorneo(awayId, leagueStatId, seasonStat),
         ]);
         final ultLocal = results[0] as List<Map<String, dynamic>>;
         final ultVisit = results[1] as List<Map<String, dynamic>>;
@@ -1159,7 +2075,8 @@ class ApiService {
         }
 
 
-        return {
+    return {
+          'fixtureId': fixtureId,
           'homeId': homeId, 'awayId': awayId,
           'homeName': homeName, 'awayName': awayName,
           'homeLogo': homeLogo, 'awayLogo': awayLogo,
@@ -1171,20 +2088,16 @@ class ApiService {
           'formaLocal': formaRecLocal, 'formaVisit': formaRecVisit,
           'h2hLocal': h2hLocal, 'h2hEmpate': h2hEmpate, 'h2hVisit': h2hVisit,
           'golesLocalPred': golesLocalPred, 'golesVisitPred': golesVisitPred,
-          'fecha': proximaFecha,
+          'fecha': fechaLiga ?? 0,
+          'grupoSortKey': grupoSortKey,
+          'grupoLabel': grupoLabel,
         };
-      }));
-
-      _prediccionesCache = resultados;
-      _prediccionesCacheTime = DateTime.now();
-      return resultados;
-    } catch (e) {
-      return _prediccionesCache ?? [];
-    }
   }
 
-  // Cache para TablaDTs
+  // Cache para TablaDTs (deduplicar peticiones en vuelo: evita carreras que dejan la caché vacía).
   static List<Map<String, dynamic>>? _tablaDTsCache;
+  static Future<List<Map<String, dynamic>>>? _tablaDTsInFlight;
+  static int _tablaDTsEpoch = 0;
 
   static List<Map<String, dynamic>>? _tablaPosesionCache;
   static DateTime? _tablaPosesionCacheTime;
@@ -1374,6 +2287,31 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getTablaDTs({bool forceRefresh = false}) async {
     if (!forceRefresh && _tablaDTsCache != null) return _tablaDTsCache!;
+
+    if (forceRefresh) {
+      _tablaDTsEpoch++;
+      if (_tablaDTsInFlight != null) {
+        await _tablaDTsInFlight;
+      }
+      _tablaDTsCache = null;
+    }
+
+    if (_tablaDTsInFlight != null) {
+      return List<Map<String, dynamic>>.from(await _tablaDTsInFlight!);
+    }
+
+    final epochAtStart = _tablaDTsEpoch;
+    final fut = _getTablaDTsInternal(epochAtStart);
+    _tablaDTsInFlight = fut;
+    fut.whenComplete(() {
+      if (identical(_tablaDTsInFlight, fut)) {
+        _tablaDTsInFlight = null;
+      }
+    });
+    return List<Map<String, dynamic>>.from(await fut);
+  }
+
+  static Future<List<Map<String, dynamic>>> _getTablaDTsInternal(int epochAtStart) async {
     try {
       // Liga + copas (argentinos), terminados, orden cronológico ascendente
       final fixtures = await _fixturesLigaYCopasArgParaDTs();
@@ -1458,7 +2396,7 @@ class ApiService {
           } catch (_) {}
         }));
         if (i + loteSize < fixtures.length) {
-          await Future.delayed(const Duration(milliseconds: 200));
+          await Future.delayed(const Duration(milliseconds: 90));
         }
       }
 
@@ -1521,7 +2459,9 @@ class ApiService {
       }).toList()
         ..sort((a, b) => (b['pctPuntos'] as double).compareTo(a['pctPuntos'] as double));
 
-      _tablaDTsCache = result;
+      if (epochAtStart == _tablaDTsEpoch) {
+        _tablaDTsCache = result;
+      }
       return result;
     } catch (e) {
       return _tablaDTsCache ?? [];
@@ -1733,6 +2673,26 @@ class ApiService {
     }
   }
 
+  /// Estadísticas del equipo en un torneo concreto (copa); si la API no devuelve datos, cae a la Liga Prof.
+  static Future<Map<String, dynamic>> getStatsEquipoTorneo(
+      int teamId, int leagueId, int season) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+            '$_baseUrl/teams/statistics?team=$teamId&season=$season&league=$leagueId'),
+        headers: _headers,
+      );
+      if (response.statusCode != 200) return getStatsEquipo(teamId);
+      final data = jsonDecode(response.body);
+      final raw = data['response'];
+      if (raw == null) return getStatsEquipo(teamId);
+      if (raw is Map && raw.isEmpty) return getStatsEquipo(teamId);
+      return Map<String, dynamic>.from(raw as Map);
+    } catch (_) {
+      return getStatsEquipo(teamId);
+    }
+  }
+
   static Future<String> getAlertaIA({
     required String local,
     required String visitante,
@@ -1808,7 +2768,8 @@ class ApiService {
       return 'Sin análisis disponible.';
     }
   }
-  static const int _copaArgentina = 515;
+  /// Copa Argentina (API-Sports id **130**). El 515 es otra competencia (Argelia U21).
+  static const int _copaArgentina = 130;
 
   // Equipos de la liga para onboarding
   static Future<List<Map<String, dynamic>>> getEquiposLiga() async {
@@ -1863,15 +2824,31 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getFixtureCopa() async {
     for (final season in [_season, 2025]) {
       try {
-        final response = await http.get(
-          Uri.parse('$_baseUrl/fixtures?league=$_copaArgentina&season=$season'),
-          headers: _headers,
-        );
-        if (response.statusCode == 200) {
-          final fixtures = (jsonDecode(response.body)['response'] as List);
-          if (fixtures.isNotEmpty) return fixtures.map((f) => f as Map<String, dynamic>).toList();
+        final acc = <Map<String, dynamic>>[];
+        var page = 1;
+        while (true) {
+          final response = await http.get(
+            Uri.parse(
+                '$_baseUrl/fixtures?league=$_copaArgentina&season=$season&page=$page'),
+            headers: _headers,
+          );
+          if (response.statusCode != 200) break;
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final fixtures = data['response'] as List? ?? [];
+          for (final f in fixtures) {
+            acc.add(f as Map<String, dynamic>);
+          }
+          final paging = data['paging'];
+          final totalPages = paging is Map
+              ? (paging['total'] as num?)?.toInt() ?? 1
+              : 1;
+          if (page >= totalPages || fixtures.isEmpty) break;
+          page++;
         }
-      } catch (_) { continue; }
+        if (acc.isNotEmpty) return acc;
+      } catch (_) {
+        continue;
+      }
     }
     return [];
   }
@@ -1992,10 +2969,12 @@ class ApiService {
 
   /// Tabla moral = solo fase de liga por fechas. Excluye play-offs bajo el mismo league id.
   /// API-Sports: a veces `Regular Season - N`, en LPF 2026 suele ser `Apertura - N` / `Clausura - N`;
-  /// excluye `Apertura - Round of 16`, etc.
+  /// excluye `Apertura - Round of 16`, octavos/cuartos/semis/final, etc.
+  /// También usado por [getTablasTiempos] (1er y 2do tiempo): mismos partidos que la moral.
   static bool _fixtureCuentaParaTablaMoral(Map<String, dynamic> f) {
     final round = (f['league']?['round'] as String? ?? '').trim();
     if (round.isEmpty) return false;
+    if (_esRondaPlayoffsLigaArg(round)) return false;
     final lower = round.toLowerCase();
     if (lower.contains('play-off') || lower.contains('playoff')) return false;
     if (lower.contains('round of')) return false;
@@ -2005,7 +2984,34 @@ class ApiService {
     return false;
   }
 
+  static Map<String, List<Map<String, dynamic>>> _copyTablaMoral(
+      Map<String, List<Map<String, dynamic>>> src) {
+    return {
+      for (final e in src.entries)
+        e.key: e.value.map((m) => Map<String, dynamic>.from(m)).toList(),
+    };
+  }
+
   static Future<Map<String, List<Map<String, dynamic>>>> getTablaMoral() async {
+    const ttl = Duration(seconds: 90);
+    final now = DateTime.now();
+    if (_tablaMoralResultCache != null &&
+        _tablaMoralResultCacheTime != null &&
+        now.difference(_tablaMoralResultCacheTime!) < ttl) {
+      return _copyTablaMoral(_tablaMoralResultCache!);
+    }
+    if (_tablaMoralInFlight != null) {
+      return _copyTablaMoral(await _tablaMoralInFlight!);
+    }
+    _tablaMoralInFlight = _getTablaMoralInternal().then((m) {
+      _tablaMoralResultCache = m;
+      _tablaMoralResultCacheTime = DateTime.now();
+      return m;
+    }).whenComplete(() => _tablaMoralInFlight = null);
+    return _copyTablaMoral(await _tablaMoralInFlight!);
+  }
+
+  static Future<Map<String, List<Map<String, dynamic>>>> _getTablaMoralInternal() async {
     try {
       // PASO 1: Standings + Fixtures usando cache global (1 request cada uno en toda la sesión)
       final standData = await _getStandingsData();
@@ -2281,7 +3287,7 @@ for (final f in jugados) {
         final totalPages = data['paging']?['total'] as int? ?? 1;
         if (page >= totalPages) break;
         page++;
-        await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 90));
       }
       return todos;
     } catch (e) { return []; }
@@ -2301,27 +3307,29 @@ for (final f in jugados) {
   // Carrera histórica de jugadores en selección
   static Future<List<dynamic>> getCarreraJugadoresSeleccion(int teamId) async {
     try {
-      // Traer plantel primero para obtener IDs
       final squad = await getPlantelSeleccion(teamId);
       if (squad.isEmpty) return [];
-      final List<dynamic> result = [];
-      // Procesar solo primeros 10 para no gastar calls
+      // Máx. 10 jugadores; en paralelo (antes: 10 × HTTP en serie + 300 ms → ~3 s solo en esperas).
       final top = squad.take(10).toList();
-      for (final p in top) {
+      Future<dynamic> fetchRow(dynamic p) async {
         final playerId = p['id'] as int?;
-        if (playerId == null) continue;
+        if (playerId == null) return null;
         try {
           final uri = Uri.parse('$_baseUrl/players?id=$playerId&season=2024');
           final res = await http.get(uri, headers: _headers);
           final data = jsonDecode(res.body);
           if (data['response'] != null && (data['response'] as List).isNotEmpty) {
-            result.add(data['response'][0]);
+            return data['response'][0];
           }
         } catch (_) {}
-        await Future.delayed(const Duration(milliseconds: 300));
+        return null;
       }
-      return result;
-    } catch (e) { return []; }
+
+      final outs = await Future.wait(top.map(fetchRow));
+      return outs.where((e) => e != null).toList();
+    } catch (e) {
+      return [];
+    }
   }
 
 
@@ -2776,7 +3784,26 @@ for (final f in jugados) {
     }
   }
 
-static Future<Map<String, dynamic>> getIndiceMatchgol() async {
+  static Future<Map<String, dynamic>> getIndiceMatchgol() async {
+    const ttl = Duration(minutes: 4);
+    final now = DateTime.now();
+    if (_indiceMatchgolCache != null &&
+        _indiceMatchgolCacheTime != null &&
+        now.difference(_indiceMatchgolCacheTime!) < ttl) {
+      return Map<String, dynamic>.from(_indiceMatchgolCache!);
+    }
+    if (_indiceMatchgolInFlight != null) {
+      return Map<String, dynamic>.from(await _indiceMatchgolInFlight!);
+    }
+    _indiceMatchgolInFlight = _getIndiceMatchgolInternal().then((m) {
+      _indiceMatchgolCache = m;
+      _indiceMatchgolCacheTime = DateTime.now();
+      return m;
+    }).whenComplete(() => _indiceMatchgolInFlight = null);
+    return Map<String, dynamic>.from(await _indiceMatchgolInFlight!);
+  }
+
+  static Future<Map<String, dynamic>> _getIndiceMatchgolInternal() async {
     try {
       final Map<int, Map<String, dynamic>> merged = {};
       final Set<int> seen = {};
@@ -2817,6 +3844,7 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
         if (players.isEmpty) break;
         absorb(players);
         page++;
+        if (page % 4 == 0) await Future<void>.delayed(Duration.zero);
       }
       final List<Map<String, dynamic>> all = [];
       for (final item in merged.values) {
@@ -2836,12 +3864,128 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
       }
       return {'best': all.isNotEmpty ? all[0] : <String, dynamic>{}, 'top10': all.take(10).toList(), 'byPos': byPos};
     } catch (e) {
-      return {'best': <String, dynamic>{}, 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
+      return {'best': <String, dynamic>{}, 'top10': <Map<String, dynamic>>[], 'byPos': {'G': [], 'D': [], 'M': [], 'F': []}};
     }
   }
+  /// Último resultado de [getAlFilo]: si la lista se armó en modo playoffs (para subtítulos en UI).
+  static bool ultimoAlFiloEsPlayoffsLiga = false;
+
+  /// True si el calendario de Liga Argentina ya incluye rondas knockout (octavos en adelante).
+  static Future<bool> ligaArgentinaHayPlayoffs() async {
+    try {
+      final todos = await getFixture();
+      return _hayPlayoffsLigaArgEnFixtures(todos);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _hayPlayoffsLigaArgEnFixtures(List<Map<String, dynamic>> todos) {
+    for (final f in todos) {
+      if (_esRondaPlayoffsLigaArg(f['league']?['round'] as String?)) return true;
+    }
+    return false;
+  }
+
+  static bool _esRondaPlayoffsLigaArg(String? round) {
+    if (round == null || round.isEmpty) return false;
+    final r = round.toLowerCase();
+    if (r.contains('regular season') || r.contains('fase regular')) return false;
+    return r.contains('round of 16') ||
+        r.contains('octavos') ||
+        r.contains('1/8') ||
+        r.contains('eighth') ||
+        r.contains('quarter') ||
+        r.contains('cuartos') ||
+        r.contains('1/4') ||
+        r.contains('semi') ||
+        r.contains('final');
+  }
+
+  /// Amarillas solo en partidos knockout ya jugados; **nunca** suspensión por amarilla en playoffs.
+  static Future<List<Map<String, dynamic>>> _getAlFiloAmarillasSoloPlayoffs(
+      List<Map<String, dynamic>> todosFixture) async {
+    final playoffFixtures = todosFixture
+        .where((f) => _esRondaPlayoffsLigaArg(f['league']?['round'] as String?))
+        .toList();
+    final jugables = playoffFixtures.where((f) {
+      final s = f['fixture']?['status']?['short'] as String? ?? '';
+      return s == 'FT' || s == 'AET' || s == 'PEN';
+    }).toList();
+
+    final acumulado = <String, Map<String, dynamic>>{};
+    var n = 0;
+    for (final fixture in jugables) {
+      final fixtureId = fixture['fixture']?['id'];
+      if (fixtureId == null) continue;
+      final homeId = fixture['teams']?['home']?['id'];
+      final awayId = fixture['teams']?['away']?['id'];
+      final homeName = fixture['teams']?['home']?['name'] as String? ?? '';
+      final awayName = fixture['teams']?['away']?['name'] as String? ?? '';
+      final homeLogo = fixture['teams']?['home']?['logo'] as String? ?? '';
+      final awayLogo = fixture['teams']?['away']?['logo'] as String? ?? '';
+
+      final evResponse = await http.get(
+        Uri.parse('$_baseUrl/fixtures/events?fixture=$fixtureId'),
+        headers: _headers,
+      );
+      if (evResponse.statusCode != 200) continue;
+      final events = jsonDecode(evResponse.body)['response'] as List? ?? [];
+      for (final e in events) {
+        if ((e['type'] as String? ?? '') != 'Card') continue;
+        final detail = (e['detail'] as String? ?? '').toLowerCase();
+        if (!detail.contains('yellow')) continue;
+        if (detail.contains('second yellow')) continue;
+
+        final playerName = e['player']?['name'] as String? ?? '';
+        if (playerName.isEmpty) continue;
+        final playerId = e['player']?['id'];
+        final teamId = e['team']?['id'];
+        final isHome = teamId != null && homeId != null && teamId == homeId;
+        final equipo = isHome ? homeName : awayName;
+        final logoEquipo = isHome ? homeLogo : awayLogo;
+        final key = '${playerId ?? playerName}-$teamId';
+
+        acumulado.putIfAbsent(
+          key,
+          () => {
+            'nombre': playerName,
+            'foto': '',
+            'equipo': equipo,
+            'logoEquipo': logoEquipo,
+            'amarillas': 0,
+            'suspension': false,
+            'playoffsLiga': true,
+          },
+        );
+        acumulado[key]!['amarillas'] = (acumulado[key]!['amarillas'] as int) + 1;
+      }
+      n++;
+      if (n % 5 == 0) await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+
+    final result = acumulado.values
+        .where((j) {
+          final am = j['amarillas'] as int? ?? 0;
+          return am == 4 || am == 9;
+        })
+        .map((j) => Map<String, dynamic>.from(j))
+        .toList();
+    result.sort((a, b) => (b['amarillas'] as int).compareTo(a['amarillas'] as int));
+    return result;
+  }
+
   // ── AL FILO — jugadores con 4 o 9 amarillas ─────────────────
   static Future<List<Map<String, dynamic>>> getAlFilo() async {
     try {
+      final todosFixture = await getFixture();
+      final playoffs = _hayPlayoffsLigaArgEnFixtures(todosFixture);
+      ultimoAlFiloEsPlayoffsLiga = playoffs;
+
+      if (playoffs) {
+        return await _getAlFiloAmarillasSoloPlayoffs(todosFixture);
+      }
+
       final List<Map<String, dynamic>> result = [];
       int page = 1;
       int totalPages = 1;
@@ -2865,6 +4009,7 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
                 'logoEquipo': st['team']?['logo'] ?? '',
                 'amarillas': amarillas,
                 'suspension': amarillas == 5 || amarillas == 10,
+                'playoffsLiga': false,
               });
             }
           }
@@ -2874,9 +4019,10 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
       result.sort((a, b) => (b['amarillas'] as int).compareTo(a['amarillas'] as int));
       return result;
     } catch (e) {
+      ultimoAlFiloEsPlayoffsLiga = false;
       return [];
     }
-}  // cierre getAlFilo
+  }
   // ── EXPULSADOS ÚLTIMA FECHA ──────────────────────────────────
   static Future<List<Map<String, dynamic>>> getExpulsadosUltimaFecha() async {
     try {
@@ -2922,5 +4068,380 @@ static Future<Map<String, dynamic>> getIndiceMatchgol() async {
     } catch (e) {
       return [];
     }
+  }
+
+  // ── PERFIL JUGADOR (carrera aproximada vía API) ───────────────────────────
+  static Future<Map<String, dynamic>?> getPlayerProfileApi(int playerId) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/players/profiles?player=$playerId'),
+        headers: _headers,
+      );
+      if (r.statusCode != 200) return null;
+      final decoded = jsonDecode(r.body) as Map<String, dynamic>;
+      final raw = decoded['response'];
+      Map<String, dynamic>? normalize(dynamic item) {
+        if (item is! Map) return null;
+        final m = Map<String, dynamic>.from(item);
+        if (m.containsKey('player')) return m;
+        return {'player': m};
+      }
+      if (raw is List && raw.isNotEmpty) {
+        return normalize(raw.first);
+      }
+      if (raw is Map) {
+        return normalize(raw);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Pares (teamId, season) devueltos por `players/teams`.
+  static Future<List<Map<String, int>>> getPlayerTeamSeasonHistory(int playerId) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/players/teams?player=$playerId'),
+        headers: _headers,
+      );
+      if (r.statusCode != 200) return [];
+      final list = jsonDecode(r.body)['response'] as List? ?? [];
+      final seen = <String, Map<String, int>>{};
+      for (final row in list) {
+        final tid = (row['team'] as Map<String, dynamic>?)?['id'] as int?;
+        final seasons = row['seasons'] as List? ?? [];
+        if (tid == null) continue;
+        for (final s in seasons) {
+          final y = s is int ? s : int.tryParse('$s') ?? 0;
+          if (y <= 0) continue;
+          seen['$tid-$y'] = {'team': tid, 'season': y};
+        }
+      }
+      final out = seen.values.toList();
+      out.sort((a, b) => (b['season']!).compareTo(a['season']!));
+      return out;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Filas para UI: nombre, escudo y año en cada club (`players/teams`).
+  static Future<List<Map<String, dynamic>>> getPlayerClubsHistoryDisplay(
+      int playerId) async {
+    if (playerId <= 0) return [];
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/players/teams?player=$playerId'),
+        headers: _headers,
+      );
+      if (r.statusCode != 200) return [];
+      final list = jsonDecode(r.body)['response'] as List? ?? [];
+      final rows = <Map<String, dynamic>>[];
+      for (final row in list) {
+        if (row is! Map) continue;
+        final team = row['team'] as Map<String, dynamic>?;
+        if (team == null) continue;
+        final nombre = team['name'] as String? ?? '';
+        final logo = team['logo'] as String? ?? '';
+        final tid = (team['id'] as num?)?.toInt() ?? 0;
+        final seasons = row['seasons'] as List? ?? [];
+        for (final s in seasons) {
+          final y = s is int ? s : int.tryParse('$s') ?? 0;
+          if (y <= 0) continue;
+          rows.add({
+            'teamId': tid,
+            'nombre': nombre,
+            'logo': logo,
+            'anio': y,
+          });
+        }
+      }
+      rows.sort((a, b) => (b['anio'] as int).compareTo(a['anio'] as int));
+      return rows;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Equipo de club más reciente del jugador, excluyendo la selección ([excluirTeamId]).
+  static Future<Map<String, dynamic>?> getClubActualExcluyendoEquipo(
+    int playerId,
+    int excluirTeamId,
+  ) async {
+    if (playerId <= 0) return null;
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/players/teams?player=$playerId'),
+        headers: _headers,
+      );
+      if (r.statusCode != 200) return null;
+      final list = jsonDecode(r.body)['response'] as List? ?? [];
+      var bestYear = 0;
+      Map<String, dynamic>? best;
+      for (final row in list) {
+        if (row is! Map) continue;
+        final team = row['team'] as Map<String, dynamic>?;
+        if (team == null) continue;
+        final tid = team['id'] as int? ?? 0;
+        if (tid == excluirTeamId || tid <= 0) continue;
+        final seasons = row['seasons'] as List? ?? [];
+        for (final s in seasons) {
+          final y = s is int ? s : int.tryParse('$s') ?? 0;
+          if (y > bestYear) {
+            bestYear = y;
+            best = {
+              'id': tid,
+              'nombre': team['name'] as String? ?? '',
+              'logo': team['logo'] as String? ?? '',
+              'temporada': y,
+            };
+          }
+        }
+      }
+      return best;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> _fetchPlayerFullRow(int playerId) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/players?id=$playerId'),
+        headers: _headers,
+      );
+      if (r.statusCode != 200) return null;
+      final resp = jsonDecode(r.body)['response'] as List?;
+      if (resp == null || resp.isEmpty) return null;
+      final first = resp.first;
+      if (first is Map<String, dynamic>) return first;
+      if (first is Map) return Map<String, dynamic>.from(first);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _ligaStatEsSeleccion(Map<String, dynamic> stat) {
+    final league = stat['league'];
+    if (league is! Map) return false;
+    final country = (league['country'] as String? ?? '').toLowerCase();
+    final name = (league['name'] as String? ?? '').toLowerCase();
+    if (country == 'world') return true;
+    const keys = [
+      'world cup',
+      'copa america',
+      'copa américa',
+      'euro championship',
+      'uefa nations',
+      'nations league',
+      'africa cup',
+      'asian cup',
+      'gold cup',
+      'wc qualification',
+      'world cup - qualification',
+      'olympic',
+      'olímpico',
+      'friend',
+    ];
+    for (final k in keys) {
+      if (name.contains(k)) return true;
+    }
+    return false;
+  }
+
+  static Map<String, dynamic> _extraerDorsalYSeleccion(
+    Map<String, dynamic>? apiRow,
+    int? clubTeamId,
+  ) {
+    var dorsal = 0;
+    var tieneSel = false;
+    var pjSelTotal = 0;
+    var golesSelTotal = 0;
+    String? clubStatNombre;
+    String? clubStatLogo;
+    final detalles = <String>[];
+    final stats = apiRow?['statistics'] as List? ?? [];
+    Map<String, dynamic>? statClub;
+    for (final raw in stats) {
+      if (raw is! Map) continue;
+      final m = Map<String, dynamic>.from(raw);
+      if (_ligaStatEsSeleccion(m)) {
+        tieneSel = true;
+        final lname = m['league']?['name'] as String? ?? '';
+        final season = m['season']?.toString() ?? '';
+        final pj = (m['games']?['appearences'] as num?)?.toInt() ??
+            (m['games']?['appearances'] as num?)?.toInt() ??
+            0;
+        final g = (m['goals']?['total'] as num?)?.toInt() ?? 0;
+        pjSelTotal += pj;
+        golesSelTotal += g;
+        if (lname.isNotEmpty) {
+          detalles.add(
+              pj > 0 ? '$lname ($season) · $pj PJ' : '$lname ($season)');
+        }
+      }
+      final tid = (m['team']?['id'] as num?)?.toInt();
+      if (clubTeamId != null && tid == clubTeamId) {
+        statClub = m;
+        final teamMap = m['team'] as Map<String, dynamic>?;
+        clubStatNombre = teamMap?['name'] as String? ?? clubStatNombre;
+        clubStatLogo = teamMap?['logo'] as String? ?? clubStatLogo;
+      }
+    }
+    statClub ??= stats.isNotEmpty && stats.first is Map
+        ? Map<String, dynamic>.from(stats.first as Map)
+        : null;
+    if (statClub != null) {
+      final g = statClub['games'] as Map<String, dynamic>?;
+      final n = g?['number'];
+      dorsal = n is int ? n : int.tryParse('$n') ?? 0;
+    }
+    return {
+      'dorsal': dorsal,
+      'tieneSeleccion': tieneSel,
+      'seleccionPjTotal': pjSelTotal,
+      'seleccionGolesTotal': golesSelTotal,
+      'clubStatNombre': clubStatNombre,
+      'clubStatLogo': clubStatLogo,
+      'seleccionDetalle':
+          detalles.isNotEmpty ? detalles.take(5).join('\n') : null,
+    };
+  }
+
+  static Future<Map<String, int>?> _fetchPlayerSeasonStatsTriple(
+    int playerId,
+    int teamId,
+    int season,
+  ) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/players?id=$playerId&team=$teamId&season=$season'),
+        headers: _headers,
+      );
+      if (r.statusCode != 200) return null;
+      final resp = jsonDecode(r.body)['response'] as List?;
+      if (resp == null || resp.isEmpty) return {'pj': 0, 'g': 0, 'r': 0};
+      final stats = resp.first['statistics'] as List?;
+      if (stats == null || stats.isEmpty) return {'pj': 0, 'g': 0, 'r': 0};
+      final st = stats.first as Map<String, dynamic>;
+      final pj = (st['games']?['appearences'] as num?)?.toInt() ?? 0;
+      final g = (st['goals']?['total'] as num?)?.toInt() ?? 0;
+      final red = (st['cards']?['red'] as num?)?.toInt() ?? 0;
+      final yred = (st['cards']?['yellowred'] as num?)?.toInt() ?? 0;
+      return {'pj': pj, 'g': g, 'r': red + yred};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Agrega PJ / goles / rojas recorriendo historial club+temporada (tope de requests).
+  static Future<Map<String, dynamic>> getPlayerCareerSnapshot({
+    required int playerId,
+    required int clubTeamId,
+  }) async {
+    final inicio = await Future.wait([
+      getPlayerProfileApi(playerId),
+      getPlayerTeamSeasonHistory(playerId),
+    ]);
+    final profileResp = inicio[0] as Map<String, dynamic>?;
+    final rawPairs = (inicio[1] as List<Map<String, int>>).toList();
+
+    final player = profileResp?['player'] as Map<String, dynamic>? ?? {};
+    final nombre = player['name'] as String? ?? '';
+    final foto = player['photo'] as String? ?? '';
+    final age = (player['age'] as num?)?.toInt();
+    final birthMap = player['birth'];
+    final birth = birthMap is Map<String, dynamic> ? birthMap['date'] as String? : null;
+    final birthCountry =
+        birthMap is Map<String, dynamic> ? birthMap['country'] as String? : null;
+    final nacionalidad = player['nationality'] as String?;
+
+    rawPairs.sort((a, b) {
+      final ta = a['team']!;
+      final tb = b['team']!;
+      final pa = ta == clubTeamId ? 1 : 0;
+      final pb = tb == clubTeamId ? 1 : 0;
+      if (pb != pa) return pb.compareTo(pa);
+      return (b['season']!).compareTo(a['season']!);
+    });
+
+    const maxRequests = 18;
+    const conc = 3;
+    var pjCar = 0, gCar = 0, rCar = 0;
+    var pjClub = 0, gClub = 0, rClub = 0;
+    var muestras = 0;
+    var i = 0;
+    while (muestras < maxRequests && i < rawPairs.length) {
+      final n = conc < rawPairs.length - i ? conc : rawPairs.length - i;
+      final statsFutures = <Future<Map<String, int>?>>[];
+      for (var k = 0; k < n; k++) {
+        final row = rawPairs[i + k];
+        statsFutures.add(_fetchPlayerSeasonStatsTriple(playerId, row['team']!, row['season']!));
+      }
+      final outs = await Future.wait(statsFutures);
+      for (var k = 0; k < n; k++) {
+        if (muestras >= maxRequests) break;
+        final s = outs[k];
+        if (s == null) continue;
+        muestras++;
+        final tid = rawPairs[i + k]['team']!;
+        pjCar += s['pj']!;
+        gCar += s['g']!;
+        rCar += s['r']!;
+        if (tid == clubTeamId) {
+          pjClub += s['pj']!;
+          gClub += s['g']!;
+          rClub += s['r']!;
+        }
+      }
+      i += n;
+    }
+
+    final tail = await Future.wait([
+      _fetchPlayerFullRow(playerId),
+      getPlayerClubsHistoryDisplay(playerId),
+    ]);
+    final apiRow = tail[0] as Map<String, dynamic>?;
+    final clubesHistorial = tail[1] as List<Map<String, dynamic>>;
+    final extra = _extraerDorsalYSeleccion(apiRow, clubTeamId);
+
+    var clubNombre = (extra['clubStatNombre'] as String?)?.trim() ?? '';
+    var clubLogo = (extra['clubStatLogo'] as String?)?.trim() ?? '';
+    if (clubNombre.isEmpty && clubTeamId > 0) {
+      for (final row in clubesHistorial) {
+        if ((row['teamId'] as int?) == clubTeamId) {
+          clubNombre = (row['nombre'] as String?)?.trim() ?? '';
+          clubLogo = (row['logo'] as String?)?.trim() ?? '';
+          break;
+        }
+      }
+    }
+
+    return {
+      'nombre': nombre,
+      'foto': foto,
+      'edad': age,
+      'nacimiento': birth,
+      'nacionalidad': nacionalidad,
+      'paisNacimiento': birthCountry,
+      'pjCarrera': pjCar,
+      'golesCarrera': gCar,
+      'rojasCarrera': rCar,
+      'pjClub': pjClub,
+      'golesClub': gClub,
+      'rojasClub': rClub,
+      'temporadasMuestra': muestras,
+      'temporadasTotal': rawPairs.length,
+      'dorsal': extra['dorsal'] as int,
+      'tieneSeleccion': extra['tieneSeleccion'] as bool,
+      'seleccionDetalle': extra['seleccionDetalle'] as String?,
+      'seleccionPjTotal': extra['seleccionPjTotal'] as int,
+      'seleccionGolesTotal': extra['seleccionGolesTotal'] as int,
+      'clubActualNombre': clubNombre,
+      'clubActualLogo': clubLogo,
+      'clubesHistorial': clubesHistorial,
+    };
   }
 }
