@@ -17,6 +17,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
 import 'copa_service.dart';
+import 'match_follow_service.dart';
 import 'paywall_screen.dart';
 import 'mundial_simulador_screen.dart';
 import 'nationality_flags.dart';
@@ -151,7 +152,8 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    ApiService.clearCache(); // Reset cache en cada inicio de sesion
+    // No vaciar toda la caché aquí: obligaba a re-descargar fixture, tablas, índice, etc.
+    // y la app se sentía muy lenta al abrir. Los TTL en ApiService refrescan los datos.
     if (!kIsWeb) _inicializarFCM();
     _actualizarEnVivo();
     _timerEnVivo = Timer.periodic(const Duration(seconds: 60), (_) => _actualizarEnVivo());
@@ -207,6 +209,7 @@ class _MainScreenState extends State<MainScreen> {
     }
     await messaging.subscribeToTopic('todos');
     debugPrint('FCM: suscripto a todos');
+    await MatchFollowService.subscribeAllSavedTopics();
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       final notif = message.notification;
       if (notif != null && message.notification?.android != null) {
@@ -1442,11 +1445,25 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
       );
     }
 
-    // 2. Próximo partido del equipo favorito o Argentina
+    // 2. Último partido jugado + próximo a jugar (equipo del hincha; sin Argentina genérica).
+    final int? favId = _equipoFavoritoId;
+    if (favId == null || favId == -1) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B2A3B),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: const Text(
+          'Elegí tu equipo favorito en el perfil para ver acá el último partido y el próximo.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.35),
+        ),
+      );
+    }
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _equipoFavoritoId != null && _equipoFavoritoId != -1
-          ? ApiService.getUltimos5(_equipoFavoritoId!)
-          : ApiService.getUltimos5(435), // Argentina ID fallback
+      future: ApiService.getUltimos5(favId),
       builder: (context, snap) {
         if (!snap.hasData) {
           return Container(
@@ -1455,57 +1472,98 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
             child: const Center(child: CircularProgressIndicator(color: Color(0xFF00C853))),
           );
         }
-        // Buscar el próximo NS
-        final proximoNS = snap.data!.firstWhere(
-          (f) => f['fixture']['status']['short'] == 'NS',
-          orElse: () => <String, dynamic>{},
-        );
-        if (proximoNS.isEmpty) {
-          // Mostrar último resultado
-          final ultimo = snap.data!.firstWhere(
-            (f) => f['fixture']['status']['short'] == 'FT',
-            orElse: () => <String, dynamic>{},
-          );
-          if (ultimo.isEmpty) return const SizedBox.shrink();
-          final local = ultimo['teams']['home']['name'] as String;
-          final visitante = ultimo['teams']['away']['name'] as String;
-          final logoL = ultimo['teams']['home']['logo'] as String? ?? '';
-          final logoV = ultimo['teams']['away']['logo'] as String? ?? '';
-          final golesL = ultimo['goals']['home']?.toString() ?? '0';
-          final golesV = ultimo['goals']['away']?.toString() ?? '0';
+        final list = snap.data!;
+        if (list.isEmpty) return const SizedBox.shrink();
+
+        bool jugado(String st) => st == 'FT' || st == 'AET' || st == 'PEN';
+
+        Map<String, dynamic>? ultimoJugado;
+        DateTime? ultimoJugadoDt;
+        for (final f in list) {
+          final st = f['fixture']?['status']?['short'] as String? ?? '';
+          if (!jugado(st)) continue;
+          final dt = DateTime.tryParse(f['fixture']?['date'] as String? ?? '')?.toLocal();
+          if (dt != null && (ultimoJugadoDt == null || dt.isAfter(ultimoJugadoDt!))) {
+            ultimoJugadoDt = dt;
+            ultimoJugado = f;
+          }
+        }
+
+        Map<String, dynamic>? proximoJugar;
+        DateTime? proximoDt;
+        for (final f in list) {
+          if (f['fixture']?['status']?['short'] != 'NS') continue;
+          final dt = DateTime.tryParse(f['fixture']?['date'] as String? ?? '')?.toLocal();
+          if (dt != null && (proximoDt == null || dt.isBefore(proximoDt!))) {
+            proximoDt = dt;
+            proximoJugar = f;
+          }
+        }
+
+        final nombreEq = (_equipoFavoritoNombre ?? '').trim();
+        final etiquetaEquipo = nombreEq.isNotEmpty ? nombreEq : 'Tu equipo';
+
+        Widget? cardUltimo() {
+          if (ultimoJugado == null) return null;
+          final u = ultimoJugado!;
+          final local = u['teams']['home']['name'] as String;
+          final visitante = u['teams']['away']['name'] as String;
+          final logoL = u['teams']['home']['logo'] as String? ?? '';
+          final logoV = u['teams']['away']['logo'] as String? ?? '';
+          final golesL = u['goals']['home']?.toString() ?? '0';
+          final golesV = u['goals']['away']?.toString() ?? '0';
           return GestureDetector(
             onTap: () => _irSeccion(0),
             child: _dashCard(
-              badge: 'ÚLTIMO RESULTADO',
-              badgeColor: Colors.white38,
+              badge: 'ÚLTIMO PARTIDO · $etiquetaEquipo',
+              badgeColor: Colors.white54,
               local: local, visitante: visitante,
               logoL: logoL, logoV: logoV,
               centro: '$golesL - $golesV',
               centroColor: Colors.white70,
-              sub: 'Toca para ver todos los resultados',
+              sub: 'Resultados',
             ),
           );
         }
-        final local = proximoNS['teams']['home']['name'] as String;
-        final visitante = proximoNS['teams']['away']['name'] as String;
-        final logoL = proximoNS['teams']['home']['logo'] as String? ?? '';
-        final logoV = proximoNS['teams']['away']['logo'] as String? ?? '';
-        final fecha = DateTime.tryParse(proximoNS['fixture']['date'] as String? ?? '')?.toLocal();
-        final dias = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-        final fechaStr = fecha != null
-            ? '${dias[fecha.weekday]} ${fecha.day}/${fecha.month}  ${fecha.hour.toString().padLeft(2,'0')}:${fecha.minute.toString().padLeft(2,'0')}'
-            : '';
-        return GestureDetector(
-          onTap: () => _irSeccion(4),
-          child: _dashCard(
-            badge: 'PRÓXIMO PARTIDO',
-            badgeColor: const Color(0xFF2196F3),
-            local: local, visitante: visitante,
-            logoL: logoL, logoV: logoV,
-            centro: fechaStr,
-            centroColor: const Color(0xFF00C853),
-            sub: 'Toca para ver el fixture completo',
-          ),
+
+        Widget? cardProximo() {
+          if (proximoJugar == null) return null;
+          final p = proximoJugar!;
+          final local = p['teams']['home']['name'] as String;
+          final visitante = p['teams']['away']['name'] as String;
+          final logoL = p['teams']['home']['logo'] as String? ?? '';
+          final logoV = p['teams']['away']['logo'] as String? ?? '';
+          final fecha = DateTime.tryParse(p['fixture']['date'] as String? ?? '')?.toLocal();
+          final dias = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+          final fechaStr = fecha != null
+              ? '${dias[fecha.weekday]} ${fecha.day}/${fecha.month}  ${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}'
+              : '';
+          return GestureDetector(
+            onTap: () => _irSeccion(4),
+            child: _dashCard(
+              badge: 'PRÓXIMO PARTIDO · $etiquetaEquipo',
+              badgeColor: const Color(0xFF2196F3),
+              local: local, visitante: visitante,
+              logoL: logoL, logoV: logoV,
+              centro: fechaStr,
+              centroColor: const Color(0xFF00C853),
+              sub: 'Fixture',
+            ),
+          );
+        }
+
+        final u = cardUltimo();
+        final p = cardProximo();
+        if (u == null && p == null) return const SizedBox.shrink();
+        if (u != null && p == null) return u;
+        if (u == null && p != null) return p;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            u!,
+            const SizedBox(height: 12),
+            p!,
+          ],
         );
       },
     );

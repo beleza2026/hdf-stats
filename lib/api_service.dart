@@ -647,16 +647,19 @@ class ApiService {
       final Map<dynamic, Map<String, dynamic>> porFixtureId = {};
       // Solo la temporada configurada: mezclar 2025 completo traía el calendario del año pasado.
       for (final season in [_season]) {
-        final allFixtures = await _fetchFixturesPaginated(season, '');
-        final nsFixtures = await _fetchFixtures(season, '&status=NS');
-        final proximos = await _fetchFixtures(season, '&next=50');
-
-        // ── Octavos (R16): modelo que ya funcionaba — el calendario global a veces no trae KO.
-        //    GET fixtures con status=NS y round en inglés O español (misma idea en ambos).
-        final koR16NsEn =
-            await _fetchFixtures(season, '&status=NS&round=Round%20of%2016');
-        final koR16NsEs =
-            await _fetchFixtures(season, '&status=NS&round=Octavos%20de%20Final');
+        // Primera oleada en paralelo (antes todo en serie → muy lento al armar el fixture).
+        final wave1 = await Future.wait<List<Map<String, dynamic>>>([
+          _fetchFixturesPaginated(season, ''),
+          _fetchFixtures(season, '&status=NS'),
+          _fetchFixtures(season, '&next=50'),
+          _fetchFixtures(season, '&status=NS&round=Round%20of%2016'),
+          _fetchFixtures(season, '&status=NS&round=Octavos%20de%20Final'),
+        ]);
+        final allFixtures = wave1[0];
+        final nsFixtures = wave1[1];
+        final proximos = wave1[2];
+        final koR16NsEn = wave1[3];
+        final koR16NsEs = wave1[4];
 
         // ── Cuartos (R8): MISMO MODELO que R16 + refuerzos FT/TBD/LIVE (a veces el dump no los lista).
         //    Rondas genéricas API (inglés / español / alias) + Apertura/Clausura como en el fixture oficial.
@@ -3785,7 +3788,7 @@ for (final f in jugados) {
   }
 
   static Future<Map<String, dynamic>> getIndiceMatchgol() async {
-    const ttl = Duration(minutes: 4);
+    const ttl = Duration(minutes: 15);
     final now = DateTime.now();
     if (_indiceMatchgolCache != null &&
         _indiceMatchgolCacheTime != null &&
@@ -3813,8 +3816,13 @@ for (final f in jugados) {
           final statsList = item['statistics'] as List? ?? [];
           if (player == null || statsList.isEmpty) continue;
           final st = statsList[0] as Map<String, dynamic>;
-          final int? pid = player['id'] as int?;
-          if (pid == null) continue;
+          final pidRaw = player['id'];
+          final int? pid = pidRaw is int
+              ? pidRaw
+              : pidRaw is num
+                  ? pidRaw.toInt()
+                  : int.tryParse('$pidRaw');
+          if (pid == null || pid == 0) continue;
           final double rating = double.tryParse(st['games']?['rating']?.toString() ?? '') ?? 0.0;
           if (!seen.contains(pid)) {
             seen.add(pid);
@@ -3825,26 +3833,68 @@ for (final f in jugados) {
           }
         }
       }
+      await Future.wait([
+        () async {
+          try {
+            final r1 = await http.get(
+                Uri.parse('$_baseUrl/players/topscorers?league=$_ligaArgentina&season=$_season'),
+                headers: _headers);
+            if (r1.statusCode == 200) absorb(jsonDecode(r1.body)['response'] as List? ?? []);
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            final r2 = await http.get(
+                Uri.parse('$_baseUrl/players/topassists?league=$_ligaArgentina&season=$_season'),
+                headers: _headers);
+            if (r2.statusCode == 200) absorb(jsonDecode(r2.body)['response'] as List? ?? []);
+          } catch (_) {}
+        }(),
+      ]);
+
+      Future<List<dynamic>?> fetchPlayersPage(int page) async {
+        try {
+          final res = await http.get(
+            Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&page=$page'),
+            headers: _headers,
+          );
+          if (res.statusCode != 200) return null;
+          final data = jsonDecode(res.body) as Map<String, dynamic>;
+          return data['response'] as List?;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      var totalPages = 1;
       try {
-        final r1 = await http.get(Uri.parse('$_baseUrl/players/topscorers?league=$_ligaArgentina&season=$_season'), headers: _headers);
-        if (r1.statusCode == 200) absorb(jsonDecode(r1.body)['response'] as List? ?? []);
+        final res = await http.get(
+          Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&page=1'),
+          headers: _headers,
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body) as Map<String, dynamic>;
+          final p = data['paging'];
+          totalPages = p is Map ? (p['total'] as num?)?.toInt() ?? 1 : 1;
+          absorb(data['response'] as List? ?? []);
+        }
       } catch (_) {}
-      try {
-        final r2 = await http.get(Uri.parse('$_baseUrl/players/topassists?league=$_ligaArgentina&season=$_season'), headers: _headers);
-        if (r2.statusCode == 200) absorb(jsonDecode(r2.body)['response'] as List? ?? []);
-      } catch (_) {}
-      int page = 1;
-      int totalPages = 1;
-      while (page <= totalPages && page <= 20) {
-        final res = await http.get(Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&page=$page'), headers: _headers);
-        if (res.statusCode != 200) break;
-        final data = jsonDecode(res.body);
-        totalPages = data['paging']?['total'] as int? ?? 1;
-        final players = data['response'] as List? ?? [];
-        if (players.isEmpty) break;
-        absorb(players);
-        page++;
-        if (page % 4 == 0) await Future<void>.delayed(Duration.zero);
+
+      const maxPages = 20;
+      const batch = 4;
+      final cap = totalPages > maxPages ? maxPages : totalPages;
+      for (var start = 2; start <= cap; start += batch) {
+        final ends = <int>[];
+        for (var i = 0; i < batch && start + i <= cap; i++) {
+          ends.add(start + i);
+        }
+        final chunks = await Future.wait(ends.map(fetchPlayersPage));
+        for (final pl in chunks) {
+          if (pl != null && pl.isNotEmpty) absorb(pl);
+        }
+        if (start + batch <= cap) {
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+        }
       }
       final List<Map<String, dynamic>> all = [];
       for (final item in merged.values) {
