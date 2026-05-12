@@ -1,0 +1,40 @@
+workflows:
+  ios-release:
+    name: MatchGol Stats - iOS Release
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - matchgol
+      vars:
+        BUNDLE_ID: com.hdfstats.app
+        APP_STORE_APP_ID: "6768657341"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.hdfstats.app
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+      - name: Install pods
+        script: |
+          cd ios && pod install
+      - name: Build IPA
+        script: |
+          flutter build ipa --release
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+      email:
+        recipients:
+          - haromarce@hotmail.com
+        notify:
+          success: true
+          failure: true
