@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+﻿import 'dart:async';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'racha_model.dart';
@@ -74,6 +75,15 @@ class ApiService {
 
   /// DT con al menos un partido (liga/copa) en esta ventana se considera en actividad.
   static const int dtVentanaActividadDias = 45;
+
+  /// Solo partidos en esta ventana entran al pipeline de lineups (evita cientos de requests y cuelgues).
+  static const int _dtTablaFixturesLookbackDays = 200;
+
+  /// Tope de seguridad de partidos a procesar (los más recientes tras ordenar).
+  static const int _dtTablaMaxFixturesLineups = 420;
+
+  static String _ymdApi(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   static Map<String, String> get _headers => {
     'x-apisports-key': _apiKey,
@@ -175,14 +185,40 @@ class ApiService {
         : <dynamic>[]);
     return _fixturesFuture!;
   }
-  static Future<List> _getFixturesAllData() async {
-  return (await http.get(
-    Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
-    headers: _headers,
-  ).then((r) => r.statusCode == 200
-      ? (jsonDecode(r.body)['response'] as List)
-      : <dynamic>[]));
-}
+  static Future<List<dynamic>> _getFixturesAllData() async {
+    try {
+      final r = await http
+          .get(
+            Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season'),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 55));
+      if (r.statusCode != 200) return [];
+      final raw = jsonDecode(r.body)['response'];
+      return raw is List ? raw : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Liga Prof.: partidos en ventana reciente (preferido para tabla DT).
+  static Future<List<dynamic>> _getFixturesLigaVentanaParaDTs(String from, String to) async {
+    try {
+      final r = await http
+          .get(
+            Uri.parse(
+              '$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&from=$from&to=$to',
+            ),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 55));
+      if (r.statusCode != 200) return [];
+      final raw = jsonDecode(r.body)['response'];
+      return raw is List ? raw : [];
+    } catch (_) {
+      return [];
+    }
+  }
   // ─────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
@@ -2185,22 +2221,35 @@ class ApiService {
       byId[id] = m;
     }
 
+    final hasta = DateTime.now();
+    final desde = hasta.subtract(const Duration(days: _dtTablaFixturesLookbackDays));
+    final from = _ymdApi(desde);
+    final to = _ymdApi(hasta);
+
     try {
-      final ligaRaw = await _getFixturesAllData();
+      var ligaRaw = await _getFixturesLigaVentanaParaDTs(from, to);
+      if (ligaRaw.isEmpty) {
+        ligaRaw = await _getFixturesAllData();
+      }
       for (final f in ligaRaw) {
-        ingest(f as Map<String, dynamic>);
+        if (f is Map<String, dynamic>) ingest(f);
       }
     } catch (_) {}
 
     Future<void> fetchCup(int leagueId, List<int> seasons) async {
       for (final sea in seasons) {
         try {
-          final r = await http.get(
-            Uri.parse('$_baseUrl/fixtures?league=$leagueId&season=$sea'),
-            headers: _headers,
-          );
+          final r = await http
+              .get(
+                Uri.parse(
+                  '$_baseUrl/fixtures?league=$leagueId&season=$sea&from=$from&to=$to',
+                ),
+                headers: _headers,
+              )
+              .timeout(const Duration(seconds: 55));
           if (r.statusCode != 200) continue;
-          final resp = (jsonDecode(r.body)['response'] as List?) ?? [];
+          final raw = jsonDecode(r.body)['response'];
+          final resp = raw is List ? raw : const [];
           for (final f in resp) {
             final m = f as Map<String, dynamic>;
             final hId = m['teams']?['home']?['id']?.toString() ?? '';
@@ -2218,12 +2267,15 @@ class ApiService {
     await fetchCup(11, [_season, 2025]);
     await fetchCup(_copaArgentina, [_season, 2025]);
 
-    final list = byId.values.toList();
+    var list = byId.values.toList();
     list.sort((a, b) {
       final da = DateTime.tryParse(a['fixture']?['date'] as String? ?? '') ?? DateTime(2000);
       final db = DateTime.tryParse(b['fixture']?['date'] as String? ?? '') ?? DateTime(2000);
       return da.compareTo(db);
     });
+    if (list.length > _dtTablaMaxFixturesLineups) {
+      list = list.sublist(list.length - _dtTablaMaxFixturesLineups);
+    }
     return list;
   }
 
@@ -2267,20 +2319,24 @@ class ApiService {
         final lote = fixtures.skip(i).take(loteSize).toList();
         await Future.wait(lote.map((f) async {
           try {
-            final fm = f as Map<String, dynamic>;
+            final fm = f;
             final fxId = _idFromDynamic(fm['fixture']?['id']);
             final homeId = _idFromDynamic(fm['teams']?['home']?['id']);
             final awayId = _idFromDynamic(fm['teams']?['away']?['id']);
             if (fxId == null || homeId == null || awayId == null) return;
             final hGoals = _intFromApi(fm['goals']?['home']);
             final aGoals = _intFromApi(fm['goals']?['away']);
-            final res = await http.get(
-              Uri.parse('$_baseUrl/fixtures/lineups?fixture=$fxId'),
-              headers: _headers,
-            );
+            final res = await http
+                .get(
+                  Uri.parse('$_baseUrl/fixtures/lineups?fixture=$fxId'),
+                  headers: _headers,
+                )
+                .timeout(const Duration(seconds: 22));
             if (res.statusCode != 200) return;
-            final lineups = (jsonDecode(res.body)['response'] as List)
-                .cast<Map<String, dynamic>>();
+            final decoded = jsonDecode(res.body);
+            final rawLu = decoded is Map<String, dynamic> ? decoded['response'] : null;
+            if (rawLu is! List) return;
+            final lineups = rawLu.whereType<Map<String, dynamic>>().toList();
             for (final lu in lineups) {
               final coach = lu['coach'] as Map<String, dynamic>?;
               if (coach == null) continue;
@@ -2499,7 +2555,10 @@ class ApiService {
     }).toList();
     withP.sort((a, b) =>
         ((b['presion'] as num?)?.toDouble() ?? 0).compareTo((a['presion'] as num?)?.toDouble() ?? 0));
-    await _enriquecerFotosCuerdaFloja(withP);
+    try {
+      await _enriquecerFotosCuerdaFloja(withP)
+          .timeout(const Duration(seconds: 14));
+    } catch (_) {}
     return withP;
   }
 
@@ -2535,15 +2594,19 @@ class ApiService {
         final cid = dt['id'] as String? ?? '';
         if (cid.isEmpty) return;
         try {
-          final r = await http.get(
-            Uri.parse('$_baseUrl/coachs?id=$cid'),
-            headers: _headers,
-          );
+          final r = await http
+              .get(
+                Uri.parse('$_baseUrl/coachs?id=$cid'),
+                headers: _headers,
+              )
+              .timeout(const Duration(seconds: 12));
           if (r.statusCode != 200) return;
-          final list = jsonDecode(r.body)['response'] as List?;
-          if (list == null || list.isEmpty) return;
-          final coach = list[0] as Map<String, dynamic>;
-          final ph = coach['photo'] as String?;
+          final decoded = jsonDecode(r.body);
+          final list = decoded is Map<String, dynamic> ? decoded['response'] : null;
+          if (list is! List || list.isEmpty) return;
+          final first = list[0];
+          if (first is! Map<String, dynamic>) return;
+          final ph = first['photo'] as String?;
           if (ph != null && ph.isNotEmpty) dt['foto'] = ph;
         } catch (_) {}
       }));

@@ -5,6 +5,7 @@ import 'match_follow_service.dart';
 import 'copa_service.dart';
 import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
+import 'image_decode_helper.dart';
 
 typedef OnTapPartido = void Function(
   BuildContext context,
@@ -715,7 +716,7 @@ class _TabPlantelesState extends State<_TabPlanteles> {
               decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(10)),
               child: Row(children: [
                 logo.isNotEmpty
-                    ? Image.network(logo, width: 32, height: 32, errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, color: Colors.white38))
+                    ? DecodedNetworkImage(logo, width: 32, height: 32, errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, color: Colors.white38))
                     : const Icon(Icons.sports_soccer, color: Colors.white38),
                 const SizedBox(width: 12),
                 Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),

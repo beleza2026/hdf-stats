@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'api_service.dart';
+import 'image_decode_helper.dart';
 import 'racha_model.dart';
 
 // ─── Constantes de liga (ajustar según leagueId/season activo) ───────────────
@@ -309,7 +310,7 @@ class _TablaRachasTabState extends State<TablaRachasTab> {
             flex: 5,
             child: Row(
               children: [
-                Image.network(
+                DecodedNetworkImage(
                   r.teamLogo,
                   width: 22,
                   height: 22,

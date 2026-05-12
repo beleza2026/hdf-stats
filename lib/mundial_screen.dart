@@ -5,6 +5,7 @@ import 'paywall_screen.dart';
 import 'mundial_partido_sheet.dart';
 import 'mundial_service.dart';
 import 'mundial_simulador_screen.dart';
+import 'image_decode_helper.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MUNDIAL SCREEN
@@ -341,7 +342,7 @@ class _TabGruposState extends State<_TabGrupos> {
               ),
               const SizedBox(width: 6),
               logo.isNotEmpty
-                  ? Image.network(logo, width: 20, height: 20,
+                  ? DecodedNetworkImage(logo, width: 20, height: 20,
                       errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 20, color: Colors.white24))
                   : const Icon(Icons.sports_soccer, size: 20, color: Colors.white24),
               const SizedBox(width: 8),
@@ -468,7 +469,7 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
                     overflow: TextOverflow.ellipsis),
                 Row(children: [
                   if (logoEq.isNotEmpty)
-                    Image.network(logoEq, width: 14, height: 14,
+                    DecodedNetworkImage(logoEq, width: 14, height: 14,
                         errorBuilder: (_, __, ___) => const SizedBox()),
                   const SizedBox(width: 4),
                   Text(equipo,
@@ -666,13 +667,13 @@ class _TabCrucesState extends State<_TabCruces> {
               ]),
               const SizedBox(width: 8),
               logo.isNotEmpty
-                  ? Image.network(logo, width: 28, height: 28,
+                  ? DecodedNetworkImage(logo, width: 28, height: 28,
                       errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
                   : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
             ]
           : [
               logo.isNotEmpty
-                  ? Image.network(logo, width: 28, height: 28,
+                  ? DecodedNetworkImage(logo, width: 28, height: 28,
                       errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
                   : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
               const SizedBox(width: 8),
@@ -755,7 +756,7 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
                 overflow: TextOverflow.ellipsis),
             const SizedBox(width: 8),
             homeLogo.isNotEmpty
-                ? Image.network(homeLogo, width: 28, height: 28,
+                ? DecodedNetworkImage(homeLogo, width: 28, height: 28,
                     errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
                 : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
           ]),
@@ -802,7 +803,7 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
         Expanded(
           child: Row(mainAxisAlignment: MainAxisAlignment.start, children: [
             awayLogo.isNotEmpty
-                ? Image.network(awayLogo, width: 28, height: 28,
+                ? DecodedNetworkImage(awayLogo, width: 28, height: 28,
                     errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
                 : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
             const SizedBox(width: 8),
@@ -951,7 +952,7 @@ class _TabMejoresState extends State<_TabMejores> {
                     overflow: TextOverflow.ellipsis),
                 Row(children: [
                   if (logoEq.isNotEmpty)
-                    Image.network(logoEq, width: 14, height: 14,
+                    DecodedNetworkImage(logoEq, width: 14, height: 14,
                         errorBuilder: (_, __, ___) => const SizedBox()),
                   const SizedBox(width: 4),
                   Text(equipo, style: const TextStyle(color: Colors.white38, fontSize: 11)),

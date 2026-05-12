@@ -22,6 +22,7 @@ import 'paywall_screen.dart';
 import 'mundial_simulador_screen.dart';
 import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
+import 'image_decode_helper.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -704,7 +705,7 @@ class _MainScreenState extends State<MainScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(children: [
-                    if (logo != null) Image.network(logo, width: 48, height: 48,
+                    if (logo != null) DecodedNetworkImage(logo, width: 48, height: 48,
                         errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 48)),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -863,7 +864,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _logoConTap(String? logo, double size, int? teamId, String nombre) {
     final img = logo != null
-        ? Image.network(logo, width: size, height: size,
+        ? DecodedNetworkImage(logo, width: size, height: size,
             errorBuilder: (_, __, ___) => Icon(Icons.shield, color: Colors.white38, size: size))
         : Icon(Icons.shield, color: Colors.white38, size: size);
     if (teamId == null) return img;
@@ -1594,7 +1595,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
         // Partido
         Row(children: [
           Expanded(child: Column(children: [
-            if (logoL.isNotEmpty) Image.network(logoL, width: 40, height: 40, errorBuilder: (_, __, ___) => const SizedBox()),
+            if (logoL.isNotEmpty) DecodedNetworkImage(logoL, width: 40, height: 40, errorBuilder: (_, __, ___) => const SizedBox()),
             const SizedBox(height: 6),
             Text(local, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
               textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -1604,7 +1605,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
             child: Text(centro, style: TextStyle(color: centroColor, fontWeight: FontWeight.bold, fontSize: 22)),
           ),
           Expanded(child: Column(children: [
-            if (logoV.isNotEmpty) Image.network(logoV, width: 40, height: 40, errorBuilder: (_, __, ___) => const SizedBox()),
+            if (logoV.isNotEmpty) DecodedNetworkImage(logoV, width: 40, height: 40, errorBuilder: (_, __, ___) => const SizedBox()),
             const SizedBox(height: 6),
             Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
               textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -1785,7 +1786,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                           child: Row(children: [
                             SizedBox(width: 20, child: Text('${hi+1}', style: TextStyle(color: hi==0?const Color(0xFFFFD700):hi==1?const Color(0xFFC0C0C0):hi==2?const Color(0xFFCD7F32):Colors.white38, fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
                             const SizedBox(width: 6),
-                            if (hescudo.isNotEmpty) Image.network(hescudo, width: 22, height: 22, errorBuilder: (_, __, ___) => const SizedBox(width: 22)) else const SizedBox(width: 22),
+                            if (hescudo.isNotEmpty) DecodedNetworkImage(hescudo, width: 22, height: 22, errorBuilder: (_, __, ___) => const SizedBox(width: 22)) else const SizedBox(width: 22),
                             const SizedBox(width: 8),
                             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Row(children: [
@@ -2243,7 +2244,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               if (logo.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: Image.network(logo, width: 36, height: 36, fit: BoxFit.cover),
+                  child: DecodedNetworkImage(logo, width: 36, height: 36, fit: BoxFit.cover),
                 ),
               if (logo.isNotEmpty) const SizedBox(width: 10),
               Expanded(
@@ -2396,7 +2397,7 @@ Widget _alFiloCard(Map<String, dynamic> j) {
         backgroundColor: Colors.white12,
         child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 16) : null),
       const SizedBox(width: 10),
-      if (logoEquipo.isNotEmpty) Image.network(logoEquipo, width: 20, height: 20),
+      if (logoEquipo.isNotEmpty) DecodedNetworkImage(logoEquipo, width: 20, height: 20),
       if (logoEquipo.isNotEmpty) const SizedBox(width: 6),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
@@ -2459,7 +2460,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         backgroundColor: Colors.white12,
         child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 16) : null),
       const SizedBox(width: 10),
-      if (logoEquipo.isNotEmpty) Image.network(logoEquipo, width: 20, height: 20),
+      if (logoEquipo.isNotEmpty) DecodedNetworkImage(logoEquipo, width: 20, height: 20),
       if (logoEquipo.isNotEmpty) const SizedBox(width: 6),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
@@ -2653,7 +2654,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               ),
               child: Row(children: [
                 SizedBox(width: 20, child: Text('${e.key + 1}°', style: TextStyle(color: clasifica ? const Color(0xFFFF6F00) : Colors.white38, fontSize: 11, fontWeight: FontWeight.bold))),
-                if (logo != null) ...[Image.network(logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)), const SizedBox(width: 6)],
+                if (logo != null) ...[DecodedNetworkImage(logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)), const SizedBox(width: 6)],
                 Expanded(child: Text(nombre, style: TextStyle(color: clasifica ? Colors.white : Colors.white38, fontSize: 12))),
                 Text(grupo, style: TextStyle(color: clasifica ? const Color(0xFFFF6F00) : Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 8),
@@ -2702,7 +2703,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 0.5)),
         const SizedBox(height: 6),
         Row(children: [
-          if (logoL != null) Image.network(logoL, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+          if (logoL != null) DecodedNetworkImage(logoL, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
           const SizedBox(width: 8),
           Expanded(child: Text(nombreL, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
           Container(
@@ -2713,7 +2714,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           ),
           Expanded(child: Text(nombreV, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
           const SizedBox(width: 8),
-          if (logoV != null) Image.network(logoV, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+          if (logoV != null) DecodedNetworkImage(logoV, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
         ]),
       ]),
     );
@@ -2807,7 +2808,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                         SizedBox(width: 18, child: Text('${i+1}', style: TextStyle(color: isTop2 ? const Color(0xFFFFD700) : Colors.white54, fontSize: 12, fontWeight: isTop2 ? FontWeight.bold : FontWeight.normal))),
                         const SizedBox(width: 4),
                         if (t['logo'] != null)
-                          Image.network(t['logo'] as String, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+                          DecodedNetworkImage(t['logo'] as String, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
                         const SizedBox(width: 6),
                         Expanded(child: Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500))),
                         SizedBox(width: 28, child: Text((s['played'] as int? ?? 0).toString(), style: const TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center)),
@@ -2876,7 +2877,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                       Text(home['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500), textAlign: TextAlign.right),
                       const SizedBox(width: 6),
                       if (home['logo'] != null)
-                        Image.network(home['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                        DecodedNetworkImage(home['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
                     ])),
                     Container(
                       width: 70,
@@ -2887,7 +2888,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                     ),
                     Expanded(child: Row(children: [
                       if (away['logo'] != null)
-                        Image.network(away['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                        DecodedNetworkImage(away['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
                       const SizedBox(width: 6),
                       Text(away['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
                     ])),
@@ -2944,7 +2945,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                   Text(player['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
                   Row(children: [
                     if (team['logo'] != null)
-                      Image.network(team['logo'] as String, width: 14, height: 14, errorBuilder: (_, __, ___) => const SizedBox()),
+                      DecodedNetworkImage(team['logo'] as String, width: 14, height: 14, errorBuilder: (_, __, ___) => const SizedBox()),
                     const SizedBox(width: 4),
                     Text(team['name'] as String? ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   ]),
@@ -3052,7 +3053,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         if (imagen.isNotEmpty)
           ClipRRect(
             borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10)),
-            child: Image.network(imagen, width: 90, height: 90, fit: BoxFit.cover,
+            child: DecodedNetworkImage(imagen, width: 90, height: 90, fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const SizedBox(width: 0)),
           ),
         Expanded(child: Padding(
@@ -3097,7 +3098,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(children: [
-                if (logo != null) Image.network(logo, width: 52, height: 52,
+                if (logo != null) DecodedNetworkImage(logo, width: 52, height: 52,
                     errorBuilder: (_, __, ___) => const Icon(Icons.flag, color: Colors.white38, size: 52)),
                 const SizedBox(width: 12),
                 Expanded(child: Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold))),
@@ -3428,7 +3429,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                     width: 18, height: 18,
                     decoration: BoxDecoration(color: const Color(0xFF0D1B2A), shape: BoxShape.circle,
                         border: Border.all(color: Colors.white24, width: 1)),
-                    child: ClipOval(child: Image.network(logoEquipo, fit: BoxFit.contain,
+                    child: ClipOval(child: DecodedNetworkImage(logoEquipo, width: 18, height: 18, fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white24, size: 12))),
                   )),
             ]),
@@ -3488,7 +3489,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 const SizedBox(height: 4),
                 Row(children: [
                   if (figuraLogo.isNotEmpty) ...[
-                    Image.network(figuraLogo, width: 20, height: 20,
+                    DecodedNetworkImage(figuraLogo, width: 20, height: 20,
                         errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 16)),
                     const SizedBox(width: 6),
                   ],
@@ -3571,7 +3572,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 ]),
                 subtitle: Row(children: [
                   if (logo.isNotEmpty) ...[
-                    Image.network(logo, width: 14, height: 14,
+                    DecodedNetworkImage(logo, width: 14, height: 14,
                         errorBuilder: (_, __, ___) => const SizedBox(width: 14)),
                     const SizedBox(width: 4),
                   ],
@@ -3799,7 +3800,8 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               },
               child: ListView.builder(
                 itemCount: dts.length,
-                itemBuilder: (ctx, i) => _dtRow(i + 1, dts[i]),
+                addAutomaticKeepAlives: false,
+                itemBuilder: (ctx, i) => _dtRow(ctx, i + 1, dts[i]),
               ),
             ),
           ),
@@ -3823,20 +3825,27 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     );
   }
 
-  Widget _dtRow(int pos, Map<String, dynamic> dt) {
-    final nombre     = dt['nombre']     as String;
-    final foto       = dt['foto']       as String?;
-    final equipo     = dt['equipo']     as String;
+  Widget _dtRow(BuildContext context, int pos, Map<String, dynamic> dt) {
+    int _asInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString()) ?? 0;
+    }
+
+    final nombre     = dt['nombre']?.toString() ?? '';
+    final foto       = dt['foto'] as String?;
+    final equipo     = dt['equipo']?.toString() ?? '';
     final equipoLogo = dt['equipoLogo'] as String? ?? '';
-    final partidos   = dt['partidos']   as int;
-    final victorias  = dt['victorias']  as int;
-    final empates    = dt['empates']    as int;
-    final derrotas   = dt['derrotas']   as int;
-    final puntos     = dt['puntos']     as int;
-    final pct        = dt['pctPuntos']  as double;
-    final rachaActual= dt['rachaActual'] as String;
-    final ultimos5   = (dt['ultimos5']  as List).cast<String>();
-    final coachId    = dt['id']         as String;
+    final partidos   = _asInt(dt['partidos']);
+    final victorias  = _asInt(dt['victorias']);
+    final empates    = _asInt(dt['empates']);
+    final derrotas   = _asInt(dt['derrotas']);
+    final puntos     = _asInt(dt['puntos']);
+    final pct        = (dt['pctPuntos'] as num?)?.toDouble() ?? 0.0;
+    final rachaActual= dt['rachaActual']?.toString() ?? '';
+    final ultimos5   = (dt['ultimos5'] as List?)?.map((e) => e.toString()).toList() ?? <String>[];
+    final coachId    = dt['id']?.toString() ?? '';
     final presion    = (dt['presion'] as num?)?.toDouble() ?? 0;
     final presionLabel = dt['presionLabel'] as String? ?? '';
     final presionColor = Color((dt['presionColor'] as int?) ?? 0xFF00C853);
@@ -3859,7 +3868,10 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         ? (pos.isOdd ? const Color(0xFF321919) : const Color(0xFF2A1515))
         : (pos.isOdd ? const Color(0xFF1B2A3B) : const Color(0xFF162030));
 
-    return GestureDetector(
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+
+    return RepaintBoundary(
+      child: GestureDetector(
       onTap: () => _mostrarCarreraDT(context, dt, coachId),
       child: Container(
         decoration: BoxDecoration(
@@ -3894,7 +3906,10 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 color: const Color(0xFF0D1B2A),
                 border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3), width: 1.5),
                 image: foto != null && foto.isNotEmpty
-                    ? DecorationImage(image: NetworkImage(foto), fit: BoxFit.cover)
+                    ? DecorationImage(
+                        image: resizedNetworkImageProvider(foto, 32, dpr),
+                        fit: BoxFit.cover,
+                      )
                     : null,
               ),
               child: (foto == null || foto.isEmpty)
@@ -3916,7 +3931,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                   Row(
                     children: [
                       if (equipoLogo.isNotEmpty) ...[
-                        Image.network(
+                        DecodedNetworkImage(
                           equipoLogo,
                           width: 12,
                           height: 12,
@@ -4072,6 +4087,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           ],
         ]),
       ),
+    ),
     );
   }
 
@@ -4183,7 +4199,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
                     child: Row(children: [
-                      if (logo != null) Image.network(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const SizedBox(width: 24))
+                      if (logo != null) DecodedNetworkImage(logo, width: 24, height: 24, errorBuilder: (_, __, ___) => const SizedBox(width: 24))
                       else const Icon(Icons.sports_soccer, color: Colors.white38, size: 24),
                       const SizedBox(width: 10),
                       Expanded(child: Text(club, style: const TextStyle(color: Colors.white, fontSize: 12))),
@@ -4759,7 +4775,7 @@ Widget _tabTiempo(String tipo) {
                         SizedBox(width: 24, child: Text(i.toString(), style: const TextStyle(color: Colors.white54, fontSize: 13))),
                         if (eq['logo'] != null) ...[
                           const SizedBox(width: 4),
-                          Image.network(eq['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                          DecodedNetworkImage(eq['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
                           const SizedBox(width: 6),
                         ] else const SizedBox(width: 8),
                         Expanded(child: Text(eq['nombre'] as String, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500))),
@@ -5277,7 +5293,7 @@ Widget _tabTiempo(String tipo) {
                         // Local
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                           if (logoLocal.isNotEmpty)
-                            Image.network(logoLocal, width: 28, height: 28, errorBuilder: (_, __, ___) => const SizedBox(width: 28)),
+                            DecodedNetworkImage(logoLocal, width: 28, height: 28, errorBuilder: (_, __, ___) => const SizedBox(width: 28)),
                           const SizedBox(height: 4),
                           Text(local,
                             style: TextStyle(color: esJugado ? Colors.white54 : Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
@@ -5297,7 +5313,7 @@ Widget _tabTiempo(String tipo) {
                         // Visitante
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (logoVisitante.isNotEmpty)
-                            Image.network(logoVisitante, width: 28, height: 28, errorBuilder: (_, __, ___) => const SizedBox(width: 28)),
+                            DecodedNetworkImage(logoVisitante, width: 28, height: 28, errorBuilder: (_, __, ___) => const SizedBox(width: 28)),
                           const SizedBox(height: 4),
                           Text(visitante,
                             style: TextStyle(color: esJugado ? Colors.white54 : Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
@@ -5510,7 +5526,7 @@ Widget _tabTiempo(String tipo) {
           child: Row(children: [
             Expanded(child: Column(children: [
               if (logoLocal.isNotEmpty)
-                Image.network(logoLocal, width: 36, height: 36, errorBuilder: (_, __, ___) => const SizedBox()),
+                DecodedNetworkImage(logoLocal, width: 36, height: 36, errorBuilder: (_, __, ___) => const SizedBox()),
               const SizedBox(height: 6),
               Text(local, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14), textAlign: TextAlign.center, maxLines: 2),
             ])),
@@ -5521,7 +5537,7 @@ Widget _tabTiempo(String tipo) {
             ),
             Expanded(child: Column(children: [
               if (logoVisitante.isNotEmpty)
-                Image.network(logoVisitante, width: 36, height: 36, errorBuilder: (_, __, ___) => const SizedBox()),
+                DecodedNetworkImage(logoVisitante, width: 36, height: 36, errorBuilder: (_, __, ___) => const SizedBox()),
               const SizedBox(height: 6),
               Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14), textAlign: TextAlign.center, maxLines: 2),
             ])),
@@ -7809,7 +7825,7 @@ Widget _tabTiempo(String tipo) {
     }
 
     Widget logo(String? url, double size) => url != null && url.isNotEmpty
-        ? Image.network(url, width: size, height: size, errorBuilder: (_, __, ___) => Icon(Icons.shield, color: Colors.white38, size: size))
+        ? DecodedNetworkImage(url, width: size, height: size, errorBuilder: (_, __, ___) => Icon(Icons.shield, color: Colors.white38, size: size))
         : Icon(Icons.shield, color: Colors.white38, size: size);
 
     return Container(
@@ -7838,8 +7854,11 @@ Widget _tabTiempo(String tipo) {
               return ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                 child: Stack(children: [
-                  Image.network(foto, width: double.infinity, height: 100, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                  DecodedBannerNetworkImage(
+                    foto,
+                    height: 100,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
                   Positioned(bottom: 0, left: 0, right: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -7963,7 +7982,7 @@ Widget _tabTiempo(String tipo) {
                 child: Row(children: [
                   SizedBox(width: 24, child: Text('${i+1}', style: TextStyle(color: i==0?const Color(0xFFFFD700):i==1?const Color(0xFFC0C0C0):i==2?const Color(0xFFCD7F32):Colors.white38, fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
                   const SizedBox(width: 4),
-                  if (logo.isNotEmpty) Image.network(logo, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)) else const SizedBox(width: 20),
+                  if (logo.isNotEmpty) DecodedNetworkImage(logo, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)) else const SizedBox(width: 20),
                   const SizedBox(width: 6),
                   Expanded(child: Text(eq['nombre'] as String, style: TextStyle(color: esFav ? const Color(0xFF00C853) : Colors.white, fontSize: 11, fontWeight: esFav ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)),
                   SizedBox(width: 22, child: Text('${eq['pj']}', style: const TextStyle(color: Colors.white54, fontSize: 11), textAlign: TextAlign.center)),
@@ -8070,14 +8089,14 @@ Widget _tabTiempo(String tipo) {
                   const SizedBox(height: 10),
                   Row(children: [
                     Expanded(child: Column(children: [
-                      if (logoL.isNotEmpty) Image.network(logoL, width: 40, height: 40, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 40)),
+                      if (logoL.isNotEmpty) DecodedNetworkImage(logoL, width: 40, height: 40, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 40)),
                       const SizedBox(height: 6),
                       Text(nombreL, style: TextStyle(color: esFavL ? const Color(0xFF00C853) : Colors.white, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
                       Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(4)), child: const Text('LOCAL', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.bold))),
                     ])),
                     const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('VS', style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold, fontSize: 18))),
                     Expanded(child: Column(children: [
-                      if (logoV.isNotEmpty) Image.network(logoV, width: 40, height: 40, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 40)),
+                      if (logoV.isNotEmpty) DecodedNetworkImage(logoV, width: 40, height: 40, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 40)),
                       const SizedBox(height: 6),
                       Text(nombreV, style: TextStyle(color: esFavV ? const Color(0xFF00C853) : Colors.white, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
                       Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(4)), child: const Text('VISITANTE', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.bold))),
@@ -8145,7 +8164,7 @@ Widget _tabTiempo(String tipo) {
                     ),
                     const SizedBox(width: 10),
                     if (escudo.isNotEmpty)
-                      Image.network(escudo, width: 30, height: 30, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 30))
+                      DecodedNetworkImage(escudo, width: 30, height: 30, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 30))
                     else
                       const Icon(Icons.shield, color: Colors.white38, size: 30),
                     const SizedBox(width: 10),
@@ -8630,7 +8649,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Image.network(eq['escudo'] as String, width: 44, height: 44,
+                              DecodedNetworkImage(eq['escudo'] as String, width: 44, height: 44,
                                 errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 44)),
                               const SizedBox(height: 8),
                               Padding(
@@ -8924,7 +8943,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
               decoration: BoxDecoration(border: Border(left: BorderSide(color: posColor, width: 3))),
               child: Row(children: [
                 SizedBox(width: 26, child: Text(badge, style: TextStyle(color: posColor, fontSize: 10, fontWeight: FontWeight.bold))),
-                if (t['logo'] != null) Image.network(t['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
+                if (t['logo'] != null) DecodedNetworkImage(t['logo'] as String, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox(width: 20)),
                 const SizedBox(width: 8),
                 Expanded(child: Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
                 Text('$pts pts', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold)),
@@ -8981,7 +9000,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
                 const SizedBox(width: 8),
                 Text('Gr.$g', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                 const SizedBox(width: 6),
-                if (team['logo'] != null) Image.network(team['logo'] as String, width: 16, height: 16, errorBuilder: (_, __, ___) => const SizedBox(width: 16)),
+                if (team['logo'] != null) DecodedNetworkImage(team['logo'] as String, width: 16, height: 16, errorBuilder: (_, __, ___) => const SizedBox(width: 16)),
                 const SizedBox(width: 6),
                 Expanded(child: Text(team['name'] as String? ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
                 Text('$pts pts', style: const TextStyle(color: Color(0xFFFFD700), fontSize: 11)),
@@ -9050,7 +9069,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
               color: t1Win ? const Color(0xFF00C853).withValues(alpha: 0.2) : Colors.transparent,
               borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8))),
             child: Row(children: [
-              if (t1Logo != null) Image.network(t1Logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+              if (t1Logo != null) DecodedNetworkImage(t1Logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
               const SizedBox(width: 6),
               Expanded(child: Text(t1Name, style: TextStyle(
                 color: t1 == null ? Colors.white24 : (t1Win ? const Color(0xFF00C853) : Colors.white),
@@ -9075,7 +9094,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
                 color: t2 == null ? Colors.white24 : (t2Win ? const Color(0xFF00C853) : Colors.white),
                 fontSize: 11, fontWeight: t2Win ? FontWeight.bold : FontWeight.normal))),
               const SizedBox(width: 6),
-              if (t2Logo != null) Image.network(t2Logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
+              if (t2Logo != null) DecodedNetworkImage(t2Logo, width: 18, height: 18, errorBuilder: (_, __, ___) => const SizedBox(width: 18)),
             ]),
           ),
         )),
@@ -9098,7 +9117,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
       child: Column(children: [
         const Text('CAMPEON DEL MUNDO', style: TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
         const SizedBox(height: 10),
-        if (t['logo'] != null) Image.network(t['logo'] as String, width: 50, height: 50, errorBuilder: (_, __, ___) => const SizedBox(height: 50)),
+        if (t['logo'] != null) DecodedNetworkImage(t['logo'] as String, width: 50, height: 50, errorBuilder: (_, __, ___) => const SizedBox(height: 50)),
         const SizedBox(height: 6),
         Text(t['name'] as String? ?? '', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
       ]),
