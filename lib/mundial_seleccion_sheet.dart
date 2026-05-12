@@ -290,6 +290,8 @@ Widget _filaJugadorPlantel(
   final nombre = _cleanName(pl['name'] as String? ?? '');
   final foto = pl['photo'] as String? ?? '';
   final pid = pl['id'] as int? ?? 0;
+  final nacionalidad = (pl['nationality'] as String?)?.trim() ?? '';
+  final flagJug = flagEmojiFromCountryName(nacionalidad);
   final st = _statsMundialEnFila(row);
   final games = st?['games'] as Map<String, dynamic>? ?? {};
   final goals = st?['goals'] as Map<String, dynamic>? ?? {};
@@ -333,6 +335,10 @@ Widget _filaJugadorPlantel(
               backgroundImage: foto.isNotEmpty ? NetworkImage(foto) : null,
               child: foto.isEmpty ? const Icon(Icons.person, size: 18, color: Colors.white38) : null,
             ),
+            if (flagJug.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(flagJug, style: const TextStyle(fontSize: 18, height: 1)),
+            ],
             const SizedBox(width: 10),
             Expanded(
               child: Column(

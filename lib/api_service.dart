@@ -1,7 +1,6 @@
 ﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'copa_service.dart';
 import 'racha_model.dart';
 
 class ApiService {
@@ -157,7 +156,7 @@ class ApiService {
         final zona = group as List;
         for (final row in zona) {
           final m = row as Map<String, dynamic>;
-          final tid = m['team']?['id'] as int?;
+          final tid = _idFromDynamic(m['team']?['id']);
           if (tid != null) ids.add(tid);
         }
       }
@@ -1156,51 +1155,70 @@ class ApiService {
     } catch (e) { return null; }
   }
   static Future<List<Map<String, dynamic>>> getPlayersPartido(String fixtureId) async {
-    final url = Uri.parse('$_baseUrl/fixtures/players?fixture=$fixtureId');
-    final response = await http.get(url, headers: _headers);
-    if (response.statusCode != 200) return [];
-    final data = jsonDecode(response.body);
-    final teams = data['response'] as List;
-    List<Map<String, dynamic>> jugadores = [];
-    for (var team in teams) {
-      final teamName = team['team']['name'] as String;
-      final teamId = team['team']['id'] as int;
-      final teamLogo = team['team']['logo'] as String? ?? '';
-      final players = team['players'] as List;
-      for (var p in players) {
-        final stats = p['statistics'][0];
-        final games = stats['games'] as Map<String, dynamic>? ?? {};
-        final numRaw = games['number'];
-        final dorsalVal = numRaw is int ? numRaw : int.tryParse('$numRaw') ?? 0;
-        final rating = games['rating'];
-        jugadores.add({
-          'id': p['player']['id'],
-          'nombre': p['player']['name'],
-          'foto': p['player']['photo'],
-          'equipo': teamName,
-          'equipoId': teamId,
-          'equipoLogo': teamLogo,
-          'rating': rating != null ? (double.tryParse(rating.toString()) ?? 0.0) : 0.0,
-          'tieneRating': rating != null,
-          'tiros': stats['shots']['on'] ?? 0,
-          'pases': stats['passes']['accuracy'] ?? 0,
-          'minutos': games['minutes'] ?? 0,
-          'posicion': games['position'] ?? '',
-          'numero': dorsalVal,
-          'dorsal': dorsalVal,
-          'capitan': games['captain'] ?? false,
-          'suplente': games['substitute'] ?? false,
-          'goles': stats['goals']['total'] ?? 0,
-          'asistencias': stats['goals']['assists'] ?? 0,
-          'saves': stats['goals']['saves'] ?? 0,
-          'amarillas': stats['cards']['yellow'] ?? 0,
-          'rojas': stats['cards']['red'] ?? 0,
-          'faltas': stats['fouls']['committed'] ?? 0,
-        });
+    try {
+      final url = Uri.parse('$_baseUrl/fixtures/players?fixture=$fixtureId');
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final teams = data['response'] as List? ?? [];
+      final jugadores = <Map<String, dynamic>>[];
+      for (final team in teams) {
+        if (team is! Map<String, dynamic>) continue;
+        final teamName = team['team']?['name'] as String? ?? '';
+        final teamIdRaw = team['team']?['id'];
+        final teamId = teamIdRaw is int ? teamIdRaw : (teamIdRaw is num ? teamIdRaw.toInt() : int.tryParse('$teamIdRaw') ?? 0);
+        final teamLogo = team['team']?['logo'] as String? ?? '';
+        final players = team['players'] as List? ?? [];
+        for (final p in players) {
+          if (p is! Map<String, dynamic>) continue;
+          final statsList = p['statistics'];
+          if (statsList is! List || statsList.isEmpty) continue;
+          final stats = statsList[0];
+          if (stats is! Map<String, dynamic>) continue;
+          final games = stats['games'] as Map<String, dynamic>? ?? {};
+          final numRaw = games['number'];
+          final dorsalVal = numRaw is int ? numRaw : int.tryParse('$numRaw') ?? 0;
+          final rating = games['rating'];
+          final shots = stats['shots'];
+          final tirosOn = shots is Map<String, dynamic> ? (shots['on'] ?? 0) : 0;
+          final passes = stats['passes'];
+          final pasesAcc = passes is Map<String, dynamic> ? (passes['accuracy'] ?? 0) : 0;
+          final goals = stats['goals'];
+          final cards = stats['cards'];
+          final fouls = stats['fouls'];
+          final pl = p['player'];
+          if (pl is! Map<String, dynamic>) continue;
+          jugadores.add({
+            'id': pl['id'],
+            'nombre': pl['name'],
+            'foto': pl['photo'],
+            'equipo': teamName,
+            'equipoId': teamId,
+            'equipoLogo': teamLogo,
+            'rating': rating != null ? (double.tryParse(rating.toString()) ?? 0.0) : 0.0,
+            'tieneRating': rating != null,
+            'tiros': tirosOn,
+            'pases': pasesAcc,
+            'minutos': games['minutes'] ?? 0,
+            'posicion': games['position'] ?? '',
+            'numero': dorsalVal,
+            'dorsal': dorsalVal,
+            'capitan': games['captain'] ?? false,
+            'suplente': games['substitute'] ?? false,
+            'goles': goals is Map<String, dynamic> ? (goals['total'] ?? 0) : 0,
+            'asistencias': goals is Map<String, dynamic> ? (goals['assists'] ?? 0) : 0,
+            'saves': goals is Map<String, dynamic> ? (goals['saves'] ?? 0) : 0,
+            'amarillas': cards is Map<String, dynamic> ? (cards['yellow'] ?? 0) : 0,
+            'rojas': cards is Map<String, dynamic> ? (cards['red'] ?? 0) : 0,
+            'faltas': fouls is Map<String, dynamic> ? (fouls['committed'] ?? 0) : 0,
+          });
+        }
       }
+      jugadores.sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
+      return jugadores;
+    } catch (_) {
+      return [];
     }
-    jugadores.sort((a, b) => (b['rating'] as double).compareTo(a['rating'] as double));
-    return jugadores;
   }
 
   static Future<List<Map<String, dynamic>>> getUltimos5(int teamId) async {
@@ -1610,10 +1628,6 @@ class ApiService {
       return _prediccionesCache!;
     }
     try {
-      final futCopaArg = CopaService.getFixture(CopaService.leagueCopaArgentina);
-      final futLib = CopaService.getFixture(CopaService.leagueLibertadores);
-      final futSud = CopaService.getFixture(CopaService.leagueSudamericana);
-
       final todos = await _fetchPrediccionesLigaTodos();
 
       int? proximaFecha;
@@ -1693,18 +1707,8 @@ class ApiService {
       final ligaKoPreds =
           await _prediccionesLigaArgPlayoffsNs(todos, yaLigaFids);
 
-      final caList = await futCopaArg;
-      final libList = await futLib;
-      final sudList = await futSud;
-      final cupPreds = <Map<String, dynamic>>[];
-      cupPreds.addAll(await _prediccionesCopaNs(caList,
-          tipoOrden: 1, nombreCorto: 'COPA ARGENTINA', soloArg: false));
-      cupPreds.addAll(await _prediccionesCopaNs(libList,
-          tipoOrden: 2, nombreCorto: 'LIBERTADORES', soloArg: true));
-      cupPreds.addAll(await _prediccionesCopaNs(sudList,
-          tipoOrden: 3, nombreCorto: 'SUDAMERICANA', soloArg: true));
-
-      final all = [...ligaPreds, ...ligaKoPreds, ...cupPreds];
+      // Solo Liga Profesional Argentina (fecha regular + liguilla LPF).
+      final all = [...ligaPreds, ...ligaKoPreds];
       all.sort((a, b) {
         final c = (a['grupoSortKey'] as String).compareTo(b['grupoSortKey'] as String);
         if (c != 0) return c;
@@ -1723,74 +1727,9 @@ class ApiService {
     }
   }
 
-  static bool _fixtureInvolucraArgentinoConmebol(Map<String, dynamic> p) {
-    final hId = '${p['teams']?['home']?['id'] ?? ''}';
-    final aId = '${p['teams']?['away']?['id'] ?? ''}';
-    if (_equiposArgTablaDT.contains(hId) || _equiposArgTablaDT.contains(aId)) {
-      return true;
-    }
-    final h = p['teams']?['home']?['country'] as String? ?? '';
-    final a = p['teams']?['away']?['country'] as String? ?? '';
-    return h == 'Argentina' || a == 'Argentina';
-  }
-
   static String _labelDiaPrediccion(DateTime dt) {
     const dias = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     return '${dias[dt.weekday]} ${dt.day}/${dt.month}';
-  }
-
-  static Future<List<Map<String, dynamic>>> _prediccionesCopaNs(
-    List<Map<String, dynamic>> fixtures, {
-    required int tipoOrden,
-    required String nombreCorto,
-    required bool soloArg,
-  }) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final candidatos = <Map<String, Object>>[];
-    final seen = <int>{};
-    for (final p in fixtures) {
-      if (soloArg && !_fixtureInvolucraArgentinoConmebol(p)) continue;
-      final st = p['fixture']?['status']?['short'] as String? ?? '';
-      if (st != 'NS') continue;
-      final idRaw = p['fixture']?['id'];
-      final id = idRaw is int ? idRaw : int.tryParse('$idRaw') ?? 0;
-      if (id == 0 || !seen.add(id)) continue;
-      final ds = p['fixture']?['date'] as String?;
-      if (ds == null) continue;
-      DateTime dt;
-      try {
-        dt = DateTime.parse(ds).toLocal();
-      } catch (_) {
-        continue;
-      }
-      final dOnly = DateTime(dt.year, dt.month, dt.day);
-      if (dOnly.isBefore(today)) continue;
-      final ymd =
-          '${dOnly.year}${dOnly.month.toString().padLeft(2, '0')}${dOnly.day.toString().padLeft(2, '0')}';
-      final sortKey = 'B_${ymd}_$tipoOrden';
-      final ronda = (p['league']?['round'] as String?)?.trim() ?? '';
-      final sufRonda = ronda.isNotEmpty ? ' · $ronda' : '';
-      final label = '$nombreCorto · ${_labelDiaPrediccion(dt)}$sufRonda';
-      candidatos.add({'p': p, 'sortKey': sortKey, 'label': label});
-    }
-    candidatos.sort((a, b) =>
-        (a['sortKey'] as String).compareTo(b['sortKey'] as String));
-    final out = <Map<String, dynamic>>[];
-    const batch = 3;
-    for (var i = 0; i < candidatos.length; i += batch) {
-      final slice = candidatos.skip(i).take(batch).toList();
-      out.addAll(await Future.wait(slice.map((c) => _calcularPrediccionPartido(
-            c['p'] as Map<String, dynamic>,
-            grupoSortKey: c['sortKey'] as String,
-            grupoLabel: c['label'] as String,
-            fechaLiga: null,
-          ))));
-      if (i + batch < candidatos.length) {
-        await Future.delayed(const Duration(milliseconds: 220));
-      }
-    }
-    return out;
   }
 
   /// Eliminatorias LPF (128): octavos/cuartos/semis/final — no entran en el reparto por "fecha" regular
@@ -2239,7 +2178,7 @@ class ApiService {
     final byId = <int, Map<String, dynamic>>{};
 
     void ingest(Map<String, dynamic> m) {
-      final id = m['fixture']?['id'] as int?;
+      final id = _idFromDynamic(m['fixture']?['id']);
       if (id == null) return;
       final s = m['fixture']?['status']?['short'] as String? ?? '';
       if (s != 'FT' && s != 'AET' && s != 'PEN') return;
@@ -2327,12 +2266,14 @@ class ApiService {
       for (int i = 0; i < fixtures.length; i += loteSize) {
         final lote = fixtures.skip(i).take(loteSize).toList();
         await Future.wait(lote.map((f) async {
-          final fxId   = f['fixture']['id'] as int;
-          final homeId = f['teams']['home']['id'] as int;
-          final awayId = f['teams']['away']['id'] as int;
-          final hGoals = f['goals']['home'] as int? ?? 0;
-          final aGoals = f['goals']['away'] as int? ?? 0;
           try {
+            final fm = f as Map<String, dynamic>;
+            final fxId = _idFromDynamic(fm['fixture']?['id']);
+            final homeId = _idFromDynamic(fm['teams']?['home']?['id']);
+            final awayId = _idFromDynamic(fm['teams']?['away']?['id']);
+            if (fxId == null || homeId == null || awayId == null) return;
+            final hGoals = _intFromApi(fm['goals']?['home']);
+            final aGoals = _intFromApi(fm['goals']?['away']);
             final res = await http.get(
               Uri.parse('$_baseUrl/fixtures/lineups?fixture=$fxId'),
               headers: _headers,
@@ -2346,10 +2287,10 @@ class ApiService {
               final coachId = coach['id']?.toString() ?? '';
               if (coachId.isEmpty) continue;
 
-              final luTeamId = lu['team']?['id'] as int?;
+              final luTeamId = _idFromDynamic(lu['team']?['id']);
               if (luTeamId == null) continue;
               // Solo DT de clubes argentinos: LPF y Copa Arg. cuentan todos; en Libertadores/Sudamericana solo el bando argentino.
-              final leagueF = f['league']?['id'] as int? ?? 0;
+              final leagueF = _idFromDynamic(fm['league']?['id']) ?? 0;
               final esCompetenciaSoloArg =
                   leagueF == _ligaArgentina || leagueF == _copaArgentina;
               if (!esCompetenciaSoloArg &&
@@ -2357,8 +2298,8 @@ class ApiService {
                 continue;
               }
               final isHome   = luTeamId == homeId;
-              final teamName = (isHome ? f['teams']['home']['name'] : f['teams']['away']['name']) as String;
-              final teamLogo = (isHome ? f['teams']['home']['logo'] : f['teams']['away']['logo']) as String? ?? '';
+              final teamName = (isHome ? fm['teams']['home']['name'] : fm['teams']['away']['name']) as String;
+              final teamLogo = (isHome ? fm['teams']['home']['logo'] : fm['teams']['away']['logo']) as String? ?? '';
               final gano     = isHome ? hGoals > aGoals : aGoals > hGoals;
               final empato   = hGoals == aGoals;
               final res2     = gano ? 'W' : empato ? 'D' : 'L';
@@ -2387,7 +2328,7 @@ class ApiService {
               else             dts[coachId]!['derrotas']  = (dts[coachId]!['derrotas']  as int) + 1;
               (dts[coachId]!['racha'] as List<String>).add(res2);
 
-              final fechaStr = f['fixture']?['date'] as String? ?? '';
+              final fechaStr = fm['fixture']?['date'] as String? ?? '';
               final fechaPartido = DateTime.tryParse(fechaStr);
               if (fechaPartido != null) {
                 final prev = dts[coachId]!['_ultimaFecha'] as DateTime?;
@@ -2548,8 +2489,7 @@ class ApiService {
     final activos = dts.where((d) {
       if (d['dtEnActividad'] != true) return false;
       if (lpfIds.isEmpty) return true;
-      final raw = d['equipoId'];
-      final id = raw is int ? raw : int.tryParse(raw.toString());
+      final id = _idFromDynamic(d['equipoId']);
       if (id == null) return false;
       return lpfIds.contains(id);
     }).toList();
@@ -2566,6 +2506,7 @@ class ApiService {
   static int _intFromApi(dynamic v) {
     if (v == null) return 0;
     if (v is int) return v;
+    if (v is num) return v.toInt();
     return int.tryParse(v.toString()) ?? 0;
   }
 

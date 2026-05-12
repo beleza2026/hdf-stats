@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'match_follow_service.dart';
 import 'copa_service.dart';
+import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
 
 typedef OnTapPartido = void Function(
@@ -17,6 +18,10 @@ typedef OnTapPartido = void Function(
   String? fechaPartido,
   bool isLive,
   String minuto,
+  /// API-Sports `league.id` del listado (p. ej. 130 Copa Argentina).
+  int? sourceLeagueId,
+  /// Objeto completo del fixture del listado (fusionar estadio/árbitro si el GET por id viene vacío).
+  Map<String, dynamic>? partidoLista,
 });
 
 class CopaScreen extends StatefulWidget {
@@ -163,6 +168,8 @@ Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTa
             fixtureId: fixtureId, homeId: homeId, awayId: awayId,
             fechaPartido: fechaPartido, isLive: isLive,
             minuto: isLive ? status : '',
+            sourceLeagueId: leagueId,
+            partidoLista: partido,
           ),
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -771,6 +778,8 @@ class _TabPlantelesState extends State<_TabPlanteles> {
     final clubTeamId = stats['team']?['id'] as int?;
     final nombre = player['name'] as String? ?? '';
     final foto = player['photo'] as String? ?? '';
+    final nacionalidad = (player['nationality'] as String?)?.trim() ?? '';
+    final flagNat = flagEmojiFromCountryName(nacionalidad);
     final pos = stats['games']?['position'] as String? ?? '';
     final partidos = stats['games']?['appearences'] as int? ?? 0;
     final goles = stats['goals']?['total'] as int? ?? 0;
@@ -795,6 +804,10 @@ class _TabPlantelesState extends State<_TabPlanteles> {
           backgroundColor: Colors.white12,
           child: foto.isEmpty ? const Icon(Icons.person, color: Colors.white38, size: 18) : null,
         ),
+        if (flagNat.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Text(flagNat, style: const TextStyle(fontSize: 16, height: 1)),
+        ],
         const SizedBox(width: 8),
         Expanded(
           child: GestureDetector(
