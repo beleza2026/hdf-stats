@@ -146,7 +146,7 @@ class _MatchFollowToggleState extends State<MatchFollowToggle> {
       );
     }
     return IconButton(
-      tooltip: _on! ? 'Quitar alertas de este partido' : 'Alertas de este partido',
+      tooltip: _on! ? 'Quitar alertas push de este partido' : 'Activar alertas push de este partido',
       icon: Icon(
         _on! ? Icons.notifications_active : Icons.notifications_none_outlined,
         color: _on! ? const Color(0xFF00C853) : Colors.white38,

@@ -154,12 +154,16 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido)
                 ApiService.getLineupsPartido(fixtureId),
                 ApiService.getDetallePartido(fixtureId),
                 ApiService.getPlayersPartido(fixtureId.toString()),
+                MundialService.getPlantelMundialCompleto(homeId),
+                MundialService.getPlantelMundialCompleto(awayId),
               ])
             : Future.wait<dynamic>([
                 ApiService.getLineupsPartido(fixtureId),
                 ApiService.getDetallePartido(fixtureId),
                 MundialService.getPreviewEquipoMundial(homeId),
                 MundialService.getPreviewEquipoMundial(awayId),
+                MundialService.getPlantelMundialCompleto(homeId),
+                MundialService.getPlantelMundialCompleto(awayId),
               ]),
         builder: (context, snap) {
           if (jugado) {
@@ -240,13 +244,28 @@ Widget _statRow(String stat, String localVal, String visitVal) {
   );
 }
 
+String _statsMundialFormacionLinea(Map<int, Map<String, dynamic>>? plantelIdx, int playerId) {
+  if (plantelIdx == null || playerId <= 0) return '';
+  final row = plantelIdx[playerId];
+  if (row == null) return '';
+  final m = MundialService.resumenMundialPlantel(row);
+  return 'Mundial · PJ ${m.pj} · G ${m.goles} · Exp ${m.expulsiones}';
+}
+
 Widget _formacionLineal(
   BuildContext context,
   List<Map<String, dynamic>> lineups,
   String local,
-  String visitante,
-) {
-  Widget equipoWidget(Map<String, dynamic> team, String nombre, Color color) {
+  String visitante, {
+  Map<int, Map<String, dynamic>>? plantelHome,
+  Map<int, Map<String, dynamic>>? plantelAway,
+}) {
+  Widget equipoWidget(
+    Map<String, dynamic> team,
+    String nombre,
+    Color color,
+    Map<int, Map<String, dynamic>>? plantelIdx,
+  ) {
     final clubFormId = _intFromDyn(team['team']?['id']);
     final formacion = team['formation'] as String? ?? '';
     final titulares = List<Map<String, dynamic>>.from(team['startXI'] ?? []);
@@ -281,9 +300,11 @@ Widget _formacionLineal(
             final num = pl['number'] as int? ?? 0;
             final pnombre = _cleanName(pl['name'] as String? ?? '');
             final pos = pl['pos'] as String? ?? '';
+            final statsLine = _statsMundialFormacionLinea(plantelIdx, pid);
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 22,
@@ -298,7 +319,23 @@ Widget _formacionLineal(
                       onTap: pid > 0 && clubFormId != null
                           ? () => showPlayerCareerSheet(context, playerId: pid, clubTeamId: clubFormId, playerName: pnombre)
                           : null,
-                      child: Text(pnombre, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(pnombre, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          if (statsLine.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(statsLine,
+                                  style: TextStyle(color: color.withValues(alpha: 0.85), fontSize: 10, fontWeight: FontWeight.w600)),
+                            ),
+                          if (clubFormId != null && clubFormId > 0 && pid > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: mundialClubActualLine(pid, clubFormId),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   Text(pos, style: const TextStyle(color: Colors.white38, fontSize: 10)),
@@ -318,6 +355,8 @@ Widget _formacionLineal(
                 final sid = _intFromDyn(pl['id']) ?? 0;
                 final num = pl['number'] as int? ?? 0;
                 final name = _cleanName(pl['name'] as String? ?? '').split(' ').last;
+                final sub = _statsMundialFormacionLinea(plantelIdx, sid);
+                final label = sub.isEmpty ? '$num $name' : '$num $name · ${sub.replaceFirst('Mundial · ', '')}';
                 return GestureDetector(
                   onTap: sid > 0 && clubFormId != null
                       ? () => showPlayerCareerSheet(context, playerId: sid, clubTeamId: clubFormId, playerName: name)
@@ -325,7 +364,7 @@ Widget _formacionLineal(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-                    child: Text('$num $name', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                    child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
                   ),
                 );
               }).toList(),
@@ -338,9 +377,9 @@ Widget _formacionLineal(
 
   return Column(
     children: [
-      equipoWidget(lineups[0], local, const Color(0xFF00C853)),
+      equipoWidget(lineups[0], local, const Color(0xFF00C853), plantelHome),
       const SizedBox(height: 8),
-      equipoWidget(lineups[1], visitante, const Color(0xFF1E88E5)),
+      equipoWidget(lineups[1], visitante, const Color(0xFF1E88E5), plantelAway),
     ],
   );
 }
@@ -576,6 +615,10 @@ Widget _buildListaPrematch({
   final detalle = snap.data?[1] as Map<String, dynamic>?;
   final previewHome = snap.data?[2] as Map<String, dynamic>? ?? {};
   final previewAway = snap.data?[3] as Map<String, dynamic>? ?? {};
+  final plantelHomeRaw = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
+  final plantelAwayRaw = List<Map<String, dynamic>>.from(snap.data?[5] ?? []);
+  final idxPlantelHome = MundialService.indexPlantelPorJugadorId(plantelHomeRaw);
+  final idxPlantelAway = MundialService.indexPlantelPorJugadorId(plantelAwayRaw);
 
   final rawDate = detalle?['fixture']?['date'] as String? ?? partido['fixture']?['date'] as String?;
   final matchDateTime = rawDate != null ? DateTime.tryParse(rawDate)?.toLocal() : null;
@@ -643,7 +686,8 @@ Widget _buildListaPrematch({
       const SizedBox(height: 12),
       if (lineups.length >= 2) ...[
         _seccion('FORMACIONES'),
-        _formacionLineal(context, lineups, local, visitante),
+        _formacionLineal(context, lineups, local, visitante,
+            plantelHome: idxPlantelHome, plantelAway: idxPlantelAway),
         const SizedBox(height: 8),
       ],
       _seccion('DESTACADOS EN EL MUNDIAL'),
@@ -681,6 +725,10 @@ Widget _buildListaJugado({
   final statusShortDet = stList.isNotEmpty ? stList : PenalesShootoutHelper.statusShortDesdePartido(detalle);
   final partidoRefPen = PenalesShootoutHelper.refPartidoConScorePen(partido, detalle);
   final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
+  final plantelHomeRaw = List<Map<String, dynamic>>.from(snap.data?[5] ?? []);
+  final plantelAwayRaw = List<Map<String, dynamic>>.from(snap.data?[6] ?? []);
+  final idxPlantelHome = MundialService.indexPlantelPorJugadorId(plantelHomeRaw);
+  final idxPlantelAway = MundialService.indexPlantelPorJugadorId(plantelAwayRaw);
 
   final teamsDet = detalle?['teams'] as Map<String, dynamic>? ??
       partido['teams'] as Map<String, dynamic>? ??
@@ -1229,7 +1277,8 @@ Widget _buildListaJugado({
         const SizedBox(height: 16),
         if (lineups.length >= 2) ...[
           _seccion('FORMACIONES'),
-          _formacionLineal(context, lineups, local, visitante),
+          _formacionLineal(context, lineups, local, visitante,
+              plantelHome: idxPlantelHome, plantelAway: idxPlantelAway),
         ] else ...[
           _seccion('FORMACIONES'),
           const Padding(

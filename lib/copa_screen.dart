@@ -578,20 +578,19 @@ class _TabGoleadores extends StatelessWidget {
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: players.length,
-          itemBuilder: (context, i) => _cardGoleador(players[i], i + 1),
+          itemBuilder: (context, i) => _cardGoleador(players[i], leagueId, i + 1),
         );
       },
     );
   }
 
-  Widget _cardGoleador(Map<String, dynamic> data, int pos) {
+  Widget _cardGoleador(Map<String, dynamic> data, int leagueId, int pos) {
     final player = data['player'] as Map<String, dynamic>?;
     if (player == null) return const SizedBox.shrink();
-    final statsList = data['statistics'] as List?;
-    if (statsList == null || statsList.isEmpty) return const SizedBox.shrink();
-    final stats = statsList.first as Map<String, dynamic>;
-    final goals = stats['goals']?['total'] as int? ?? 0;
-    final assists = stats['goals']?['assists'] as int? ?? 0;
+    final stats = CopaService.statsForLeague(data, leagueId);
+    if (stats == null) return const SizedBox.shrink();
+    final goals = (stats['goals']?['total'] as num?)?.toInt() ?? 0;
+    final assists = (stats['goals']?['assists'] as num?)?.toInt() ?? 0;
     final team = stats['team']?['name'] as String? ?? '';
     final nombre = player['name'] as String? ?? '';
     final foto = player['photo'] as String? ?? '';
@@ -776,7 +775,8 @@ class _TabPlantelesState extends State<_TabPlanteles> {
   Widget _cardJugador(Map<String, dynamic> data) {
     final player = data['player'];
     final statsList = data['statistics'] as List? ?? [];
-    final stats = statsList.isNotEmpty ? statsList.first as Map<String, dynamic> : <String, dynamic>{};
+    final stats = CopaService.statsForLeague(data, widget.leagueId) ??
+        (statsList.isNotEmpty ? Map<String, dynamic>.from(statsList.first as Map) : <String, dynamic>{});
     final playerId = player['id'] as int?;
     final clubTeamId = stats['team']?['id'] as int?;
     final nombre = player['name'] as String? ?? '';

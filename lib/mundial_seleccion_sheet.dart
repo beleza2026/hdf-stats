@@ -9,16 +9,22 @@ String _cleanName(String name) {
   return String.fromCharCodes(name.runes.where((r) => r <= 0xFFFF)).trim();
 }
 
-Map<String, dynamic>? _statsMundialEnFila(Map<String, dynamic> row) {
-  final list = row['statistics'] as List?;
-  if (list == null) return null;
-  for (final s in list) {
-    if (s is Map<String, dynamic> && s['league']?['id'] == 1) return s;
-  }
-  if (list.isNotEmpty && list.first is Map<String, dynamic>) {
-    return list.first as Map<String, dynamic>;
-  }
-  return null;
+Map<String, dynamic> _playerMapFromRow(Map<String, dynamic> row) {
+  final raw = row['player'];
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) return Map<String, dynamic>.from(raw);
+  return {};
+}
+
+int _playerIdFromMap(Map<String, dynamic> pl) {
+  return (pl['id'] as num?)?.toInt() ?? int.tryParse('${pl['id']}') ?? 0;
+}
+
+int _intFromStat(dynamic v) {
+  if (v == null) return 0;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString()) ?? 0;
 }
 
 int _ordenPosicion(String? pos) {
@@ -75,7 +81,17 @@ void showMundialSeleccionSheet(
           final data = snap.data ?? {};
           final info = data['info'] as Map<String, dynamic>?;
           final trofeos = List<Map<String, dynamic>>.from(data['trofeos'] as List? ?? []);
-          final plantelRaw = List<Map<String, dynamic>>.from(data['plantel'] as List? ?? []);
+          final plantelRaw = <Map<String, dynamic>>[];
+          final pr = data['plantel'];
+          if (pr is List) {
+            for (final e in pr) {
+              if (e is Map<String, dynamic>) {
+                plantelRaw.add(e);
+              } else if (e is Map) {
+                plantelRaw.add(Map<String, dynamic>.from(e));
+              }
+            }
+          }
           final hist = data['historico'] as Map<String, dynamic>? ?? {};
 
           final nombre = (info?['name'] as String?)?.trim().isNotEmpty == true
@@ -93,13 +109,15 @@ void showMundialSeleccionSheet(
           final nTitulos = titulos.length;
 
           plantelRaw.sort((a, b) {
-            final sa = _statsMundialEnFila(a);
-            final sb = _statsMundialEnFila(b);
-            final oa = _ordenPosicion(sa?['games']?['position'] as String?);
-            final ob = _ordenPosicion(sb?['games']?['position'] as String?);
+            final sa = MundialService.statisticsMundialLiga1(a, priorizarSeleccionId: teamId);
+            final sb = MundialService.statisticsMundialLiga1(b, priorizarSeleccionId: teamId);
+            final ga = MundialService.childMap(sa?['games']);
+            final gb = MundialService.childMap(sb?['games']);
+            final oa = _ordenPosicion(ga['position'] as String?);
+            final ob = _ordenPosicion(gb['position'] as String?);
             if (oa != ob) return oa.compareTo(ob);
-            final na = (sa?['games']?['number'] as num?)?.toInt() ?? 999;
-            final nb = (sb?['games']?['number'] as num?)?.toInt() ?? 999;
+            final na = (ga['number'] as num?)?.toInt() ?? 999;
+            final nb = (gb['number'] as num?)?.toInt() ?? 999;
             return na.compareTo(nb);
           });
 
@@ -207,14 +225,17 @@ void showMundialSeleccionSheet(
               const SizedBox(height: 18),
               _seccionTitulo('PLANTEL — MUNDIAL 2026'),
               const Text(
-                'Número · foto · goles · rojas · rating (datos de la competición en la API)',
+                'PJ y goles con la selección en esta competición · expulsiones · club actual (fuera de la selección)',
                 style: TextStyle(color: Colors.white38, fontSize: 11),
               ),
               const SizedBox(height: 10),
               if (plantelRaw.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('Sin plantel con estadísticas aún.', style: TextStyle(color: Colors.white38)),
+                  child: Text(
+                    'Sin plantel en la API para esta selección (revisá conexión o probá más tarde).',
+                    style: TextStyle(color: Colors.white38),
+                  ),
                 )
               else
                 ...plantelRaw.map((row) => _filaJugadorPlantel(
@@ -281,28 +302,115 @@ Widget _filaGoleador(String nombre, int valor, String foto, {bool esGoles = true
   );
 }
 
+Widget _chipPlantelStat(String label, String valor, {Color accent = const Color(0xFF00C853)}) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: accent.withValues(alpha: 0.35)),
+    ),
+    child: Text(
+      '$label $valor',
+      style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w700),
+    ),
+  );
+}
+
+/// Club actual del jugador fuera de la selección (API + cache). Reutilizable en formaciones del partido.
+Widget mundialClubActualLine(int playerId, int nationalTeamId) {
+  if (playerId <= 0) {
+    return const SizedBox.shrink();
+  }
+  return FutureBuilder<Map<String, dynamic>?>(
+    future: ApiService.getClubActualExcluyendoEquipoCached(playerId, nationalTeamId),
+    builder: (context, snap) {
+      if (snap.connectionState == ConnectionState.waiting) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'Club: cargando…',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 11),
+          ),
+        );
+      }
+      final c = snap.data;
+      final nombre = c?['nombre'] as String? ?? '';
+      if (nombre.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'Club: no disponible en API',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.32), fontSize: 11),
+          ),
+        );
+      }
+      final logo = c?['logo'] as String? ?? '';
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (logo.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(logo, width: 22, height: 22, fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.shield_outlined, size: 18, color: Color(0xFF90CAF9))),
+              ),
+              const SizedBox(width: 8),
+            ] else ...[
+              const Icon(Icons.shield_outlined, size: 14, color: Color(0xFF90CAF9)),
+              const SizedBox(width: 6),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Club', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w600)),
+                  Text(
+                    nombre,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 Widget _filaJugadorPlantel(
   BuildContext context, {
   required Map<String, dynamic> row,
   required int nationalTeamId,
 }) {
-  final pl = row['player'] as Map<String, dynamic>? ?? {};
+  final pl = _playerMapFromRow(row);
   final nombre = _cleanName(pl['name'] as String? ?? '');
   final foto = pl['photo'] as String? ?? '';
-  final pid = pl['id'] as int? ?? 0;
+  final pid = _playerIdFromMap(pl);
   final nacionalidad = (pl['nationality'] as String?)?.trim() ?? '';
   final flagJug = flagEmojiFromCountryName(nacionalidad);
-  final st = _statsMundialEnFila(row);
-  final games = st?['games'] as Map<String, dynamic>? ?? {};
-  final goals = st?['goals'] as Map<String, dynamic>? ?? {};
-  final cards = st?['cards'] as Map<String, dynamic>? ?? {};
-  final dorsal = (games['number'] as num?)?.toInt() ?? 0;
-  final pj = (games['appearences'] as num?)?.toInt() ?? (games['appearances'] as num?)?.toInt() ?? 0;
+  final st = MundialService.statisticsMundialLiga1(row, priorizarSeleccionId: nationalTeamId);
+  final games = MundialService.childMap(st?['games']);
+  final goals = MundialService.childMap(st?['goals']);
+  final cards = MundialService.childMap(st?['cards']);
+  final dorsal = _intFromStat(games['number']) != 0
+      ? _intFromStat(games['number'])
+      : _intFromStat(pl['number']);
+  final pjA = _intFromStat(games['appearences']);
+  final pjB = _intFromStat(games['appearances']);
+  final pj = pjA != 0 ? pjA : pjB;
   final rating = double.tryParse(games['rating']?.toString() ?? '') ?? 0.0;
-  final g = (goals['total'] as num?)?.toInt() ?? 0;
-  final rojas = (cards['red'] as num?)?.toInt() ?? 0;
-  final yred = (cards['yellowred'] as num?)?.toInt() ?? 0;
+  final g = _intFromStat(goals['total']);
+  final rojas = _intFromStat(cards['red']);
+  final yred = _intFromStat(cards['yellowred']);
   final expulsiones = rojas + yred;
+
+  final pos = (games['position'] as String? ?? pl['position']?.toString() ?? '').trim();
 
   return Material(
     color: Colors.transparent,
@@ -320,6 +428,7 @@ Widget _filaJugadorPlantel(
           border: Border.all(color: Colors.white10),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 28,
@@ -345,10 +454,29 @@ Widget _filaJugadorPlantel(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  if (pos.isNotEmpty)
+                    Text(
+                      pos,
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 10, fontWeight: FontWeight.w600),
+                    ),
+                  const SizedBox(height: 6),
                   Text(
-                    'PJ $pj · ⚽ $g · 🟥 $expulsiones${rating > 0 ? ' · ★ ${rating.toStringAsFixed(1)}' : ''}',
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    'En este Mundial: $pj PJ · $g goles · $expulsiones expulsiones',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11, fontWeight: FontWeight.w600),
                   ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _chipPlantelStat('PJ selección', '$pj'),
+                      _chipPlantelStat('Goles', '$g', accent: const Color(0xFFFFD700)),
+                      _chipPlantelStat('Expulsiones', '$expulsiones', accent: const Color(0xFFFF5252)),
+                      if (rating > 0)
+                        _chipPlantelStat('Rating', rating.toStringAsFixed(1), accent: Colors.white70),
+                    ],
+                  ),
+                  mundialClubActualLine(pid, nationalTeamId),
                 ],
               ),
             ),
@@ -365,25 +493,27 @@ void showMundialSeleccionPlayerSheet(
   required Map<String, dynamic> playerRow,
   required int nationalTeamId,
 }) {
-  final pl = playerRow['player'] as Map<String, dynamic>? ?? {};
-  final pid = pl['id'] as int? ?? 0;
+  final pl = _playerMapFromRow(playerRow);
+  final pid = _playerIdFromMap(pl);
   if (pid <= 0) return;
 
-  final st = _statsMundialEnFila(playerRow);
-  final games = st?['games'] as Map<String, dynamic>? ?? {};
-  final goals = st?['goals'] as Map<String, dynamic>? ?? {};
-  final cards = st?['cards'] as Map<String, dynamic>? ?? {};
+  final st = MundialService.statisticsMundialLiga1(playerRow, priorizarSeleccionId: nationalTeamId);
+  final games = MundialService.childMap(st?['games']);
+  final goals = MundialService.childMap(st?['goals']);
+  final cards = MundialService.childMap(st?['cards']);
   final nombre = _cleanName(pl['name'] as String? ?? '');
   final foto = pl['photo'] as String? ?? '';
   final pos = games['position'] as String? ?? '';
-  final dorsal = (games['number'] as num?)?.toInt() ?? 0;
+  final dorsal = _intFromStat(games['number']);
+  final pjA = _intFromStat(games['appearences']);
+  final pjB = _intFromStat(games['appearances']);
+  final pj = pjA != 0 ? pjA : pjB;
   final rating = double.tryParse(games['rating']?.toString() ?? '') ?? 0.0;
-  final pj = (games['appearences'] as num?)?.toInt() ?? (games['appearances'] as num?)?.toInt() ?? 0;
-  final g = (goals['total'] as num?)?.toInt() ?? 0;
-  final asist = (goals['assists'] as num?)?.toInt() ?? 0;
-  final amar = (cards['yellow'] as num?)?.toInt() ?? 0;
-  final rojas = (cards['red'] as num?)?.toInt() ?? 0;
-  final yred = (cards['yellowred'] as num?)?.toInt() ?? 0;
+  final g = _intFromStat(goals['total']);
+  final asist = _intFromStat(goals['assists']);
+  final amar = _intFromStat(cards['yellow']);
+  final rojas = _intFromStat(cards['red']);
+  final yred = _intFromStat(cards['yellowred']);
 
   showModalBottomSheet<void>(
     context: context,
@@ -452,7 +582,7 @@ void showMundialSeleccionPlayerSheet(
                 style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 10),
             FutureBuilder<Map<String, dynamic>?>(
-              future: ApiService.getClubActualExcluyendoEquipo(pid, nationalTeamId),
+              future: ApiService.getClubActualExcluyendoEquipoCached(pid, nationalTeamId),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Padding(
@@ -494,8 +624,8 @@ void showMundialSeleccionPlayerSheet(
                 child: OutlinedButton.icon(
                   onPressed: () async {
                     Navigator.pop(ctx);
-                    final club = await ApiService.getClubActualExcluyendoEquipo(pid, nationalTeamId);
-                    final clubId = club?['id'] as int? ?? 0;
+                    final club = await ApiService.getClubActualExcluyendoEquipoCached(pid, nationalTeamId);
+                    final clubId = (club?['id'] as num?)?.toInt() ?? int.tryParse('${club?['id']}') ?? 0;
                     if (!context.mounted || clubId <= 0) return;
                     await showPlayerCareerSheet(
                       context,

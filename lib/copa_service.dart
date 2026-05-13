@@ -13,6 +13,48 @@ class CopaService {
     'x-apisports-key': _apiKey,
   };
 
+  /// API-Football puede mandar `errors: {}` en respuestas OK.
+  static bool _apiErrorsPresent(dynamic decoded) {
+    if (decoded is! Map) return false;
+    final e = decoded['errors'];
+    if (e == null) return false;
+    if (e is Map) return e.isNotEmpty;
+    if (e is List) return e.isNotEmpty;
+    if (e is String) return e.trim().isNotEmpty;
+    return false;
+  }
+
+  /// Copa Argentina: más temporadas por si la API cambia el año de la edición.
+  static List<int> _seasonsFor(int leagueId) {
+    if (leagueId == leagueCopaArgentina) {
+      return const [2026, 2025, 2024, 2023, 2022];
+    }
+    return _seasonsCopa;
+  }
+
+  static Map<String, dynamic>? _statPreferLiga(Map<String, dynamic> row, int leagueId) {
+    final list = row['statistics'] as List?;
+    if (list == null || list.isEmpty) return null;
+    for (final s in list) {
+      if (s is! Map) continue;
+      final sm = Map<String, dynamic>.from(s);
+      final lid = (sm['league']?['id'] as num?)?.toInt();
+      if (lid == leagueId) return sm;
+    }
+    return Map<String, dynamic>.from(list.first as Map);
+  }
+
+  static int _golesDesdeRow(Map<String, dynamic> row, int leagueId) {
+    final st = _statPreferLiga(row, leagueId);
+    final g = st?['goals'];
+    if (g is Map) return (g['total'] as num?)?.toInt() ?? int.tryParse('${g['total']}') ?? 0;
+    return 0;
+  }
+
+  /// Bloque `statistics` alineado con la liga del torneo (p. ej. Copa Arg. 130).
+  static Map<String, dynamic>? statsForLeague(Map<String, dynamic> row, int leagueId) =>
+      _statPreferLiga(row, leagueId);
+
   /// Temporadas a probar en orden (la API a veces usa 2025 u 2026 para la edición vigente).
   static const List<int> _seasonsCopa = [2026, 2025];
 
@@ -21,7 +63,7 @@ class CopaService {
     final hoy = DateTime.now().toLocal();
     final fecha =
         '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-    for (final season in _seasonsCopa) {
+    for (final season in _seasonsFor(leagueId)) {
       try {
         final response = await http.get(
           Uri.parse(
@@ -30,7 +72,8 @@ class CopaService {
         );
         if (response.statusCode != 200) continue;
         final data = jsonDecode(response.body);
-        final fixtures = data['response'] as List;
+        if (_apiErrorsPresent(data)) continue;
+        final fixtures = data['response'] as List? ?? [];
         final list = fixtures
             .map((f) => f as Map<String, dynamic>)
             .where((f) {
@@ -63,8 +106,7 @@ class CopaService {
       final response = await http.get(uri, headers: _headers);
       if (response.statusCode != 200) break;
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final errs = data['errors'];
-      if (errs is Map && errs.isNotEmpty) break;
+      if (_apiErrorsPresent(data)) break;
       final fixtures = data['response'] as List? ?? [];
       for (final f in fixtures) {
         out.add(f as Map<String, dynamic>);
@@ -81,7 +123,7 @@ class CopaService {
 
   // FIXTURE completo del torneo (todas las páginas)
   static Future<List<Map<String, dynamic>>> getFixture(int leagueId) async {
-    for (final season in _seasonsCopa) {
+    for (final season in _seasonsFor(leagueId)) {
       try {
         final list = await _fixturesAllPages(leagueId, season);
         if (list.isNotEmpty) return list;
@@ -92,7 +134,7 @@ class CopaService {
 
   // TABLA DE GRUPOS
   static Future<List<Map<String, dynamic>>> getGrupos(int leagueId) async {
-    for (final season in _seasonsCopa) {
+    for (final season in _seasonsFor(leagueId)) {
       try {
         final response = await http.get(
           Uri.parse('$_baseUrl/standings?league=$leagueId&season=$season'),
@@ -100,7 +142,8 @@ class CopaService {
         );
         if (response.statusCode != 200) continue;
         final data = jsonDecode(response.body);
-        final standings = data['response'] as List;
+        if (_apiErrorsPresent(data)) continue;
+        final standings = data['response'] as List? ?? [];
         if (standings.isEmpty) continue;
         final league = standings[0]['league'];
         final grupos = league['standings'] as List;
@@ -112,36 +155,7 @@ class CopaService {
 
   // GOLEADORES
   static Future<List<Map<String, dynamic>>> getGoleadores(int leagueId) async {
-    if (leagueId == leagueCopaArgentina) {
-      // Una sola temporada vigente: la primera con datos (2026 antes que 2025).
-      // Antes se elegía la lista con más filas → mezclaba ediciones y sumaba de más en la percepción del usuario.
-      for (final season in _seasonsCopa) {
-        try {
-          final response = await http.get(
-            Uri.parse(
-                '$_baseUrl/players/topscorers?league=$leagueId&season=$season'),
-            headers: _headers,
-          );
-          if (response.statusCode != 200) continue;
-          final data = jsonDecode(response.body);
-          final players = data['response'] as List;
-          if (players.isEmpty) continue;
-          final list =
-              players.map((p) => p as Map<String, dynamic>).toList();
-          list.sort((a, b) {
-            int g(Map<String, dynamic> x) {
-              final st = x['statistics'];
-              if (st is! List || st.isEmpty) return 0;
-              return (st.first['goals']?['total'] as num?)?.toInt() ?? 0;
-            }
-            return g(b).compareTo(g(a));
-          });
-          return list;
-        } catch (_) {}
-      }
-      return [];
-    }
-    for (final season in _seasonsCopa) {
+    for (final season in _seasonsFor(leagueId)) {
       try {
         final response = await http.get(
           Uri.parse(
@@ -150,30 +164,61 @@ class CopaService {
         );
         if (response.statusCode != 200) continue;
         final data = jsonDecode(response.body);
-        final players = data['response'] as List;
+        if (_apiErrorsPresent(data)) continue;
+        final players = data['response'] as List? ?? [];
         if (players.isEmpty) continue;
-        return players.map((p) => p as Map<String, dynamic>).toList();
+        final list = players.map((p) => p as Map<String, dynamic>).toList();
+        list.sort((a, b) => _golesDesdeRow(b, leagueId).compareTo(_golesDesdeRow(a, leagueId)));
+        return list;
       } catch (_) {}
     }
     return [];
   }
 
-  // EQUIPOS ARGENTINOS en el torneo (para plantel)
+  // EQUIPOS del torneo (Copa Arg.: sin filtro país primero — la API a veces devuelve 0 con country=Argentina)
   static Future<List<Map<String, dynamic>>> getEquiposArgentinos(
       int leagueId) async {
-    for (final season in _seasonsCopa) {
+    final out = <Map<String, dynamic>>[];
+    final seen = <int>{};
+    void addAll(List<dynamic> raw) {
+      for (final t in raw) {
+        if (t is! Map) continue;
+        final m = Map<String, dynamic>.from(t);
+        final team = m['team'] is Map ? Map<String, dynamic>.from(m['team'] as Map) : null;
+        if (team == null) continue;
+        final id = (team['id'] as num?)?.toInt() ?? 0;
+        if (id <= 0 || !seen.add(id)) continue;
+        out.add(m);
+      }
+    }
+
+    for (final season in _seasonsFor(leagueId)) {
       try {
-        final response = await http.get(
-          Uri.parse(
-              '$_baseUrl/teams?league=$leagueId&season=$season&country=Argentina'),
+        var response = await http.get(
+          Uri.parse('$_baseUrl/teams?league=$leagueId&season=$season'),
           headers: _headers,
         );
-        if (response.statusCode != 200) continue;
-        final data = jsonDecode(response.body);
-        final teams = data['response'] as List;
-        if (teams.isEmpty) continue;
-        return teams.map((t) => t as Map<String, dynamic>).toList();
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (!_apiErrorsPresent(data)) {
+            addAll(data['response'] as List? ?? []);
+          }
+        }
+        if (leagueId == leagueCopaArgentina && out.isEmpty) {
+          response = await http.get(
+            Uri.parse(
+                '$_baseUrl/teams?league=$leagueId&season=$season&country=Argentina'),
+            headers: _headers,
+          );
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            if (!_apiErrorsPresent(data)) {
+              addAll(data['response'] as List? ?? []);
+            }
+          }
+        }
       } catch (_) {}
+      if (out.isNotEmpty) return out;
     }
     return [];
   }
@@ -181,20 +226,74 @@ class CopaService {
   // PLANTEL + STATS de un equipo en el torneo
   static Future<List<Map<String, dynamic>>> getPlantelStats(
       int leagueId, int teamId, {int pagina = 1}) async {
-    for (final season in _seasonsCopa) {
+    for (final season in _seasonsFor(leagueId)) {
       try {
-        final response = await http.get(
-          Uri.parse(
-              '$_baseUrl/players?league=$leagueId&season=$season&team=$teamId&page=$pagina'),
-          headers: _headers,
-        );
-        if (response.statusCode != 200) continue;
-        final data = jsonDecode(response.body);
-        final players = data['response'] as List;
-        if (players.isEmpty) continue;
-        return players.map((p) => p as Map<String, dynamic>).toList();
+        final base = '$_baseUrl/players?league=$leagueId&season=$season&team=$teamId';
+        final urls = pagina <= 1 ? <String>[base, '$base&page=1'] : <String>['$base&page=$pagina'];
+        for (final url in urls) {
+          final response = await http.get(Uri.parse(url), headers: _headers);
+          if (response.statusCode != 200) continue;
+          final data = jsonDecode(response.body);
+          if (_apiErrorsPresent(data)) continue;
+          final players = data['response'] as List? ?? [];
+          if (players.isNotEmpty) {
+            return players.map((p) => p as Map<String, dynamic>).toList();
+          }
+        }
       } catch (_) {}
     }
+    if (leagueId == leagueCopaArgentina && pagina == 1) {
+      return _plantelDesdeSquads(teamId);
+    }
     return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> _plantelDesdeSquads(int teamId) async {
+    if (teamId <= 0) return [];
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/players/squads?team=$teamId'),
+        headers: _headers,
+      );
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body);
+      if (_apiErrorsPresent(data)) return [];
+      final resp = data['response'] as List? ?? [];
+      if (resp.isEmpty) return [];
+      final block0 = resp.first;
+      if (block0 is! Map) return [];
+      final players = block0['players'] as List? ?? [];
+      final out = <Map<String, dynamic>>[];
+      for (final pl in players) {
+        if (pl is! Map) continue;
+        final m = Map<String, dynamic>.from(pl);
+        final id = (m['id'] as num?)?.toInt() ?? 0;
+        if (id <= 0) continue;
+        final posRaw = m['position'];
+        final pos = posRaw is String ? posRaw : null;
+        out.add({
+          'player': {
+            'id': id,
+            'name': m['name'],
+            'photo': m['photo'],
+            'nationality': m['nationality'],
+          },
+          'statistics': [
+            {
+              'team': {'id': teamId},
+              'games': {
+                'position': pos,
+                'appearences': 0,
+                'appearances': 0,
+              },
+              'goals': {'total': 0, 'assists': 0},
+            },
+          ],
+        });
+      }
+      return out;
+    } catch (_) {
+      return [];
+    }
   }
 }

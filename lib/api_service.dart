@@ -13,6 +13,17 @@ class ApiService {
   /// Temporada principal de la app (Liga Profesional en `getFixture`, etc.).
   static int get temporadaLigaPrincipal => _season;
 
+  /// API-Football: `errors: {}` en respuestas OK; solo tratar como fallo si hay contenido.
+  static bool _apiSportsDecodedHasErrors(dynamic decoded) {
+    if (decoded is! Map) return false;
+    final e = decoded['errors'];
+    if (e == null) return false;
+    if (e is Map) return e.isNotEmpty;
+    if (e is List) return e.isNotEmpty;
+    if (e is String) return e.trim().isNotEmpty;
+    return false;
+  }
+
   /// Agrupa `league.round` de la Liga 128: 1–99 fecha regular, 200 octavos, 300 cuartos, 400 semis, 500 final, 999 otro.
   static int ligaFixtureBucket(String roundRaw) {
     final r = roundRaw.trim().toLowerCase();
@@ -3217,15 +3228,25 @@ for (final f in jugados) {
       if (fecha != null) url += '&date=$fecha';
       final uri = Uri.parse(url);
       final res = await http.get(uri, headers: _headers);
+      if (res.statusCode != 200) return [];
       final data = jsonDecode(res.body);
+      if (_apiSportsDecodedHasErrors(data)) return [];
       if (data['response'] == null) return [];
-      final fixtures = (data['response'] as List)
-          .map((f) => f as Map<String, dynamic>)
-          .toList();
+      final raw = data['response'] as List? ?? [];
+      final fixtures = <Map<String, dynamic>>[];
+      for (final f in raw) {
+        if (f is Map<String, dynamic>) {
+          fixtures.add(f);
+        } else if (f is Map) {
+          fixtures.add(Map<String, dynamic>.from(f));
+        }
+      }
       fixtures.sort((a, b) {
-        final da = DateTime.tryParse(a['fixture']['date'] as String? ?? '') ?? DateTime(2026);
-        final db = DateTime.tryParse(b['fixture']['date'] as String? ?? '') ?? DateTime(2026);
-        return da.compareTo(db);
+        final fa = a['fixture'];
+        final fb = b['fixture'];
+        final da = fa is Map ? DateTime.tryParse(fa['date'] as String? ?? '') : null;
+        final db = fb is Map ? DateTime.tryParse(fb['date'] as String? ?? '') : null;
+        return (da ?? DateTime.utc(2026, 6, 1)).compareTo(db ?? DateTime.utc(2026, 6, 1));
       });
       return fixtures;
     } catch (e) {
@@ -3239,12 +3260,20 @@ for (final f in jugados) {
       final uri = Uri.parse(
           '$_baseUrl/players/topscorers?league=$_mundialId&season=$_mundialSeason');
       final res = await http.get(uri, headers: _headers);
+      if (res.statusCode != 200) return [];
       final data = jsonDecode(res.body);
+      if (_apiSportsDecodedHasErrors(data)) return [];
       if (data['response'] == null) return [];
-      return (data['response'] as List)
-          .map((p) => p as Map<String, dynamic>)
-          .take(20)
-          .toList();
+      final raw = data['response'] as List? ?? [];
+      final out = <Map<String, dynamic>>[];
+      for (final p in raw) {
+        if (p is Map<String, dynamic>) {
+          out.add(p);
+        } else if (p is Map) {
+          out.add(Map<String, dynamic>.from(p));
+        }
+      }
+      return out.take(20).toList();
     } catch (e) {
       return [];
     }
@@ -3258,9 +3287,20 @@ for (final f in jugados) {
       final uri = Uri.parse(
           '$_baseUrl/fixtures?league=$_mundialId&season=$_mundialSeason&date=$fechaStr&timezone=America/Argentina/Buenos_Aires');
       final res = await http.get(uri, headers: _headers);
+      if (res.statusCode != 200) return [];
       final data = jsonDecode(res.body);
+      if (_apiSportsDecodedHasErrors(data)) return [];
       if (data['response'] == null) return [];
-      return (data['response'] as List).map((f) => f as Map<String, dynamic>).toList();
+      final rawH = data['response'] as List? ?? [];
+      final outH = <Map<String, dynamic>>[];
+      for (final f in rawH) {
+        if (f is Map<String, dynamic>) {
+          outH.add(f);
+        } else if (f is Map) {
+          outH.add(Map<String, dynamic>.from(f));
+        }
+      }
+      return outH;
     } catch (e) {
       return [];
     }
@@ -4237,7 +4277,7 @@ for (final f in jugados) {
         if (row is! Map) continue;
         final team = row['team'] as Map<String, dynamic>?;
         if (team == null) continue;
-        final tid = team['id'] as int? ?? 0;
+        final tid = (team['id'] as num?)?.toInt() ?? int.tryParse('${team['id']}') ?? 0;
         if (tid == excluirTeamId || tid <= 0) continue;
         final seasons = row['seasons'] as List? ?? [];
         for (final s in seasons) {
@@ -4257,6 +4297,21 @@ for (final f in jugados) {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Misma data que [getClubActualExcluyendoEquipo], con caché por jugador y selección (plantel Mundial).
+  static final Map<String, Future<Map<String, dynamic>?>> _clubExcluirFutureCache = {};
+
+  static Future<Map<String, dynamic>?> getClubActualExcluyendoEquipoCached(
+    int playerId,
+    int excluirTeamId,
+  ) {
+    if (playerId <= 0) return Future<Map<String, dynamic>?>.value(null);
+    final k = '$playerId-$excluirTeamId';
+    return _clubExcluirFutureCache.putIfAbsent(
+      k,
+      () => getClubActualExcluyendoEquipo(playerId, excluirTeamId),
+    );
   }
 
   static Future<Map<String, dynamic>?> _fetchPlayerFullRow(int playerId) async {

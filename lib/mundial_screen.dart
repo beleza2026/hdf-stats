@@ -7,6 +7,124 @@ import 'mundial_service.dart';
 import 'mundial_simulador_screen.dart';
 import 'penales_shootout_helper.dart';
 import 'image_decode_helper.dart';
+import 'nationality_flags.dart';
+
+/// Nombres que devuelve la API a veces no coinciden con el mapa de países; normalizamos para la bandera.
+String _mundialNombreParaBandera(String teamName) {
+  final t = teamName.trim();
+  if (t.isEmpty) return t;
+  final k = t.toLowerCase();
+  const aliases = <String, String>{
+    'ir iran': 'Iran',
+    'iran': 'Iran',
+    'korea republic': 'South Korea',
+    'korea, south': 'South Korea',
+    'republic of korea': 'South Korea',
+    'usa': 'United States',
+    'u.s.a.': 'United States',
+    'côte d\'ivoire': 'Ivory Coast',
+    "cote d'ivoire": 'Ivory Coast',
+    'cote divoire': 'Ivory Coast',
+    'czechia': 'Czech Republic',
+    'bosnia-herzegovina': 'Bosnia and Herzegovina',
+    'bosnia and herzegovina': 'Bosnia and Herzegovina',
+    'north macedonia': 'North Macedonia',
+    'macedonia fyr': 'North Macedonia',
+    'northern ireland': 'Northern Ireland',
+    'south africa': 'South Africa',
+    'south korea': 'South Korea',
+    'saudi arabia': 'Saudi Arabia',
+    'united arab emirates': 'United Arab Emirates',
+    'trinidad and tobago': 'Trinidad and Tobago',
+    'cape verde': 'Cape Verde',
+    'cabo verde': 'Cape Verde',
+    'dr congo': 'Congo DR',
+    'democratic republic of congo': 'Congo DR',
+    'holland': 'Netherlands',
+    'great britain': 'England',
+  };
+  if (aliases.containsKey(k)) return aliases[k]!;
+  return t;
+}
+
+/// Texto para filas de fixture: menos de 10 caracteres sin tocar; si no, reglas + recorte.
+String _mundialNombreEquipoCorta(String raw) {
+  final name = raw.trim();
+  if (name.length <= 10) return name;
+  final lower = name.toLowerCase();
+  if (lower.contains('bosnia')) return 'Bosnia & Hz.';
+  if (lower.contains('czech')) return 'Czech Rep.';
+  if (lower.contains('united states') || lower == 'usa') return 'USA';
+  if (lower.contains('south korea') || lower.contains('korea republic')) return 'S. Korea';
+  if (lower.contains('north macedonia') || (lower.contains('macedonia') && lower.contains('north'))) return 'N. Maced.';
+  if (lower.contains('saudi arabia')) return 'Saudi Arab.';
+  if (lower.contains('united arab emirates')) return 'UAE';
+  if (lower.contains('northern ireland')) return 'N. Irel.';
+  if (lower.contains('south africa')) return 'S. Africa';
+  if (lower.contains('new zealand')) return 'N. Zeal.';
+  if (lower.contains('trinidad')) return 'Trin. & T.';
+  if (lower.contains('papua')) return 'PNG';
+  if (lower.contains('dominican republic')) return 'Dom. Rep.';
+  if (lower.contains('netherlands')) return 'Netherl.';
+  if (lower.contains('switzerland')) return 'Switzerl.';
+  if (lower.contains('portugal')) return 'Portugal';
+  if (lower.contains('argentina')) return 'Argentina';
+  if (lower.contains('australia')) return 'Australia';
+  if (lower.contains('côte') || lower.contains('cote d') || lower.contains('ivory')) return 'C. d\'Ivoire';
+  final cut = name.substring(0, 8).trimRight();
+  return cut.isEmpty ? name : '$cut…';
+}
+
+/// Solo emoji de bandera o monograma: **nunca** cargamos PNG del CDN en el fixture (evita marcas de agua).
+Widget _mundialEscudoLista({double side = 26, String? teamHint}) {
+  final hint = teamHint?.trim() ?? '';
+  if (hint.isNotEmpty) {
+    final normalized = _mundialNombreParaBandera(hint);
+    var flag = flagEmojiFromCountryName(normalized);
+    if (flag.isEmpty && normalized != hint) {
+      flag = flagEmojiFromCountryName(hint);
+    }
+    if (flag.isNotEmpty) {
+      return Container(
+        width: side,
+        height: side,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A2838),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Text(flag, style: TextStyle(fontSize: side * 0.48)),
+      );
+    }
+    final letters = hint.replaceAll(RegExp(r'[^A-Za-zÁÉÍÓÚÑáéíóúñ]'), '');
+    final mono = letters.length >= 2
+        ? letters.substring(0, 2).toUpperCase()
+        : letters.isEmpty
+            ? '?'
+            : letters.toUpperCase();
+    return Container(
+      width: side,
+      height: side,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFF243447),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Text(
+        mono,
+        style: TextStyle(
+          fontSize: side * 0.32,
+          fontWeight: FontWeight.w800,
+          color: Colors.white.withValues(alpha: 0.85),
+          height: 1,
+        ),
+      ),
+    );
+  }
+  return Icon(Icons.sports_soccer, size: side - 2, color: Colors.white24);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MUNDIAL SCREEN
@@ -240,7 +358,7 @@ class _TabGrupos extends StatefulWidget {
 }
 
 class _TabGruposState extends State<_TabGrupos> {
-  List<Map<String, dynamic>> _grupos = [];
+  List<List<Map<String, dynamic>>> _grupos = [];
   bool _cargando = true;
 
   @override
@@ -264,10 +382,10 @@ class _TabGruposState extends State<_TabGrupos> {
       padding: const EdgeInsets.all(16),
       itemCount: _grupos.length,
       itemBuilder: (context, i) {
-        final grupo = _grupos[i] as List?;
-        if (grupo == null || grupo.isEmpty) return const SizedBox();
+        final grupo = _grupos[i];
+        if (grupo.isEmpty) return const SizedBox();
         final nombreGrupo = grupo[0]['group'] as String? ?? 'Grupo ${i + 1}';
-        return _cardGrupo(nombreGrupo, grupo.cast<Map<String, dynamic>>());
+        return _cardGrupo(nombreGrupo, grupo);
       },
     );
   }
@@ -405,39 +523,96 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
   }
 
   Future<void> _cargar() async {
+    final mostrar = await MundialService.debeMostrarTablaGoleadoresMundial();
+    if (!mounted) return;
+    if (!mostrar) {
+      setState(() {
+        _jugadores = [];
+        _cargando = false;
+      });
+      return;
+    }
+    setState(() {
+      _cargando = true;
+    });
     final data = await MundialService.getGoleadores();
-    if (mounted) setState(() { _jugadores = data; _cargando = false; });
+    final filtrados = data.where((item) {
+      final st = MundialService.statisticsMundialLiga1(item);
+      if (st == null) return false;
+      final league = st['league'];
+      if (league is! Map || (league['id'] as num?)?.toInt() != 1) return false;
+      final goals = MundialService.childMap(st['goals']);
+      final g = (goals['total'] as num?)?.toInt() ?? int.tryParse('${goals['total']}') ?? 0;
+      return g > 0;
+    }).toList();
+    if (!mounted) return;
+    setState(() {
+      _jugadores = filtrados;
+      _cargando = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_cargando) return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+
     if (_jugadores.isEmpty) {
-      return const Center(child: Text('Sin datos', style: TextStyle(color: Colors.white54)));
+      return RefreshIndicator(
+        color: const Color(0xFF00C853),
+        onRefresh: _cargar,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.5,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  MundialService.esAntesDelInicioMundial2026Utc()
+                      ? 'La tabla de goleadores se habilita cuando comience el Mundial (con partidos ya jugados en el torneo).'
+                      : 'Aún no hay goleadores con goles registrados en el torneo.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.35),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _jugadores.length,
-      itemBuilder: (context, i) {
-        final item = _jugadores[i];
-        final player = item['player'] ?? {};
-        final stats = (item['statistics'] as List?)?.first ?? {};
-        final goles = stats['goals']?['total'] ?? 0;
-        final asists = stats['goals']?['assists'] ?? 0;
+
+    return RefreshIndicator(
+      color: const Color(0xFF00C853),
+      onRefresh: _cargar,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: _jugadores.length,
+        itemBuilder: (context, i) {
+        final idx = i;
+        final item = _jugadores[idx];
+        final player = item['player'] is Map
+            ? Map<String, dynamic>.from(item['player'] as Map)
+            : <String, dynamic>{};
+        final stats = MundialService.statisticsMundialLiga1(item) ?? {};
+        final goalsMap = MundialService.childMap(stats['goals']);
+        final goles = (goalsMap['total'] as num?)?.toInt() ?? int.tryParse('${goalsMap['total']}') ?? 0;
+        final asists = (goalsMap['assists'] as num?)?.toInt() ?? int.tryParse('${goalsMap['assists']}') ?? 0;
         final foto = player['photo'] as String? ?? '';
         final nombre = player['name'] as String? ?? '';
-        final equipo = stats['team']?['name'] as String? ?? '';
-        final logoEq = stats['team']?['logo'] as String? ?? '';
+        final teamMap = MundialService.childMap(stats['team']);
+        final equipo = teamMap['name'] as String? ?? '';
+        final logoEq = teamMap['logo'] as String? ?? '';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: i == 0
+            color: idx == 0
                 ? const Color(0xFF00C853).withValues(alpha: 0.12)
                 : const Color(0xFF1B2A3B),
             borderRadius: BorderRadius.circular(10),
-            border: i == 0
+            border: idx == 0
                 ? Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4))
                 : null,
           ),
@@ -445,9 +620,9 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
             // Posición
             SizedBox(
               width: 24,
-              child: Text('${i + 1}',
+              child: Text('${idx + 1}',
                   style: TextStyle(
-                      color: i == 0 ? const Color(0xFF00C853) : Colors.white38,
+                      color: idx == 0 ? const Color(0xFF00C853) : Colors.white38,
                       fontWeight: FontWeight.bold,
                       fontSize: 13),
                   textAlign: TextAlign.center),
@@ -491,7 +666,7 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
             const SizedBox(width: 16),
             // Asistencias
             Column(children: [
-              Text('${asists ?? 0}',
+              Text('$asists',
                   style: const TextStyle(
                       color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
               const Text('asist.',
@@ -500,12 +675,100 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
           ]),
         );
       },
+    ),
     );
   }
 }
 
+// ── Bracket 32avos Mundial 2026 (partidos FIFA 73–88). Terceros en cruces `t:`: mejor 3°
+// provisional entre los grupos del pool (la matriz final depende de los 8 terceros que clasifiquen).
+// Referencia: sorteo / procedimiento FIFA Mundial 2026 (fase eliminatoria inicial).
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB CRUCES (Octavos de final dinámico)
+
+class _MundialR32Def {
+  const _MundialR32Def(this.match, this.desc, this.aSpec, this.bSpec);
+  final int match;
+  final String desc;
+  final String aSpec; // w:X = 1°, r:X = 2°, t:LETTERS = mejor 3° del pool
+  final String bSpec;
+}
+
+const _mundialR32Oficial = <_MundialR32Def>[
+  _MundialR32Def(73, '2°A vs 2°B', 'r:A', 'r:B'),
+  _MundialR32Def(74, '1°E vs 3° (A,B,C,D,F)', 'w:E', 't:ABCDF'),
+  _MundialR32Def(75, '1°F vs 2°C', 'w:F', 'r:C'),
+  _MundialR32Def(76, '1°C vs 2°F', 'w:C', 'r:F'),
+  _MundialR32Def(77, '1°I vs 3° (C,D,F,G,H)', 'w:I', 't:CDFGH'),
+  _MundialR32Def(78, '2°E vs 2°I', 'r:E', 'r:I'),
+  _MundialR32Def(79, '1°A vs 3° (C,E,F,H,I)', 'w:A', 't:CEFHI'),
+  _MundialR32Def(80, '1°L vs 3° (E,H,I,J,K)', 'w:L', 't:EHIJK'),
+  _MundialR32Def(81, '1°D vs 3° (B,E,F,I,J)', 'w:D', 't:BEFIJ'),
+  _MundialR32Def(82, '1°G vs 3° (A,E,H,I,J)', 'w:G', 't:AEHIJ'),
+  _MundialR32Def(83, '2°K vs 2°L', 'r:K', 'r:L'),
+  _MundialR32Def(84, '1°H vs 2°J', 'w:H', 'r:J'),
+  _MundialR32Def(85, '1°B vs 3° (E,F,G,I,J)', 'w:B', 't:EFGIJ'),
+  _MundialR32Def(86, '1°J vs 2°H', 'w:J', 'r:H'),
+  _MundialR32Def(87, '1°K vs 3° (D,E,I,J,L)', 'w:K', 't:DEIJL'),
+  _MundialR32Def(88, '2°D vs 2°G', 'r:D', 'r:G'),
+];
+
+int _mundialGolesFavorRow(Map<String, dynamic> eq) {
+  final g = eq['goals'];
+  if (g is Map && g['for'] != null) return (g['for'] as num?)?.toInt() ?? 0;
+  final all = eq['all'];
+  if (all is Map) {
+    final gg = all['goals'];
+    if (gg is Map && gg['for'] != null) return (gg['for'] as num?)?.toInt() ?? 0;
+  }
+  return 0;
+}
+
+Map<String, dynamic>? _mundialMejorTerceroPool(String letters, Map<String, Map<String, dynamic>> c) {
+  Map<String, dynamic>? best;
+  var bestPts = -1;
+  var bestGd = -999999;
+  var bestGf = -1;
+  for (var i = 0; i < letters.length; i++) {
+    final ch = letters[i].toUpperCase();
+    if (ch.codeUnitAt(0) < 65 || ch.codeUnitAt(0) > 76) continue;
+    final row = c['Group ${ch}_3'];
+    if (row == null) continue;
+    final pts = (row['points'] as num?)?.toInt() ?? 0;
+    final gd = (row['goalsDiff'] as num?)?.toInt() ?? 0;
+    final gf = _mundialGolesFavorRow(row);
+    if (pts > bestPts ||
+        (pts == bestPts && gd > bestGd) ||
+        (pts == bestPts && gd == bestGd && gf > bestGf)) {
+      best = row;
+      bestPts = pts;
+      bestGd = gd;
+      bestGf = gf;
+    }
+  }
+  return best;
+}
+
+Map<String, dynamic>? _mundialR32ResolveSide(String spec, Map<String, Map<String, dynamic>> c) {
+  final i = spec.indexOf(':');
+  if (i <= 0 || i >= spec.length - 1) return null;
+  final kind = spec.substring(0, i);
+  final arg = spec.substring(i + 1);
+  switch (kind) {
+    case 'w':
+      if (arg.length != 1) return null;
+      return c['Group ${arg}_1'];
+    case 'r':
+      if (arg.length != 1) return null;
+      return c['Group ${arg}_2'];
+    case 't':
+      if (arg.isEmpty) return null;
+      return _mundialMejorTerceroPool(arg, c);
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB CRUCES (32avos — bracket FIFA 2026)
 // ─────────────────────────────────────────────────────────────────────────────
 class _TabCruces extends StatefulWidget {
   @override
@@ -513,7 +776,7 @@ class _TabCruces extends StatefulWidget {
 }
 
 class _TabCrucesState extends State<_TabCruces> {
-  List<Map<String, dynamic>> _grupos = [];
+  List<List<Map<String, dynamic>>> _grupos = [];
   bool _cargando = true;
 
   @override
@@ -527,50 +790,31 @@ class _TabCrucesState extends State<_TabCruces> {
     if (mounted) setState(() { _grupos = data; _cargando = false; });
   }
 
-  // Retorna {primero, segundo} de cada grupo
-  Map<String, Map<String, dynamic>> _getPrimeroSegundo() {
+  /// 1°, 2° y 3° por grupo (`Group A_1`, `Group A_2`, `Group A_3`).
+  Map<String, Map<String, dynamic>> _getClasificadosMundial() {
     final result = <String, Map<String, dynamic>>{};
-    for (final grupoRaw in _grupos) {
-      final grupo = grupoRaw as List?;
-      if (grupo == null || grupo.isEmpty) continue;
-      final nombreGrupo = grupo[0]['group'] as String? ?? '';
-      // Ordenar por rank
-      final sorted = List.from(grupo)
-        ..sort((a, b) => (a['rank'] ?? 99).compareTo(b['rank'] ?? 99));
-      if (sorted.isNotEmpty) {
-        result['${nombreGrupo}_1'] = sorted[0] as Map<String, dynamic>;
-      }
-      if (sorted.length > 1) {
-        result['${nombreGrupo}_2'] = sorted[1] as Map<String, dynamic>;
-      }
+    for (final grupo in _grupos) {
+      if (grupo.isEmpty) continue;
+      final nombreGrupo = (grupo[0]['group'] as String? ?? '').trim();
+      if (nombreGrupo.isEmpty) continue;
+      final sorted = List<Map<String, dynamic>>.from(grupo)
+        ..sort((a, b) {
+          final ra = (a['rank'] as num?)?.toInt() ?? 99;
+          final rb = (b['rank'] as num?)?.toInt() ?? 99;
+          return ra.compareTo(rb);
+        });
+      if (sorted.isNotEmpty) result['${nombreGrupo}_1'] = sorted[0];
+      if (sorted.length > 1) result['${nombreGrupo}_2'] = sorted[1];
+      if (sorted.length > 2) result['${nombreGrupo}_3'] = sorted[2];
     }
     return result;
   }
-
-  // Cruces según reglamento FIFA 2026 (12 grupos A-L)
-  // 1A vs 2B | 1B vs 2A | 1C vs 2D | 1D vs 2C | 1E vs 2F | 1F vs 2E
-  // 1G vs 2H | 1H vs 2G | 1I vs 2J | 1J vs 2I | 1K vs 2L | 1L vs 2K
-  // + 8 mejores 3ros (bracket abierto)
-  List<Map<String, String>> get _crucesBase => [
-    {'a': 'Group A_1', 'b': 'Group B_2', 'label': 'Llave 1'},
-    {'a': 'Group B_1', 'b': 'Group A_2', 'label': 'Llave 2'},
-    {'a': 'Group C_1', 'b': 'Group D_2', 'label': 'Llave 3'},
-    {'a': 'Group D_1', 'b': 'Group C_2', 'label': 'Llave 4'},
-    {'a': 'Group E_1', 'b': 'Group F_2', 'label': 'Llave 5'},
-    {'a': 'Group F_1', 'b': 'Group E_2', 'label': 'Llave 6'},
-    {'a': 'Group G_1', 'b': 'Group H_2', 'label': 'Llave 7'},
-    {'a': 'Group H_1', 'b': 'Group G_2', 'label': 'Llave 8'},
-    {'a': 'Group I_1', 'b': 'Group J_2', 'label': 'Llave 9'},
-    {'a': 'Group J_1', 'b': 'Group I_2', 'label': 'Llave 10'},
-    {'a': 'Group K_1', 'b': 'Group L_2', 'label': 'Llave 11'},
-    {'a': 'Group L_1', 'b': 'Group K_2', 'label': 'Llave 12'},
-  ];
 
   @override
   Widget build(BuildContext context) {
     if (_cargando) return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
 
-    final clasificados = _getPrimeroSegundo();
+    final clasificados = _getClasificadosMundial();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -588,7 +832,7 @@ class _TabCrucesState extends State<_TabCruces> {
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Cruces proyectados según posiciones actuales. Se actualizan con la tabla.',
+                '32avos según bracket FIFA (partidos 73–88). Donde hay "3°", mostramos el mejor tercero provisional del pool de grupos indicado; la llave final depende de los 8 terceros que clasifiquen.',
                 style: TextStyle(color: Colors.white54, fontSize: 11),
               ),
             ),
@@ -596,23 +840,23 @@ class _TabCrucesState extends State<_TabCruces> {
         ),
         const Padding(
           padding: EdgeInsets.only(bottom: 12),
-          child: Text('OCTAVOS DE FINAL',
+          child: Text('32AVOS DE FINAL',
               style: TextStyle(
                   color: Colors.white38,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5)),
         ),
-        ..._crucesBase.map((cruce) {
-          final eq1 = clasificados[cruce['a']!];
-          final eq2 = clasificados[cruce['b']!];
-          return _cardCruce(cruce['label']!, eq1, eq2);
+        ..._mundialR32Oficial.map((slot) {
+          final eq1 = _mundialR32ResolveSide(slot.aSpec, clasificados);
+          final eq2 = _mundialR32ResolveSide(slot.bSpec, clasificados);
+          return _cardCruce('M${slot.match}', eq1, eq2, desc: slot.desc);
         }),
       ],
     );
   }
 
-  Widget _cardCruce(String label, Map<String, dynamic>? eq1, Map<String, dynamic>? eq2) {
+  Widget _cardCruce(String label, Map<String, dynamic>? eq1, Map<String, dynamic>? eq2, {String? desc}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -621,23 +865,37 @@ class _TabCrucesState extends State<_TabCruces> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(children: [
-        // Label
         SizedBox(
-          width: 60,
-          child: Text(label,
-              style: const TextStyle(
-                  color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+          width: 56,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              if (desc != null && desc.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    desc,
+                    style: const TextStyle(color: Colors.white24, fontSize: 7, height: 1.2),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
         ),
-        // Equipo 1
         Expanded(child: _equipoCruce(eq1, align: TextAlign.right)),
-        // VS
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Text('VS',
               style: const TextStyle(
-                  color: Colors.white24, fontSize: 11, fontWeight: FontWeight.bold)),
+                  color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold)),
         ),
-        // Equipo 2
         Expanded(child: _equipoCruce(eq2, align: TextAlign.left)),
       ]),
     );
@@ -659,32 +917,48 @@ class _TabCrucesState extends State<_TabCruces> {
           align == TextAlign.right ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: align == TextAlign.right
           ? [
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(nombre,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
-                Text('$pts pts',
-                    style: const TextStyle(color: Colors.white38, fontSize: 10)),
-              ]),
-              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(nombre,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right),
+                    Text('$pts pts',
+                        style: const TextStyle(color: Colors.white38, fontSize: 9)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
               logo.isNotEmpty
-                  ? DecodedNetworkImage(logo, width: 28, height: 28,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
-                  : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
+                  ? DecodedNetworkImage(logo, width: 24, height: 24,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 20, color: Colors.white24))
+                  : const Icon(Icons.sports_soccer, size: 20, color: Colors.white24),
             ]
           : [
               logo.isNotEmpty
-                  ? DecodedNetworkImage(logo, width: 28, height: 28,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
-                  : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
-              const SizedBox(width: 8),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(nombre,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis),
-                Text('$pts pts',
-                    style: const TextStyle(color: Colors.white38, fontSize: 10)),
-              ]),
+                  ? DecodedNetworkImage(logo, width: 24, height: 24,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 20, color: Colors.white24))
+                  : const Icon(Icons.sports_soccer, size: 20, color: Colors.white24),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(nombre,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.left),
+                    Text('$pts pts',
+                        style: const TextStyle(color: Colors.white38, fontSize: 9)),
+                  ],
+                ),
+              ),
             ],
     );
     return content;
@@ -693,9 +967,35 @@ class _TabCrucesState extends State<_TabCruces> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CARD PARTIDO (compartida entre HOY y FIXTURE)
+// Logos del CDN a veces traen marca de agua: en listas usamos bandera por país cuando hay mapeo.
 // ─────────────────────────────────────────────────────────────────────────────
+
+String _mundialDiaCortaEs(DateTime d) {
+  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return '${d.day} ${meses[d.month - 1]}';
+}
+
+DateTime? _mundialFixtureLocal(Map<String, dynamic> fixture) {
+  final ds = fixture['date'] as String?;
+  if (ds != null && ds.isNotEmpty) {
+    final parsed = DateTime.tryParse(ds);
+    if (parsed != null) return parsed.toLocal();
+  }
+  final ts = fixture['timestamp'];
+  if (ts is int && ts > 0) {
+    return DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true).toLocal();
+  }
+  if (ts is num && ts > 0) {
+    return DateTime.fromMillisecondsSinceEpoch(ts.toInt() * 1000, isUtc: true).toLocal();
+  }
+  return null;
+}
+
 Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
-  final fixture = partido['fixture'] ?? {};
+  final fixtureRaw = partido['fixture'];
+  final fixture = fixtureRaw is Map
+      ? Map<String, dynamic>.from(fixtureRaw)
+      : <String, dynamic>{};
   final teams = partido['teams'] ?? {};
   final goals = partido['goals'] ?? {};
   final league = partido['league'] ?? {};
@@ -704,19 +1004,17 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
   final away = teams['away'] ?? {};
   final homeName = home['name'] as String? ?? '';
   final awayName = away['name'] as String? ?? '';
-  final homeLogo = home['logo'] as String? ?? '';
-  final awayLogo = away['logo'] as String? ?? '';
   final homeGoals = goals['home'];
   final awayGoals = goals['away'];
   final status = fixture['status']?['short'] as String? ?? '';
   final elapsed = fixture['status']?['elapsed'];
-  final fecha = DateTime.tryParse(fixture['date'] ?? '')?.toLocal();
+  final fechaLocal = _mundialFixtureLocal(fixture);
   final ronda = league['round'] as String? ?? '';
 
-  String horario = '';
-  if (fecha != null) {
+  String horario = '—';
+  if (fechaLocal != null) {
     horario =
-        '${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}';
+        '${fechaLocal.hour.toString().padLeft(2, '0')}:${fechaLocal.minute.toString().padLeft(2, '0')}';
   }
 
   final isLive = ['1H', '2H', 'HT', 'ET', 'P'].contains(status);
@@ -748,86 +1046,127 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
           child: Text(ronda,
               style: const TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 0.5)),
         ),
-      Row(children: [
-        // Local
-        Expanded(
-          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            Text(homeName,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.right,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(width: 8),
-            homeLogo.isNotEmpty
-                ? DecodedNetworkImage(homeLogo, width: 28, height: 28,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
-                : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
-          ]),
-        ),
-        // Marcador / Horario
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Column(children: [
-            if (isLive || isFinished)
-              Column(
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // [Nombre local + escudo] — flex mayor para texto largo
+          Expanded(
+            flex: 6,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    _mundialNombreEquipoCorta(homeName),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
+                    textAlign: TextAlign.right,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _mundialEscudoLista(teamHint: homeName),
+              ],
+            ),
+          ),
+          // [Hora / marcador] — columna central fija en proporción menor
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(children: [
-                Text('${homeGoals ?? 0}',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: Text('-', style: TextStyle(color: Colors.white38, fontSize: 16)),
-                ),
-                Text('${awayGoals ?? 0}',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                  ]),
-                  if (penSuf != null && isFinished)
+                  if (fechaLocal != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(bottom: 2),
                       child: Text(
-                        penSuf,
-                        style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+                        _mundialDiaCortaEs(fechaLocal),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w600),
                       ),
                     ),
+                  if (isLive || isFinished)
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${homeGoals ?? 0}',
+                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Text('-', style: TextStyle(color: Colors.white38, fontSize: 14)),
+                            ),
+                            Text(
+                              '${awayGoals ?? 0}',
+                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        if (penSuf != null && isFinished)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              penSuf,
+                              style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    )
+                  else
+                    Text(
+                      horario,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF00C853), fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  if (isLive)
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00C853),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        elapsed != null ? "$elapsed'" : 'EN VIVO',
+                        style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold),
+                      ),
+                    )
+                  else if (isFinished)
+                    const Text('FT', style: TextStyle(color: Colors.white38, fontSize: 9)),
                 ],
-              )
-            else
-              Text(horario,
-                  style: const TextStyle(
-                      color: Color(0xFF00C853), fontSize: 16, fontWeight: FontWeight.bold)),
-            if (isLive)
-              Container(
-                margin: const EdgeInsets.only(top: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00C853),
-                  borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          // [Escudo + nombre visitante]
+          Expanded(
+            flex: 6,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                _mundialEscudoLista(teamHint: awayName),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    _mundialNombreEquipoCorta(awayName),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
+                    textAlign: TextAlign.left,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                child: Text(elapsed != null ? "$elapsed'" : 'EN VIVO',
-                    style: const TextStyle(
-                        color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold)),
-              )
-            else if (isFinished)
-              const Text('FT',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
-          ]),
-        ),
-        // Visitante
-        Expanded(
-          child: Row(mainAxisAlignment: MainAxisAlignment.start, children: [
-            awayLogo.isNotEmpty
-                ? DecodedNetworkImage(awayLogo, width: 28, height: 28,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white24))
-                : const Icon(Icons.sports_soccer, size: 24, color: Colors.white24),
-            const SizedBox(width: 8),
-            Text(awayName,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis),
-          ]),
-        ),
-      ]),
+              ],
+            ),
+          ),
+        ],
+      ),
         ],
       ),
       ),
