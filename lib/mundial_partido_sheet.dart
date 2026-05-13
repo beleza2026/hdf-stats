@@ -4,6 +4,7 @@ import 'api_service.dart';
 import 'mundial_seleccion_sheet.dart';
 import 'mundial_service.dart';
 import 'nationality_flags.dart';
+import 'penales_shootout_helper.dart';
 import 'player_career_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -674,6 +675,11 @@ Widget _buildListaJugado({
   final eventos = List<Map<String, dynamic>>.from(snap.data?[1] ?? []);
   final lineups = List<Map<String, dynamic>>.from(snap.data?[2] ?? []);
   final detalle = snap.data?[3] as Map<String, dynamic>?;
+  final resultadoCabecera = PenalesShootoutHelper.resultadoConPenales(resultado, partido, detalle);
+  final resultadoSoloGoles = resultadoCabecera.split('(').first.trim();
+  final stList = PenalesShootoutHelper.statusShortDesdePartido(partido);
+  final statusShortDet = stList.isNotEmpty ? stList : PenalesShootoutHelper.statusShortDesdePartido(detalle);
+  final partidoRefPen = PenalesShootoutHelper.refPartidoConScorePen(partido, detalle);
   final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
 
   final teamsDet = detalle?['teams'] as Map<String, dynamic>? ??
@@ -708,7 +714,7 @@ Widget _buildListaJugado({
       if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
       if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
     }
-    final partes = resultado.split('-');
+    final partes = resultadoSoloGoles.split('-');
     final int glLocal = int.tryParse(partes.isNotEmpty ? partes[0].trim() : '0') ?? 0;
     final int glVisit = int.tryParse(partes.length > 1 ? partes[1].trim() : '0') ?? 0;
     int moralL = glLocal, moralV = glVisit;
@@ -772,7 +778,7 @@ Widget _buildListaJugado({
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
-            child: Text(resultado, style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22)),
+            child: Text(resultadoCabecera, style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22)),
           ),
           Expanded(
             child: Align(
@@ -947,7 +953,7 @@ Widget _buildListaJugado({
             future: ApiService.getAlertaIA(
               local: local,
               visitante: visitante,
-              resultado: resultado,
+              resultado: resultadoSoloGoles,
               minuto: minuto,
               stats: stats,
               eventos: eventos,
@@ -1182,7 +1188,7 @@ Widget _buildListaJugado({
         else
           ...eventos.where((e) => ['Goal', 'Card', 'subst', 'Var'].contains(e['type'])).map((e) {
             final tipo = e['type'];
-            final min = "${e['time']['elapsed']}'";
+            var min = "${e['time']['elapsed']}'";
             final equipo = e['team']['name'] ?? '';
             String icono = '⚽';
             String tipoText = 'Gol: ${e['player']['name'] ?? ''}';
@@ -1203,6 +1209,11 @@ Widget _buildListaJugado({
               else if (detail.isNotEmpty) varDesc = 'VAR — $detail';
               tipoText = varDesc;
             } else if (tipo == 'Goal') {
+              if (PenalesShootoutHelper.esEventoTandaPenales(e, statusShortDet, partidoRefPen)) {
+                icono = '⚽';
+                tipoText = PenalesShootoutHelper.textoIncidenciaSeriePenales(e);
+                min = PenalesShootoutHelper.minutoIncidenciaSerie(e, min);
+              } else {
               final detail = e['detail'] ?? '';
               if (detail == 'Own Goal') {
                 tipoText = 'Gol en contra: ${e['player']['name'] ?? ''}';
@@ -1210,6 +1221,7 @@ Widget _buildListaJugado({
                 tipoText = 'Penal: ${e['player']['name'] ?? ''}';
               } else {
                 tipoText = 'Gol: ${e['player']['name'] ?? ''}';
+              }
               }
             }
             return _incidencia(icono, min, tipoText, equipo, esVar: tipo == 'Var');

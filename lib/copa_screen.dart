@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'match_follow_service.dart';
 import 'copa_service.dart';
 import 'nationality_flags.dart';
+import 'penales_shootout_helper.dart';
 import 'player_career_sheet.dart';
 import 'image_decode_helper.dart';
 
@@ -143,6 +144,7 @@ Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTa
   final fechaPartido = fixture['date'] as String?;
   final hScore = goals['home']?.toString() ?? '-';
   final aScore = goals['away']?.toString() ?? '-';
+  final marcadorConPen = '$hScore - $aScore${PenalesShootoutHelper.sufijoMarcadorParentesis(partido) ?? ''}';
   final isLive = status.contains("'") || status == '1H' || status == '2H' || status == 'HT';
   final isFinished = status == 'FT' || status == 'AET' || status == 'PEN';
   final jugado = isFinished;
@@ -165,7 +167,7 @@ Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTa
       Expanded(
         child: GestureDetector(
           onTap: () => onTap(
-            context, home, away, '$hScore - $aScore', jugado,
+            context, home, away, marcadorConPen, jugado,
             fixtureId: fixtureId, homeId: homeId, awayId: awayId,
             fechaPartido: fechaPartido, isLive: isLive,
             minuto: isLive ? status : '',
@@ -200,7 +202,7 @@ Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTa
                         color: const Color(0xFF0D1B2A),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text('$hScore - $aScore',
+                      child: Text(marcadorConPen,
                           style: TextStyle(
                               color: isLive ? const Color(0xFF00C853) : Colors.white,
                               fontWeight: FontWeight.bold,

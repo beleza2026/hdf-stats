@@ -23,6 +23,7 @@ import 'mundial_simulador_screen.dart';
 import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
 import 'image_decode_helper.dart';
+import 'penales_shootout_helper.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -1851,7 +1852,8 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
           }
           final esFavorito = _equipoFavoritoId != null && _equipoFavoritoId != -1 &&
               (homeId == _equipoFavoritoId || awayId == _equipoFavoritoId);
-          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito);
+          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId,
+              homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito, partidoMap: partido);
         }
 
         return ListView(
@@ -1866,11 +1868,13 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
     );
   }
 
-  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId, {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false}) {
+  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId,
+      {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false, Map<String, dynamic>? partidoMap}) {
     final bool isLive = status.contains("'");
     final bool isFinished = status == 'FT';
+    final marcadorLinea = '$hScore - $aScore${PenalesShootoutHelper.sufijoMarcadorParentesis(partidoMap) ?? ''}';
     return GestureDetector(
-      onTap: () => _mostrarDetalle(context, home, away, '$hScore - $aScore', jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status),
+      onTap: () => _mostrarDetalle(context, home, away, marcadorLinea, jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status, partidoLista: partidoMap),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1888,7 +1892,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
-            child: Text('$hScore - $aScore', style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            child: Text(marcadorLinea, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
           const SizedBox(width: 12),
           Expanded(child: Text(away, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
@@ -5276,10 +5280,12 @@ Widget _tabTiempo(String tipo) {
               final diasSemana = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
               final diaStr = diasSemana[fecha.weekday];
               final fechaStr = esJugado
-                  ? '$golesL - $golesV'
+                  ? '$golesL - $golesV${PenalesShootoutHelper.sufijoMarcadorParentesis(p) ?? ''}'
                   : '$diaStr ${fecha.day}/${fecha.month}  ${fecha.hour.toString().padLeft(2,'0')}:${fecha.minute.toString().padLeft(2,'0')}';
               return GestureDetector(
-                onTap: () => _mostrarDetalle(context, local, visitante, '$golesL - $golesV', esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, partidoLista: p, sourceLeagueId: (p['league']?['id'] as num?)?.toInt()),
+                onTap: () => _mostrarDetalle(context, local, visitante,
+                    PenalesShootoutHelper.resultadoConPenales('$golesL - $golesV', p, null),
+                    esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, partidoLista: p, sourceLeagueId: (p['league']?['id'] as num?)?.toInt()),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
@@ -6029,6 +6035,11 @@ Widget _tabTiempo(String tipo) {
             final eventos = List<Map<String, dynamic>>.from(snap.data?[1] ?? []);
             final lineups = List<Map<String, dynamic>>.from(snap.data?[2] ?? []);
             final detalle = snap.data != null && snap.data!.length > 3 ? snap.data![3] as Map<String, dynamic>? : null;
+            final resultadoCabecera = PenalesShootoutHelper.resultadoConPenales(resultado, partidoLista, detalle);
+            final resultadoSoloGoles = resultadoCabecera.split('(').first.trim();
+            final stList = PenalesShootoutHelper.statusShortDesdePartido(partidoLista);
+            final statusShortDet = stList.isNotEmpty ? stList : PenalesShootoutHelper.statusShortDesdePartido(detalle);
+            final partidoRefPen = PenalesShootoutHelper.refPartidoConScorePen(partidoLista, detalle);
             final esCopaArgDetalle = sourceLeagueId == CopaService.leagueCopaArgentina;
             final mostrarFormacion = _mostrarFormacionEnDetalle(sourceLeagueId, lineups);
             final listFx = partidoLista?['fixture'] as Map<String, dynamic>?;
@@ -6065,7 +6076,7 @@ Widget _tabTiempo(String tipo) {
                 if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
                 if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
               }
-              final partes = resultado.split('-');
+              final partes = resultadoSoloGoles.split('-');
               final int glLocal = int.tryParse(partes.isNotEmpty ? partes[0].trim() : '0') ?? 0;
               final int glVisit = int.tryParse(partes.length > 1 ? partes[1].trim() : '0') ?? 0;
               int moralL = glLocal, moralV = glVisit;
@@ -6121,7 +6132,7 @@ Widget _tabTiempo(String tipo) {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
-                    child: Text(resultado, style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 24)),
+                    child: Text(resultadoCabecera, style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 24)),
                   ),
                   Expanded(child: Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), textAlign: TextAlign.center)),
                 ]),
@@ -6136,7 +6147,7 @@ Widget _tabTiempo(String tipo) {
                     else
                       ...eventos.where((e) => ['Goal', 'Card', 'subst', 'Var'].contains(e['type'])).map((e) {
                         final tipo = e['type'];
-                        final minutoEv = "${e['time']['elapsed']}'";
+                        var minutoEv = "${e['time']['elapsed']}'";
                         final equipo = e['team']['name'] ?? '';
                         String icono = '⚽';
                         String tipoText = 'Gol: ${e['player']['name'] ?? ''}';
@@ -6157,6 +6168,11 @@ Widget _tabTiempo(String tipo) {
                           else if (detail.isNotEmpty) varDesc = 'VAR — $detail';
                           tipoText = varDesc;
                         } else if (tipo == 'Goal') {
+                          if (PenalesShootoutHelper.esEventoTandaPenales(e, statusShortDet, partidoRefPen)) {
+                            icono = '⚽';
+                            tipoText = PenalesShootoutHelper.textoIncidenciaSeriePenales(e);
+                            minutoEv = PenalesShootoutHelper.minutoIncidenciaSerie(e, minutoEv);
+                          } else {
                           final detail = e['detail'] ?? '';
                           if (detail == 'Own Goal') {
                             icono = '⚽';
@@ -6165,6 +6181,7 @@ Widget _tabTiempo(String tipo) {
                             tipoText = 'Penal: ${e['player']['name'] ?? ''}';
                           } else {
                             tipoText = 'Gol: ${e['player']['name'] ?? ''}';
+                          }
                           }
                         }
                         return _incidencia(icono, minutoEv, tipoText, equipo, esVar: tipo == 'Var');
@@ -6485,7 +6502,7 @@ Widget _tabTiempo(String tipo) {
                     else
                       ...eventos.where((e) => ['Goal', 'Card', 'subst', 'Var'].contains(e['type'])).map((e) {
                         final tipo = e['type'];
-                        final minuto = "${e['time']['elapsed']}'";
+                        var minuto = "${e['time']['elapsed']}'";
                         final equipo = e['team']['name'] ?? '';
                         String icono = '⚽';
                         String tipoText = 'Gol: ${e['player']['name'] ?? ''}';
@@ -6506,6 +6523,11 @@ Widget _tabTiempo(String tipo) {
                           else if (detail.isNotEmpty) varDesc = 'VAR — $detail';
                           tipoText = varDesc;
                         } else if (tipo == 'Goal') {
+                          if (PenalesShootoutHelper.esEventoTandaPenales(e, statusShortDet, partidoRefPen)) {
+                            icono = '⚽';
+                            tipoText = PenalesShootoutHelper.textoIncidenciaSeriePenales(e);
+                            minuto = PenalesShootoutHelper.minutoIncidenciaSerie(e, minuto);
+                          } else {
                           final detail = e['detail'] ?? '';
                           if (detail == 'Own Goal') {
                             icono = '⚽';
@@ -6514,6 +6536,7 @@ Widget _tabTiempo(String tipo) {
                             tipoText = 'Penal: ${e['player']['name'] ?? ''}';
                           } else {
                             tipoText = 'Gol: ${e['player']['name'] ?? ''}';
+                          }
                           }
                         }
                         return _incidencia(icono, minuto, tipoText, equipo, esVar: tipo == 'Var');

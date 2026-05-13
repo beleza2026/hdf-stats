@@ -5,6 +5,7 @@ import 'paywall_screen.dart';
 import 'mundial_partido_sheet.dart';
 import 'mundial_service.dart';
 import 'mundial_simulador_screen.dart';
+import 'penales_shootout_helper.dart';
 import 'image_decode_helper.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -720,6 +721,7 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
 
   final isLive = ['1H', '2H', 'HT', 'ET', 'P'].contains(status);
   final isFinished = const {'FT', 'AET', 'PEN'}.contains(status);
+  final penSuf = PenalesShootoutHelper.sufijoMarcadorParentesis(partido);
 
   return Material(
     color: Colors.transparent,
@@ -766,7 +768,10 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(children: [
             if (isLive || isFinished)
-              Row(children: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [
                 Text('${homeGoals ?? 0}',
                     style: const TextStyle(
                         color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
@@ -777,7 +782,17 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
                 Text('${awayGoals ?? 0}',
                     style: const TextStyle(
                         color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              ])
+                  ]),
+                  if (penSuf != null && isFinished)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        penSuf,
+                        style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                ],
+              )
             else
               Text(horario,
                   style: const TextStyle(
