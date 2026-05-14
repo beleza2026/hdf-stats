@@ -12,6 +12,6 @@ key.properties
 google-services.json
 firebase_options.dart
 
-service_account.json
+dart_defines.json
 
 service_account.json

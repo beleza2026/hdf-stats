@@ -11,7 +11,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'api_service.dart';
-import 'racha_model.dart';
 import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -19,14 +18,16 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
 import 'copa_service.dart';
 import 'match_follow_service.dart';
-import 'paywall_screen.dart';
 import 'mundial_screen.dart';
-import 'mundial_simulador_screen.dart';
-import 'mundial_service.dart';
 import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
+import 'widgets/datos_mercado_sportmonks_section.dart';
+import 'widgets/remontada_liga_tabla_widget.dart';
+import 'widgets/remontada_comparacion_widget.dart';
+import 'widgets/remontada_widget.dart';
 import 'image_decode_helper.dart';
 import 'penales_shootout_helper.dart';
+import 'live_section/live_fixture_bundle.dart';
 import 'live_section/live_section_view.dart';
 
 @pragma('vm:entry-point')
@@ -242,7 +243,7 @@ class _MainScreenState extends State<MainScreen> {
   // ── PERFIL DE CLUB ────────────────────────────────────────────────────────
   static const Map<int, Map<String, dynamic>> _clubInfo = {
   // ══ ZONA A ══════════════════════════════════════════════════════════════
-    451: { // Boca Juniors
+    451: { // Boca Juniors (API-Sports id 451 en liga 128 Argentina)
       'nombre': 'Boca Juniors',
       'presidente': 'Juan Roman Riquelme',
       'estadio': 'Estadio Alberto J. Armando (La Bombonera)',
@@ -730,18 +731,31 @@ class _MainScreenState extends State<MainScreen> {
                   tabs: const [Tab(text: 'INFO'), Tab(text: 'TITULOS'), Tab(text: 'PLANTEL')],
                 ),
                 Expanded(
-                  child: info == null
-                    ? const Center(child: Text('Datos proximos', style: TextStyle(color: Colors.white54)))
-                    : TabBarView(children: [
+                  child: TabBarView(children: [
                         ListView(controller: sc, padding: const EdgeInsets.all(16), children: [
-                          _clubInfoRow('Estadio', info['estadio'] as String),
-                          _clubInfoRow('Capacidad', '${info["capacidad"]} espectadores'),
-                          _clubInfoRow('Presidente', info['presidente'] as String),
-                          _clubInfoRow('Director Tecnico', info['dt'] as String),
-                          _clubInfoRow('Fundacion', info['fundacion'] as String),
-                          _clubInfoRow('Socios', '~${info["socios"]}'),
+                          if (info != null) ...[
+                            _clubInfoRow('Estadio', info['estadio'] as String),
+                            _clubInfoRow('Capacidad', '${info["capacidad"]} espectadores'),
+                            _clubInfoRow('Presidente', info['presidente'] as String),
+                            _clubInfoRow('Director Tecnico', info['dt'] as String),
+                            _clubInfoRow('Fundacion', info['fundacion'] as String),
+                            _clubInfoRow('Socios', '~${info["socios"]}'),
+                            const SizedBox(height: 16),
+                          ] else ...[
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 20),
+                              child: Center(child: Text('Datos proximos', style: TextStyle(color: Colors.white54))),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          _detalleSeccion('REMONTADAS'),
+                          const SizedBox(height: 6),
+                          RemontadaWidget(teamId: teamId, season: ApiService.temporadaLigaPrincipal),
                         ]),
-                        ListView(controller: sc, padding: const EdgeInsets.all(16), children: [
+                        if (info == null)
+                          const Center(child: Text('Datos proximos', style: TextStyle(color: Colors.white54)))
+                        else
+                          ListView(controller: sc, padding: const EdgeInsets.all(16), children: [
                           const Text('LOCALES', style: TextStyle(color: Color(0xFFFFD700), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
                           const SizedBox(height: 6),
                           ...(info['titulosLocales'] as List).map((t) => Padding(
@@ -944,6 +958,7 @@ class _MainScreenState extends State<MainScreen> {
       minuto: statusDisplay,
       sourceLeagueId: lid,
       partidoLista: partidoMap,
+      modalDesdeSeccionEnVivo: true,
     );
   }
 
@@ -1304,7 +1319,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _torneoItem('🇦🇷', 'Liga Profesional', 'Zona A/B · 2026', true, _irLiga),
+          _torneoItem('🇦🇷', 'Liga Argentina', 'LPF · Zona A/B · 2026', true, _irLiga),
           _torneoItem('🇦🇷', 'Copa Argentina', 'AFA · fixture y tablas', true, _irCopaArgentina),
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
@@ -1357,7 +1372,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
           icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF00C853), size: 18),
           onPressed: _irTorneos,
         ),
-        title: const Text('LIGA PROFESIONAL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1)),
+        title: const Text('LIGA ARGENTINA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1.5)),
         actions: [
           IconButton(
             icon: const Icon(Icons.home_rounded, color: Colors.white38),
@@ -1445,6 +1460,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               _ligaBoton('🟥', 'Expulsados', 12),
               _ligaBoton('📈', 'Tabla Posesión', 13),
               _ligaBoton('🪢', 'Cuerda Floja', 14),
+              _ligaBoton('🔼', 'Remontada', 16),
             ],
            
           ),
@@ -1573,7 +1589,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
           final golesL = u['goals']['home']?.toString() ?? '0';
           final golesV = u['goals']['away']?.toString() ?? '0';
           return GestureDetector(
-            onTap: () => _irSeccion(0),
+            onTap: () => _abrirDetalleDesdeMapaPartido(context, u),
             child: _dashCard(
               badge: 'ÚLTIMO PARTIDO · $etiquetaEquipo',
               badgeColor: Colors.white54,
@@ -1599,7 +1615,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               ? '${dias[fecha.weekday]} ${fecha.day}/${fecha.month}  ${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}'
               : '';
           return GestureDetector(
-            onTap: () => _irSeccion(4),
+            onTap: () => _abrirDetalleDesdeMapaPartido(context, p),
             child: _dashCard(
               badge: 'PRÓXIMO PARTIDO · $etiquetaEquipo',
               badgeColor: const Color(0xFF2196F3),
@@ -1676,6 +1692,23 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
     );
   }
 
+  Widget _buildRemontadaLigaSeccion() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '% de victorias cuando el rival marcó el primer gol del partido (LPF, finalizados).',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          RemontadaLigaTablaWidget(onVerFixture: () => _irSeccion(4)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBody() {
     switch (_selectedIndex) {
       case 0: return _buildResultados();
@@ -1708,6 +1741,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                     minuto: minuto,
                     sourceLeagueId: sourceLeagueId,
                     partidoLista: partidoLista));
+      case 16: return _buildRemontadaLigaSeccion();
       default: return _buildResultados();
     }
   }
@@ -5306,6 +5340,58 @@ Widget _tabTiempo(String tipo) {
     );
   }
 
+  /// Primer partido `NS` de la fecha con ids: bloque LIGA ARGENTINA + comparativa de remontadas.
+  List<Widget> _bloqueRemontadaLigaArgentinaEnFixture(List<Map<String, dynamic>> partidos) {
+    Map<String, dynamic>? primero;
+    for (final p in partidos) {
+      if (p['fixture']?['status']?['short'] != 'NS') continue;
+      final th = p['teams'];
+      if (th is! Map) continue;
+      final hid = th['home']?['id'];
+      final aid = th['away']?['id'];
+      final hi = hid is int ? hid : (hid is num ? hid.toInt() : int.tryParse('$hid') ?? 0);
+      final ai = aid is int ? aid : (aid is num ? aid.toInt() : int.tryParse('$aid') ?? 0);
+      if (hi > 0 && ai > 0) {
+        primero = p;
+        break;
+      }
+    }
+    if (primero == null) return [];
+    final teams = primero['teams'] as Map<String, dynamic>;
+    final local = teams['home']?['name'] as String? ?? '';
+    final visitante = teams['away']?['name'] as String? ?? '';
+    final hiRaw = teams['home']?['id'];
+    final aiRaw = teams['away']?['id'];
+    final homeId = hiRaw is int ? hiRaw : (hiRaw is num ? hiRaw.toInt() : int.tryParse('$hiRaw') ?? 0);
+    final awayId = aiRaw is int ? aiRaw : (aiRaw is num ? aiRaw.toInt() : int.tryParse('$aiRaw') ?? 0);
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _detalleSeccion('LIGA ARGENTINA'),
+            const SizedBox(height: 2),
+            Text(
+              'Remontadas · primer encuentro sin jugar de la fecha',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 11),
+            ),
+            const SizedBox(height: 8),
+            _detalleSeccion('REMONTADAS'),
+            const SizedBox(height: 6),
+            RemontadaComparacionWidget(
+              homeTeamId: homeId,
+              awayTeamId: awayId,
+              homeName: local,
+              awayName: visitante,
+              season: ApiService.temporadaLigaPrincipal,
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
   Widget _buildFixture() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: ApiService.getFixture(),
@@ -5323,13 +5409,29 @@ Widget _tabTiempo(String tipo) {
           final round = (p['league']['round'] as String? ?? '').toLowerCase();
           return round.contains('clausura');
         }).toList();
-        final filtrados = _torneoActual == 'APERTURA' ? apertura : clausura;
+        final base = _torneoActual == 'APERTURA' ? apertura : clausura;
+        final baseIds = <int>{
+          for (final p in base)
+            if (p['fixture']?['id'] != null)
+              (p['fixture']['id'] is int
+                  ? p['fixture']['id'] as int
+                  : int.tryParse('${p['fixture']['id']}') ?? 0)
+        }..remove(0);
+        final knockExtra = todosOrdenados.where((p) {
+          final rawId = p['fixture']?['id'];
+          final fid = rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+          if (fid == 0 || baseIds.contains(fid)) return false;
+          final round = p['league']?['round'] as String? ?? '';
+          return ApiService.ligaEsRondaEliminatoria(round);
+        }).toList();
+        final filtrados = [...base, ...knockExtra];
         Map<int, List<Map<String, dynamic>>> porFecha = {};
         final Map<int, String> labelPorFecha = {};
         for (var p in filtrados) {
           final st = p['fixture']['status']['short'];
-          if (st == 'PST' || st == 'CANC' || st == 'TBD') continue;
+          if (st == 'PST' || st == 'CANC') continue;
           final round = p['league']['round'] as String;
+          if (st == 'TBD' && !ApiService.ligaEsRondaEliminatoria(round)) continue;
           final roundNorm = round.toLowerCase();
           int num;
           String? label;
@@ -5406,7 +5508,9 @@ Widget _tabTiempo(String tipo) {
           ),
           Expanded(child: ListView(
             padding: const EdgeInsets.all(16),
-            children: partidos.map((p) {
+            children: [
+              ..._bloqueRemontadaLigaArgentinaEnFixture(partidos),
+              ...partidos.map((p) {
               final local = p['teams']['home']['name'];
               final visitante = p['teams']['away']['name'];
               final logoLocal = p['teams']['home']['logo'] as String? ?? '';
@@ -5536,6 +5640,7 @@ Widget _tabTiempo(String tipo) {
                 ),
               );
             }).toList(),
+            ],
           )),
         ]);
       },
@@ -5584,10 +5689,26 @@ Widget _tabTiempo(String tipo) {
   int? _teamIdFromPartidoMap(Map<String, dynamic>? p, bool home) {
     if (p == null) return null;
     final side = home ? 'home' : 'away';
-    final v = p['teams']?[side]?['id'];
+    dynamic v = p['teams']?[side]?['id'];
+    if (v == null) {
+      final resp = p['response'];
+      if (resp is List && resp.isNotEmpty && resp.first is Map<String, dynamic>) {
+        final m = resp.first as Map<String, dynamic>;
+        v = m['teams']?[side]?['id'];
+      }
+    }
     if (v is int) return v;
     if (v is num) return v.toInt();
     return int.tryParse('$v');
+  }
+
+  int? _teamIdFromLineups(List<Map<String, dynamic>> lineups, bool home) {
+    if (lineups.length < 2) return null;
+    final idx = home ? 0 : 1;
+    final raw = lineups[idx]['team']?['id'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw');
   }
 
   /// Goles y tarjetas por jugador (nombre normalizado) desde eventos del partido.
@@ -5662,7 +5783,50 @@ Widget _tabTiempo(String tipo) {
     return chips;
   }
 
-  void _mostrarDetalle(BuildContext context, String local, String visitante, String resultado, bool jugado, {int? fixtureId, int? homeId, int? awayId, String? fechaPartido, bool isLive = false, String minuto = '', int? sourceLeagueId, Map<String, dynamic>? partidoLista}) {
+  void _abrirDetalleDesdeMapaPartido(BuildContext context, Map<String, dynamic> p) {
+    final teams = p['teams'] as Map<String, dynamic>?;
+    final fixture = p['fixture'] as Map<String, dynamic>?;
+    if (teams == null || fixture == null) return;
+    final goalsRaw = p['goals'];
+    final goals = goalsRaw is Map<String, dynamic> ? goalsRaw : <String, dynamic>{};
+    final local = teams['home']?['name'] as String? ?? '';
+    final visitante = teams['away']?['name'] as String? ?? '';
+    final golesL = goals['home']?.toString() ?? '-';
+    final golesV = goals['away']?.toString() ?? '-';
+    final fixtureId = fixture['id'] as int?;
+    final homeId = teams['home']?['id'] as int?;
+    final awayId = teams['away']?['id'] as int?;
+    final fechaPartido = fixture['date'] as String?;
+    final statusShort = fixture['status']?['short'] as String? ?? '';
+    final jugado = statusShort == 'FT' || statusShort == 'AET' || statusShort == 'PEN' || statusShort == 'AWD' || statusShort == 'WO';
+    final isLive = statusShort == '1H' ||
+        statusShort == '2H' ||
+        statusShort == 'HT' ||
+        statusShort == 'ET' ||
+        statusShort == 'PEN' ||
+        statusShort == 'BT' ||
+        statusShort == 'INT';
+    final minuto = fixture['status']?['elapsed']?.toString() ?? '';
+    final marcador = PenalesShootoutHelper.resultadoConPenales('$golesL - $golesV', p, null);
+    final lid = (p['league']?['id'] as num?)?.toInt();
+    _mostrarDetalle(
+      context,
+      local,
+      visitante,
+      marcador,
+      jugado,
+      fixtureId: fixtureId,
+      homeId: homeId,
+      awayId: awayId,
+      fechaPartido: fechaPartido,
+      isLive: isLive,
+      minuto: minuto,
+      sourceLeagueId: lid,
+      partidoLista: p,
+    );
+  }
+
+  void _mostrarDetalle(BuildContext context, String local, String visitante, String resultado, bool jugado, {int? fixtureId, int? homeId, int? awayId, String? fechaPartido, bool isLive = false, String minuto = '', int? sourceLeagueId, Map<String, dynamic>? partidoLista, bool modalDesdeSeccionEnVivo = false}) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1B2A3B),
@@ -5728,6 +5892,10 @@ Widget _tabTiempo(String tipo) {
             final apiFx = detalle?['fixture'] as Map<String, dynamic>?;
             String arbPick = apiFx?['referee']?.toString().trim() ?? '';
             if (arbPick.isEmpty) arbPick = listFx?['referee']?.toString().trim() ?? '';
+            if (arbPick.isEmpty && detalle != null) {
+              final r = detalle['referee'];
+              if (r != null && r.toString().trim().isNotEmpty) arbPick = r.toString().trim();
+            }
             final arbitro = arbPick.isNotEmpty ? arbPick.split(',').first.trim() : 'No disponible';
             String estadio = apiFx?['venue']?['name']?.toString().trim() ?? '';
             String ciudad = apiFx?['venue']?['city']?.toString().trim() ?? '';
@@ -5737,11 +5905,22 @@ Widget _tabTiempo(String tipo) {
             final rachaVisit = !jugado && snap.data != null && snap.data!.length > 6 ? List<Map<String, dynamic>>.from((snap.data![6] as List?) ?? []) : <Map<String, dynamic>>[];
             final previewHome = !jugado && snap.data != null && snap.data!.length > 7 ? (snap.data![7] as Map<String, dynamic>? ?? {}) : <String, dynamic>{};
             final previewVisit = !jugado && snap.data != null && snap.data!.length > 8 ? (snap.data![8] as Map<String, dynamic>? ?? {}) : <String, dynamic>{};
-            final effectiveHomeId = homeId ?? _teamIdFromPartidoMap(detalle, true) ?? _teamIdFromPartidoMap(partidoLista, true);
-            final effectiveAwayId = awayId ?? _teamIdFromPartidoMap(detalle, false) ?? _teamIdFromPartidoMap(partidoLista, false);
+            final effectiveHomeId = homeId ??
+                _teamIdFromPartidoMap(detalle, true) ??
+                _teamIdFromPartidoMap(partidoLista, true) ??
+                _teamIdFromLineups(lineups, true);
+            final effectiveAwayId = awayId ??
+                _teamIdFromPartidoMap(detalle, false) ??
+                _teamIdFromPartidoMap(partidoLista, false) ??
+                _teamIdFromLineups(lineups, false);
             final rawDate = fechaPartido ?? detalle?['fixture']?['date'] as String? ?? partidoLista?['fixture']?['date'] as String?;
             final matchDateTime = rawDate != null ? DateTime.tryParse(rawDate)?.toLocal() : null;
             final horario = matchDateTime != null ? '${matchDateTime.hour.toString().padLeft(2,'0')}:${matchDateTime.minute.toString().padLeft(2,'0')}' : '';
+            final scoreParaPeriodos = (detalle?['score'] ?? partidoLista?['score']) as Map<String, dynamic>?;
+            final golesPeriodo = golesPorPeriodoDesdeScore(scoreParaPeriodos);
+            final shortStatusSheet = statusShortDet.isNotEmpty
+                ? statusShortDet
+                : (listFx?['status']?['short'] as String? ?? '');
             String moralLocal = '-', moralVisitante = '-', moralDesc = 'Calculando...';
             if (stats != null && stats['response'] != null && (stats['response'] as List).length >= 2) {
               final statLocal = List<Map<String, dynamic>>.from(stats['response'][0]['statistics'] ?? []);
@@ -5820,6 +5999,10 @@ Widget _tabTiempo(String tipo) {
                 ]),
                 const SizedBox(height: 20),
                 if ((jugado || isLive) && fixtureId != null) ...[
+                  _marcadorPorTiempoPartidoSheet(golesPeriodo, shortStatusSheet),
+                  const SizedBox(height: 12),
+                ],
+                if ((jugado || isLive) && fixtureId != null) ...[
                   if (snap.connectionState == ConnectionState.waiting)
                     const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFF00C853))))
                   else if (esCopaArgDetalle) ...[
@@ -5878,19 +6061,13 @@ Widget _tabTiempo(String tipo) {
                       _detalleSeccion('FORMACIONES'),
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
                     ],
-                  ] else if (stats != null) ...[
-                    _detalleSeccion('INFO DEL PARTIDO'),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      child: Column(children: [
-                        Row(children: [const Icon(Icons.sports, color: Color(0xFF00C853), size: 16), const SizedBox(width: 8), Expanded(child: Text('Árbitro: ${arbitro != 'No disponible' ? arbitro : 'No informado'}', style: const TextStyle(color: Colors.white70, fontSize: 13)))]),
-                        const SizedBox(height: 6),
-                        Row(children: [const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16), const SizedBox(width: 8), Expanded(child: Text(estadio.isNotEmpty ? '$estadio${ciudad.isNotEmpty ? " - $ciudad" : ""}' : 'Estadio: no informado', style: const TextStyle(color: Colors.white70, fontSize: 13)))]),
-                      ]),
-                    ),
-                    const SizedBox(height: 8),
-                    _detalleSeccion('PODIO DEL PARTIDO'),
-                    Builder(builder: (context) {
+                  ] else ...[
+                    if (modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle) ..._infoPartidoDetalleSheet(arbitro, estadio, ciudad),
+                    if (stats != null) ...[
+                      if (!(modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle)) ..._infoPartidoDetalleSheet(arbitro, estadio, ciudad),
+                      if (!(modalDesdeSeccionEnVivo && isLive && !jugado) || (List<Map<String, dynamic>>.from(snap.data?[4] ?? [])).any((j) => j['tieneRating'] == true)) ...[
+                        _detalleSeccion('PODIO DEL PARTIDO'),
+                        Builder(builder: (context) {
                       final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
                       if (jugadores.isEmpty) {
                         if (esCopaArgDetalle) {
@@ -5992,6 +6169,7 @@ Widget _tabTiempo(String tipo) {
                         ),
                       );
                     }),
+                      ],
                     const SizedBox(height: 8),
                     _detalleSeccion('ESTADISTICAS'),
                     ...((stats['response'] as List).isNotEmpty
@@ -6121,20 +6299,22 @@ Widget _tabTiempo(String tipo) {
                         ]);
                       }),
                     ],
-                    _detalleSeccion('RESULTADO MORAL'),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
-                      child: Column(children: [
-                        Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                          Text(local, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                          Text('$moralLocal - $moralVisitante', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 20)),
-                          Text(visitante, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    if (!(isLive && !jugado)) ...[
+                      _detalleSeccion('RESULTADO MORAL'),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: const Color(0xFF00C853).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.3))),
+                        child: Column(children: [
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                            Text(local, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            Text('$moralLocal - $moralVisitante', style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 20)),
+                            Text(visitante, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          ]),
+                          const SizedBox(height: 8),
+                          Text('🧠 $moralDesc', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
                         ]),
-                        const SizedBox(height: 8),
-                        Text('🧠 $moralDesc', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12), textAlign: TextAlign.center),
-                      ]),
-                    ),
+                      ),
+                    ],
                     // Destacados: pases / faltas / regates
                     Builder(builder: (context) {
                       final jugadores = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
@@ -6252,47 +6432,78 @@ Widget _tabTiempo(String tipo) {
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
                     ],
                   ] else ...[
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No hay estadisticas disponibles', style: TextStyle(color: Colors.white38), textAlign: TextAlign.center)),
+                    if (modalDesdeSeccionEnVivo && isLive && !jugado && !esCopaArgDetalle)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        child: Text(
+                          'Estadísticas de equipo (posesión, tiros, etc.): la API aún no las publicó para este momento. Probá de nuevo en unos minutos.',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 13, height: 1.35),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('No hay estadisticas disponibles', style: TextStyle(color: Colors.white38), textAlign: TextAlign.center)),
+                  ],
                   ],
                 ] else if (!jugado) ...[
-                  if (snap.connectionState == ConnectionState.waiting)
-                    const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFF00C853))))
-                  else if (esCopaArgDetalle) ...[
-                    if (lineups.length >= 2) ...[
-                      _detalleSeccion('FORMACIONES'),
-                      _formacionLinealCard(lineups, local, visitante),
-                      const SizedBox(height: 16),
-                    ] else ...[
-                      _detalleSeccion('FORMACIONES'),
-                      const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (snap.connectionState == ConnectionState.waiting)
+                        const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Center(child: CircularProgressIndicator(color: Color(0xFF00C853))),
+                        )
+                      else if (esCopaArgDetalle) ...[
+                        if (lineups.length >= 2) ...[
+                          _detalleSeccion('FORMACIONES'),
+                          _formacionLinealCard(lineups, local, visitante),
+                          const SizedBox(height: 16),
+                        ] else ...[
+                          _detalleSeccion('FORMACIONES'),
+                          const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
+                        ],
+                      ] else ...[
+                        _prePartidoInfoCard(estadio, ciudad, arbitro, horario, matchDateTime, fuenteCopaArgentina: esCopaArgDetalle),
+                        const SizedBox(height: 10),
+                        if (effectiveHomeId != null && effectiveAwayId != null) ...[
+                          _h2hCard(local, visitante, effectiveHomeId!, effectiveAwayId!),
+                          const SizedBox(height: 10),
+                          _tablaRealMoralCard(local, effectiveHomeId!, visitante, effectiveAwayId!),
+                          const SizedBox(height: 10),
+                        ],
+                        _detalleSeccion('CÓMO VIENEN'),
+                        _rachaWidget(local, rachaLocal, effectiveHomeId, esLocal: true),
+                        const SizedBox(height: 8),
+                        _rachaWidget(visitante, rachaVisit, effectiveAwayId, esLocal: false),
+                        const SizedBox(height: 10),
+                        if (mostrarFormacion) ...[
+                          _detalleSeccion('FORMACIONES'),
+                          _formacionLinealCard(lineups, local, visitante),
+                          const SizedBox(height: 10),
+                        ],
+                        if (previewHome.isNotEmpty || previewVisit.isNotEmpty) ...[
+                          _detalleSeccion('MEJORES JUGADORES'),
+                          _previewEquipoWidget(local, previewHome),
+                          const SizedBox(height: 8),
+                          _previewEquipoWidget(visitante, previewVisit),
+                        ],
+                        const SizedBox(height: 16),
+                      ],
+                      if (effectiveHomeId != null && effectiveAwayId != null && effectiveHomeId > 0 && effectiveAwayId > 0) ...[
+                        SizedBox(height: snap.connectionState == ConnectionState.waiting ? 8 : 12),
+                        _detalleSeccion('REMONTADAS'),
+                        const SizedBox(height: 6),
+                        RemontadaComparacionWidget(
+                          homeTeamId: effectiveHomeId,
+                          awayTeamId: effectiveAwayId,
+                          homeName: local,
+                          awayName: visitante,
+                          season: ApiService.temporadaLigaPrincipal,
+                        ),
+                      ],
                     ],
-                  ] else ...[
-                    _prePartidoInfoCard(estadio, ciudad, arbitro, horario, matchDateTime, fuenteCopaArgentina: esCopaArgDetalle),
-                    const SizedBox(height: 10),
-                    if (effectiveHomeId != null && effectiveAwayId != null) ...[
-                      _h2hCard(local, visitante, effectiveHomeId!, effectiveAwayId!),
-                      const SizedBox(height: 10),
-                      _tablaRealMoralCard(local, effectiveHomeId!, visitante, effectiveAwayId!),
-                      const SizedBox(height: 10),
-                    ],
-                    _detalleSeccion('CÓMO VIENEN'),
-                    _rachaWidget(local, rachaLocal, effectiveHomeId, esLocal: true),
-                    const SizedBox(height: 8),
-                    _rachaWidget(visitante, rachaVisit, effectiveAwayId, esLocal: false),
-                    const SizedBox(height: 10),
-                    if (mostrarFormacion) ...[
-                      _detalleSeccion('FORMACIONES'),
-                      _formacionLinealCard(lineups, local, visitante),
-                      const SizedBox(height: 10),
-                    ],
-                    if (previewHome.isNotEmpty || previewVisit.isNotEmpty) ...[
-                      _detalleSeccion('MEJORES JUGADORES'),
-                      _previewEquipoWidget(local, previewHome),
-                      const SizedBox(height: 8),
-                      _previewEquipoWidget(visitante, previewVisit),
-                    ],
-                    const SizedBox(height: 16),
-                  ],
+                  ),
                 ],
               ],
             );
@@ -6307,6 +6518,55 @@ Widget _tabTiempo(String tipo) {
       padding: const EdgeInsets.only(bottom: 10, top: 4),
       child: Text(titulo, style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
     );
+  }
+
+  /// Marcador 1T / 2T / prórroga / penales (misma fuente que la tarjeta En Vivo).
+  Widget _marcadorPorTiempoPartidoSheet(Map<String, int?> per, String short) {
+    Widget fila(String label, int? h, int? v, {bool always = false}) {
+      if (!always && h == null && v == null) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
+            ),
+            Text('${h ?? '—'}  -  ${v ?? '—'}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _detalleSeccion('MARCADOR POR TIEMPO'),
+        fila('1.er tiempo', per['1tL'], per['1tV'], always: true),
+        fila('2.do tiempo', per['2tL'], per['2tV'], always: true),
+        if ((per['etL'] ?? 0) + (per['etV'] ?? 0) > 0 || short == 'ET' || short == 'BT' || short == 'PEN')
+          fila('Prórroga', per['etL'], per['etV'], always: short == 'ET' || short == 'BT' || short == 'PEN'),
+        if ((per['penL'] ?? 0) + (per['penV'] ?? 0) > 0 || short == 'PEN')
+          fila('Penales', per['penL'], per['penV'], always: short == 'PEN'),
+      ],
+    );
+  }
+
+  /// Árbitro + estadio en el sheet de detalle.
+  List<Widget> _infoPartidoDetalleSheet(String arbitro, String estadio, String ciudad) {
+    final arTxt = (arbitro != 'No disponible' && arbitro.isNotEmpty) ? arbitro : 'No informado por la API';
+    final esTxt = estadio.isNotEmpty ? '$estadio${ciudad.isNotEmpty ? " - $ciudad" : ""}' : 'Estadio: no informado por la API';
+    return [
+      _detalleSeccion('INFO DEL PARTIDO'),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Column(children: [
+          Row(children: [const Icon(Icons.sports, color: Color(0xFF00C853), size: 16), const SizedBox(width: 8), Expanded(child: Text('Árbitro: $arTxt', style: const TextStyle(color: Colors.white70, fontSize: 13)))]),
+          const SizedBox(height: 6),
+          Row(children: [const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16), const SizedBox(width: 8), Expanded(child: Text(esTxt, style: const TextStyle(color: Colors.white70, fontSize: 13)))]),
+        ]),
+      ),
+      const SizedBox(height: 8),
+    ];
   }
 
   Widget _prePartidoInfoCard(String estadio, String ciudad, String arbitro, String horario, DateTime? matchDateTime, {bool fuenteCopaArgentina = false}) {
@@ -7463,7 +7723,7 @@ Widget _tabTiempo(String tipo) {
         final fechaActual = fechas[idxActual];
         final predicciones = porFecha[fechaActual]!;
         final tituloGrupo = fechaActual == 0
-            ? 'PREDICCIONES — LIGUILLA LPF'
+            ? 'PREDICCIONES — LIGUILLA LPF (semis y final)'
             : 'PREDICCIONES — FECHA $fechaActual';
 
         return Column(children: [
@@ -8169,6 +8429,8 @@ class _PlantelTabState extends State<_PlantelTab> {
                               'Total carrera (aprox.): $pjT PJ · $gT goles · $muestras de $tot temporadas en historial',
                               style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.3),
                             ),
+                            const SizedBox(height: 12),
+                            DatosMercadoSportmonksSection(key: ValueKey(nombre), playerName: nombre),
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(

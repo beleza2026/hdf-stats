@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'api_service.dart';
 import 'nationality_flags.dart';
+import 'widgets/datos_mercado_sportmonks_section.dart';
 
-/// Bottom sheet: carrera (suma de temporadas consultadas) + club actual + edad.
+/// Bottom sheet: carrera (sum3a de temporadas consultadas) + club actual + edad.
 Future<void> showPlayerCareerSheet(
   BuildContext context, {
   required int playerId,
@@ -229,6 +230,8 @@ class _PlayerCareerBodyState extends State<_PlayerCareerBody> {
                     ]),
                   ),
                 ]),
+                const SizedBox(height: 16),
+                DatosMercadoSportmonksSection(key: ValueKey(nombre), playerName: nombre),
                 if (clubNom.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   Container(

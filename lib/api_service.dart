@@ -36,6 +36,10 @@ class ApiService {
         r.contains('16avos')) {
       return 200;
     }
+    if (r.contains('round of 4') ||
+        (RegExp(r'\br4\b').hasMatch(r) && !r.contains('group'))) {
+      return 400;
+    }
     if (r.contains('quarter') ||
         r.contains('cuartos') ||
         r.contains('4tos') ||
@@ -76,6 +80,12 @@ class ApiService {
       if (v >= 1 && v <= 38) return v;
     }
     return 999;
+  }
+
+  /// Octavos en adelante (buckets 200–500) para no perder liguilla aunque el `round` no diga Apertura/Clausura.
+  static bool ligaEsRondaEliminatoria(String? roundRaw) {
+    final b = ligaFixtureBucket(roundRaw ?? '');
+    return b == 200 || b == 300 || b == 400 || b == 500;
   }
 
   /// Misma nómina que en copas (vivo): partidos de copa se filtran a estos clubes.
@@ -451,6 +461,61 @@ class ApiService {
     }
   }
 
+  /// Filas de standings para rankings LPF: tabla **Anual** si la API la trae; si no, une todos los grupos
+  /// excepto tablas de promedios (Zona A/B, etc.) y deduplica por equipo.
+  static Future<List<Map<String, dynamic>>> getStandingsRowsParaRemontadaLpf() async {
+    try {
+      final byAnual = await getTablasAnualYPromedios();
+      final anual = byAnual['Anual'];
+      if (anual != null && anual.isNotEmpty) {
+        return List<Map<String, dynamic>>.from(anual);
+      }
+
+      final data = await _getStandingsData();
+      if (data == null) return [];
+      final standings = data['response']?[0]?['league']?['standings'] as List?;
+      if (standings == null) return [];
+
+      int pts(Map<String, dynamic> x) =>
+          (x['points'] is num) ? (x['points'] as num).toInt() : int.tryParse('${x['points']}') ?? 0;
+
+      int gd(Map<String, dynamic> x) {
+        final g = x['goalsDiff'];
+        if (g is num) return g.toInt();
+        return int.tryParse('$g') ?? 0;
+      }
+
+      final merged = <int, Map<String, dynamic>>{};
+      for (final group in standings) {
+        final zona = group as List;
+        if (zona.isEmpty) continue;
+        final g0 = zona[0] as Map<String, dynamic>;
+        final groupStr = (g0['group'] as String? ?? '').toLowerCase();
+        if (groupStr.contains('promedio')) continue;
+
+        for (final row in zona) {
+          if (row is! Map<String, dynamic>) continue;
+          final tid = _idFromDynamic((row['team'] as Map<String, dynamic>?)?['id']);
+          if (tid == null) continue;
+          final ex = merged[tid];
+          if (ex == null || pts(row) > pts(ex)) {
+            merged[tid] = row;
+          }
+        }
+      }
+
+      final list = merged.values.toList();
+      list.sort((a, b) {
+        final d = pts(b).compareTo(pts(a));
+        if (d != 0) return d;
+        return gd(b).compareTo(gd(a));
+      });
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
   static Future<Map<String, List<Map<String, dynamic>>>> getTablasTiempos() {
     _tiemposFuture ??= _computeTablasTiempos();
     return _tiemposFuture!;
@@ -690,6 +755,27 @@ class ApiService {
         }
       }
 
+      /// Nombres exactos de ronda que publica API-Football (p. ej. `1st Phase - Semi-finals`).
+      Future<List<String>> fetchRoundNames(int season) async {
+        try {
+          final res = await http.get(
+            Uri.parse(
+              '$_baseUrl/fixtures/rounds?league=$_ligaArgentina&season=$season&timezone=America/Argentina/Buenos_Aires',
+            ),
+            headers: _headers,
+          );
+          if (res.statusCode != 200) return [];
+          final decoded = jsonDecode(res.body);
+          if (decoded is! Map<String, dynamic>) return [];
+          if (_apiSportsDecodedHasErrors(decoded)) return [];
+          final raw = decoded['response'];
+          if (raw is! List) return [];
+          return raw.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+        } catch (_) {
+          return [];
+        }
+      }
+
       final Map<dynamic, Map<String, dynamic>> porFixtureId = {};
       // Solo la temporada configurada: mezclar 2025 completo traía el calendario del año pasado.
       for (final season in [_season]) {
@@ -706,6 +792,14 @@ class ApiService {
         final proximos = wave1[2];
         final koR16NsEn = wave1[3];
         final koR16NsEs = wave1[4];
+
+        // A veces API-Football publica el cruce por `from`/`to` antes de actualizar `/fixtures/rounds` o el `round` del partido.
+        final hoy = DateTime.now();
+        final ventanaHasta = hoy.add(const Duration(days: 50));
+        final ventanaCalendario = await _fetchFixtures(
+          season,
+          '&from=${_ymdApi(hoy)}&to=${_ymdApi(ventanaHasta)}',
+        );
 
         // ── Cuartos (R8): MISMO MODELO que R16 + refuerzos FT/TBD/LIVE (a veces el dump no los lista).
         //    Rondas genéricas API (inglés / español / alias) + Apertura/Clausura como en el fixture oficial.
@@ -748,13 +842,82 @@ class ApiService {
           await Future.delayed(const Duration(milliseconds: 70));
         }
 
+        final apiRounds = await fetchRoundNames(season);
+
+        // ── Semifinales (R4): MISMO modelo que cuartos + cualquier ronda que la API liste como semis.
+        const r4Statuses = ['NS', 'TBD', 'FT', 'LIVE'];
+        const r4RoundsGeneric = [
+          'Semi-finals',
+          'Semifinals',
+          'Semifinales',
+          'Semi finals',
+          'Round of 4',
+        ];
+        const r4RoundsFase = [
+          'Apertura - Semi-finals',
+          'Clausura - Semi-finals',
+          'Apertura - Semifinals',
+          'Clausura - Semifinals',
+          'Apertura - Semifinales',
+          'Clausura - Semifinales',
+          '1st Phase - Semi-finals',
+        ];
+        final r4RoundsAll = <String>{
+          ...r4RoundsGeneric,
+          ...r4RoundsFase,
+          for (final name in apiRounds)
+            if (ligaFixtureBucket(name) == 400) name,
+        }.toList()
+          ..sort();
+
+        final koR4 = <Map<String, dynamic>>[];
+        for (final st in r4Statuses) {
+          koR4.addAll(await koR8Layer(st, r4RoundsAll));
+        }
+        for (final rd in r4RoundsAll) {
+          koR4.addAll(await _fetchFixtures(
+              season, '&round=${Uri.encodeComponent(rd)}'));
+          await Future.delayed(const Duration(milliseconds: 70));
+        }
+
+        // ── Final: mismo modelo + rondas descubiertas vía `/fixtures/rounds`.
+        const r2Statuses = ['NS', 'TBD', 'FT', 'LIVE'];
+        const r2RoundsGeneric = [
+          'Final',
+        ];
+        const r2RoundsFase = [
+          'Apertura - Final',
+          'Clausura - Final',
+          '1st Phase - Final',
+        ];
+        final r2RoundsAll = <String>{
+          ...r2RoundsGeneric,
+          ...r2RoundsFase,
+          for (final name in apiRounds)
+            if (ligaFixtureBucket(name) == 500) name,
+        }.toList()
+          ..sort();
+
+        final koR2 = <Map<String, dynamic>>[];
+        for (final st in r2Statuses) {
+          koR2.addAll(await koR8Layer(st, r2RoundsAll));
+        }
+        for (final rd in r2RoundsAll) {
+          koR2.addAll(await _fetchFixtures(
+              season, '&round=${Uri.encodeComponent(rd)}'));
+          await Future.delayed(const Duration(milliseconds: 70));
+        }
+
         for (final fixture in [
           ...allFixtures,
           ...nsFixtures,
           ...koR16NsEn,
           ...koR16NsEs,
           ...proximos,
+          ...ventanaCalendario,
           ...koR8,
+          ...koR4,
+          ...koR2,
         ]) {
           final fixtureData = fixture['fixture'] as Map<String, dynamic>?;
           final fixtureId = fixtureData?['id'];
@@ -1675,87 +1838,10 @@ class ApiService {
       return _prediccionesCache!;
     }
     try {
-      final todos = await _fetchPrediccionesLigaTodos();
-
-      int? proximaFecha;
-      Map<int, List<Map<String, dynamic>>> porFecha = {};
-      if (todos.isNotEmpty) {
-      int fixtureIdSort(Map<String, dynamic> p) {
-        final raw = p['fixture']?['id'];
-        if (raw is int) return raw;
-        if (raw is num) return raw.toInt();
-        return int.tryParse('$raw') ?? 0;
-      }
-
-      final todosOrdenados = List<Map<String, dynamic>>.from(todos)
-        ..sort((a, b) => fixtureIdSort(a).compareTo(fixtureIdSort(b)));
-
-      // Toda la temporada: fechas regulares solo buckets 1–99 (ligaFixtureBucket).
-      // Antes solo se miraba la mitad de los fixtures por id y se parseaba `round`
-      // quitando no-dígitos → mezclaba playoffs en clave 0 y se perdía la próxima fecha.
-      for (final p in todosOrdenados) {
-        final st = p['fixture']?['status']?['short'] as String? ?? '';
-        if (st == 'PST' || st == 'CANC' || st == 'TBD') continue;
-        final round = (p['league']?['round'] as String?)?.trim() ?? '';
-        final b = ligaFixtureBucket(round);
-        if (b < 1 || b > 99) continue;
-        porFecha.putIfAbsent(b, () => []).add(p);
-      }
-      final fechas = porFecha.keys.toList()..sort();
-
-      // Fecha en curso = la más alta con al menos 1 partido activo o FT
-      int fechaEnCurso = 0;
-      for (final f in fechas) {
-        final tieneActividad = porFecha[f]!.any((p) {
-          final s = p['fixture']['status']['short'] as String;
-          return s == 'FT' || s == 'AET' || s == 'PEN' || s == '1H' || s == '2H' || s == 'HT';
-        });
-        if (tieneActividad && f > fechaEnCurso) fechaEnCurso = f;
-      }
-      // Si la fecha en curso todavía tiene NS → mostrar esos partidos
-      if (fechaEnCurso > 0) {
-        final nsEnCurso = porFecha[fechaEnCurso]?.where((p) =>
-            p['fixture']['status']['short'] == 'NS').toList() ?? [];
-        if (nsEnCurso.isNotEmpty) proximaFecha = fechaEnCurso;
-      }
-      // Si la fecha en curso está completa → mostrar la siguiente
-      if (proximaFecha == null) {
-        for (final f in fechas) {
-          if (f <= fechaEnCurso) continue;
-          if (porFecha[f]!.any((p) => p['fixture']['status']['short'] == 'NS')) {
-            proximaFecha = f; break;
-          }
-        }
-      }
-      }
-
-      List<Map<String, dynamic>> ligaPreds = [];
-      if (proximaFecha != null) {
-        final partidos = porFecha[proximaFecha]!.where((p) {
-          final s = p['fixture']['status']['short'] as String;
-          return s == 'NS';
-        }).toList();
-        final sortKey = 'A_${proximaFecha.toString().padLeft(4, '0')}';
-        final label = 'LIGA PROFESIONAL · Fecha $proximaFecha';
-        ligaPreds = await Future.wait(partidos.map((p) => _calcularPrediccionPartido(
-              p,
-              grupoSortKey: sortKey,
-              grupoLabel: label,
-              fechaLiga: proximaFecha,
-            )));
-      }
-
-      final yaLigaFids = <int>{
-        for (final pred in ligaPreds)
-          if ((pred['fixtureId'] as int?) != null &&
-              (pred['fixtureId'] as int) > 0)
-            pred['fixtureId'] as int
-      };
-      final ligaKoPreds =
-          await _prediccionesLigaArgPlayoffsNs(todos, yaLigaFids);
-
-      // Solo Liga Profesional Argentina (fecha regular + liguilla LPF).
-      final all = [...ligaPreds, ...ligaKoPreds];
+      // Misma unión de partidos que el fixture (incluye rondas KO por `round=`).
+      final todos = await getFixture();
+      // Solo liguilla LPF: semifinales y final (no fecha regular tipo "fecha 16").
+      final all = await _prediccionesLigaArgPlayoffsNs(todos, <int>{});
       all.sort((a, b) {
         final c = (a['grupoSortKey'] as String).compareTo(b['grupoSortKey'] as String);
         if (c != 0) return c;
@@ -1779,42 +1865,50 @@ class ApiService {
     return '${dias[dt.weekday]} ${dt.day}/${dt.month}';
   }
 
-  /// Eliminatorias LPF (128): octavos/cuartos/semis/final — no entran en el reparto por "fecha" regular
-  /// (además `getPredicciones` solo miraba la mitad de los fixtures por id).
+  /// Liguilla LPF (128): solo **semifinales y final** (`NS` / `TBD` con equipos definidos).
   static Future<List<Map<String, dynamic>>> _prediccionesLigaArgPlayoffsNs(
     List<Map<String, dynamic>> todos,
     Set<int> excluirFixtureIds,
   ) async {
     const faseEtiqueta = <int, String>{
-      200: 'Octavos de final',
-      300: 'Cuartos de final',
       400: 'Semifinales',
       500: 'Final',
-      999: 'Eliminatorias',
     };
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final candidatos = <Map<String, Object>>[];
     for (final p in todos) {
       final st = p['fixture']?['status']?['short'] as String? ?? '';
-      if (st != 'NS') continue;
+      if (st != 'NS' && st != 'TBD') continue;
       final idRaw = p['fixture']?['id'];
       final id = idRaw is int ? idRaw : int.tryParse('$idRaw') ?? 0;
       if (id == 0 || excluirFixtureIds.contains(id)) continue;
+      final homeRaw = p['teams']?['home']?['id'];
+      final awayRaw = p['teams']?['away']?['id'];
+      final homeId = homeRaw is int ? homeRaw : int.tryParse('$homeRaw') ?? 0;
+      final awayId = awayRaw is int ? awayRaw : int.tryParse('$awayRaw') ?? 0;
+      if (homeId <= 0 || awayId <= 0) continue;
       final round = (p['league']?['round'] as String?)?.trim() ?? '';
       final b = ligaFixtureBucket(round);
-      final fase = faseEtiqueta[b];
-      if (fase == null) continue;
+      if (b != 400 && b != 500) continue;
+      final fase = faseEtiqueta[b]!;
       final ds = p['fixture']?['date'] as String?;
-      if (ds == null) continue;
       DateTime dt;
-      try {
-        dt = DateTime.parse(ds).toLocal();
-      } catch (_) {
-        continue;
+      if (ds == null || ds.trim().isEmpty) {
+        if (st != 'TBD') continue;
+        dt = now;
+      } else {
+        try {
+          dt = DateTime.parse(ds).toLocal();
+        } catch (_) {
+          if (st != 'TBD') continue;
+          dt = now;
+        }
       }
-      final dOnly = DateTime(dt.year, dt.month, dt.day);
-      if (dOnly.isBefore(today)) continue;
+      if (st == 'NS') {
+        final dOnly = DateTime(dt.year, dt.month, dt.day);
+        if (dOnly.isBefore(today)) continue;
+      }
       final sortKey = 'A_LKO_${b.toString().padLeft(3, '0')}';
       final label =
           'LIGA PROFESIONAL · $fase · ${_labelDiaPrediccion(dt)}${round.isNotEmpty ? ' · $round' : ''}';
