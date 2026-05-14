@@ -46,6 +46,20 @@ extension SportmonksContractStatusUi on SportmonksContractStatus {
   }
 }
 
+/// Promedio de edad y valor total de plantel (Sportmonks `squads/teams` + `include=player`).
+class SportmonksSquadInfo {
+  const SportmonksSquadInfo({
+    this.averageAge,
+    this.totalMarketValueEuros,
+  });
+
+  final double? averageAge;
+  final num? totalMarketValueEuros;
+
+  bool get hasAnyData =>
+      averageAge != null || (totalMarketValueEuros != null && totalMarketValueEuros! > 0);
+}
+
 /// Una línea de transferencia para listados compactos.
 class SportmonksTransferLine {
   const SportmonksTransferLine({
@@ -84,8 +98,12 @@ class SportmonksPlayerMarketData {
   /// Ej. `Jun 2026` (inglés, mes corto).
   final String contractUntilFormatted;
   final SportmonksContractStatus contractStatus;
-  /// Recientes primero; la UI recorta a 5.
+  /// Recientes primero; la UI de detalle usa la primera como «última transferencia».
   final List<SportmonksTransferLine> transfers;
+
+  /// Hay al menos un dato para mostrar en la sección MERCADO (valor, contrato o transferencias).
+  bool get hasMercadoContent =>
+      marketValue != null || contractUntil != null || transfers.isNotEmpty;
 }
 
 /// Resultado de [SportmonksService.searchPlayerByName].
@@ -158,7 +176,15 @@ class SportmonksService {
     }
   }
 
+  /// Respuesta tipo error de Sportmonks (`message` sin `data`).
+  static bool _apiErrorsPresent(Map<String, dynamic>? root) {
+    if (root == null) return true;
+    if (root['message'] != null && root['data'] == null) return true;
+    return false;
+  }
+
   static final Map<String, dynamic> _cache = {};
+  static final Map<String, SportmonksSquadInfo?> _squadInfoCache = {};
 
   static String _cacheKey(String kind, String id) => '$kind:${id.trim()}';
 
@@ -249,6 +275,54 @@ class SportmonksService {
     }
     final r = buf.toString();
     return neg ? '-$r' : r;
+  }
+
+  static num? _asNumLoose(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    return num.tryParse(s.replaceAll(RegExp(r'[^\d.\-]'), ''));
+  }
+
+  /// Valor de mercado en la fila de búsqueda / jugador (varía según plan Sportmonks).
+  static num? _extractMarketValueRaw(Map<String, dynamic> picked) {
+    final direct = _pick(picked, [
+      'market_value',
+      'market_value_in_eur',
+      'value',
+      'price',
+      'worth',
+    ]);
+    var n = _asNumLoose(direct);
+    if (n != null && n > 0) return n;
+    final det = _asMap(picked['details']);
+    if (det != null) {
+      n = _asNumLoose(_pick(det, ['market_value', 'value', 'price']));
+      if (n != null && n > 0) return n;
+    }
+    return null;
+  }
+
+  static String _trimOneDecimal(double x) {
+    final t = x.toStringAsFixed(1);
+    return t.endsWith('.0') ? t.substring(0, t.length - 2) : t;
+  }
+
+  /// Formato compacto tipo `€12.5M` / `€900K` (asume importe en **euros** enteros salvo magnitud).
+  static String formatMarketValueCompactEur(num n) {
+    if (n <= 0) return '—';
+    final x = n.toDouble();
+    if (x >= 1_000_000) {
+      return '€${_trimOneDecimal(x / 1e6)}M';
+    }
+    if (x >= 100_000) {
+      return '€${_trimOneDecimal(x / 1e6)}M';
+    }
+    if (x >= 10_000) {
+      return '€${_trimOneDecimal(x / 1e3)}K';
+    }
+    return '€ ${_eurosConPuntos(n.round())}';
   }
 
   static String formatMarketValueEuroDisplay(dynamic raw) {
@@ -626,6 +700,140 @@ class SportmonksService {
     }).toList();
   }
 
+  static double? _ageYearsFromBirthString(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final d = DateTime.tryParse(raw.trim());
+    if (d == null) return null;
+    final now = DateTime.now();
+    var years = now.year - d.year;
+    if (now.month < d.month || (now.month == d.month && now.day < d.day)) {
+      years--;
+    }
+    if (years < 10 || years > 55) return null;
+    return years.toDouble();
+  }
+
+  static Future<int?> _sportmonksTeamIdFromSearch(String name, String token) async {
+    final q = name.trim();
+    if (q.isEmpty) return null;
+    final enc = Uri.encodeComponent(q);
+    final key = _cacheKey('teamSearch', enc);
+    if (_cache.containsKey(key)) {
+      final hit = _cache[key];
+      if (hit is int) return hit;
+      if (hit == null) return null;
+    }
+
+    try {
+      final uri = Uri.parse('$_baseUrl/teams/search/$enc').replace(queryParameters: {
+        'api_token': token.trim(),
+        'per_page': '8',
+      });
+      final res = await _httpGet(uri, token: token);
+      if (res.statusCode != 200) {
+        _cache[key] = null;
+        return null;
+      }
+      final root = _asMap(json.decode(res.body));
+      if (_apiErrorsPresent(root)) {
+        _cache[key] = null;
+        return null;
+      }
+      final data = root?['data'];
+      if (data is! List || data.isEmpty) {
+        _cache[key] = null;
+        return null;
+      }
+      final first = _asMap(data.first);
+      final id = _parseIntLoose(first?['id']);
+      if (id == null || id <= 0) {
+        _cache[key] = null;
+        return null;
+      }
+      _cache[key] = id;
+      return id;
+    } catch (_) {
+      _cache[key] = null;
+      return null;
+    }
+  }
+
+  Future<SportmonksSquadInfo?> _aggregateSquadInfo(int sportmonksTeamId, String token) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/squads/teams/$sportmonksTeamId').replace(queryParameters: {
+        'api_token': token.trim(),
+        'include': 'player',
+      });
+      final res = await _httpGet(uri, token: token, timeout: _timeoutProfile);
+      if (res.statusCode != 200) return null;
+      final root = _asMap(json.decode(res.body));
+      if (_apiErrorsPresent(root)) return null;
+      final data = root?['data'];
+      final rows = <Map<String, dynamic>>[];
+      if (data is List) {
+        for (final e in data) {
+          if (e is Map<String, dynamic>) {
+            rows.add(e);
+          } else if (e is Map) {
+            rows.add(Map<String, dynamic>.from(e));
+          }
+        }
+      }
+      if (rows.isEmpty) return null;
+
+      final ages = <double>[];
+      num sumValue = 0;
+      var nValues = 0;
+      for (final row in rows) {
+        final player = _asMap(row['player']);
+        if (player == null) continue;
+        final dob = _asString(player['date_of_birth']);
+        final age = _ageYearsFromBirthString(dob);
+        if (age != null) ages.add(age);
+        final v = _asNumLoose(_pick(player, ['value', 'market_value', 'price', 'worth']));
+        if (v != null && v > 0) {
+          sumValue += v;
+          nValues++;
+        }
+      }
+
+      final avg = ages.isEmpty ? null : ages.reduce((a, b) => a + b) / ages.length;
+      final total = nValues > 0 ? sumValue : null;
+      final out = SportmonksSquadInfo(averageAge: avg, totalMarketValueEuros: total);
+      if (!out.hasAnyData) return null;
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Datos de plantel Sportmonks para mostrar bajo la formación.
+  ///
+  /// [teamId] es el ID del club en **API-Football** (u otro origen): solo sirve como parte de la clave de caché.
+  /// [teamName] debe ser el nombre del equipo (como en el fixture); Sportmonks resuelve el club por búsqueda,
+  /// porque los IDs no coinciden entre proveedores.
+  Future<SportmonksSquadInfo?> getSquadInfo(int teamId, {required String teamName}) async {
+    final token = _pickToken();
+    if (token == null) return null;
+    final name = teamName.trim();
+    if (name.isEmpty) return null;
+
+    final memKey = '$teamId|${name.toLowerCase()}';
+    if (_squadInfoCache.containsKey(memKey)) {
+      return _squadInfoCache[memKey];
+    }
+
+    final smId = await _sportmonksTeamIdFromSearch(name, token);
+    if (smId == null) {
+      _squadInfoCache[memKey] = null;
+      return null;
+    }
+
+    final info = await _aggregateSquadInfo(smId, token);
+    _squadInfoCache[memKey] = info;
+    return info;
+  }
+
   /// Busca por nombre en Sportmonks y arma el snapshot del **primer** resultado de la API.
   Future<SportmonksPlayerMarketSnapshot> searchPlayerByName(String nombreJugador) async {
     final token = _pickToken();
@@ -740,12 +948,15 @@ class SportmonksService {
           ? List<SportmonksTransferLine>.from(transfersWrap['lines'] as List? ?? const <SportmonksTransferLine>[])
           : <SportmonksTransferLine>[];
 
+      final mvRaw = _extractMarketValueRaw(picked);
+      final mvFmt = mvRaw != null ? formatMarketValueCompactEur(mvRaw) : '—';
+
       return SportmonksPlayerMarketSnapshot(
         data: SportmonksPlayerMarketData(
           sportmonksPlayerId: idStr,
           displayName: displayName,
-          marketValue: null,
-          marketValueFormatted: '—',
+          marketValue: mvRaw,
+          marketValueFormatted: mvFmt,
           contractUntil: contractUntil,
           contractUntilFormatted: contractUntilFormatted,
           contractStatus: contractStatus,
@@ -762,7 +973,10 @@ class SportmonksService {
     }
   }
 
-  static void clearCache() => _cache.clear();
+  static void clearCache() {
+    _cache.clear();
+    _squadInfoCache.clear();
+  }
 
   static void invalidatePlayer(String playerId) {
     final id = playerId.trim();

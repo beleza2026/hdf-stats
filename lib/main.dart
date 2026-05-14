@@ -24,7 +24,6 @@ import 'player_career_sheet.dart';
 import 'widgets/datos_mercado_sportmonks_section.dart';
 import 'widgets/remontada_liga_tabla_widget.dart';
 import 'widgets/remontada_comparacion_widget.dart';
-import 'widgets/remontada_widget.dart';
 import 'image_decode_helper.dart';
 import 'penales_shootout_helper.dart';
 import 'live_section/live_fixture_bundle.dart';
@@ -748,9 +747,6 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                             const SizedBox(height: 8),
                           ],
-                          _detalleSeccion('REMONTADAS'),
-                          const SizedBox(height: 6),
-                          RemontadaWidget(teamId: teamId, season: ApiService.temporadaLigaPrincipal),
                         ]),
                         if (info == null)
                           const Center(child: Text('Datos proximos', style: TextStyle(color: Colors.white54)))

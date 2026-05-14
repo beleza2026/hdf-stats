@@ -11,6 +11,24 @@ import 'live_fixture_bundle.dart';
 import 'live_pitch_field.dart';
 import 'live_section_mock.dart';
 
+int _lineupTeamApiId(Map<String, dynamic> lu) {
+  final t = lu['team'];
+  if (t is! Map) return 0;
+  final id = t['id'];
+  if (id is int) return id;
+  if (id is num) return id.toInt();
+  return int.tryParse('$id') ?? 0;
+}
+
+String _lineupDisplayName(Map<String, dynamic> lu, String fallback) {
+  final t = lu['team'];
+  if (t is Map) {
+    final n = t['name'];
+    if (n is String && n.trim().isNotEmpty) return n.trim();
+  }
+  return fallback;
+}
+
 /// Tarjeta completa de un partido en vivo (datos enriquecidos + auto-refresh local).
 class LiveMatchRichCard extends StatefulWidget {
   const LiveMatchRichCard({
@@ -294,9 +312,25 @@ class _LiveMatchRichCardState extends State<LiveMatchRichCard> with TickerProvid
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: LivePitchField(lineupTeam: lineups[0], accent: colorH, title: local, ratingsByPlayerId: ratings)),
+                        Expanded(
+                          child: LivePitchField(
+                            lineupTeam: lineups[0],
+                            accent: colorH,
+                            title: _lineupDisplayName(lineups[0], local),
+                            teamId: _lineupTeamApiId(lineups[0]),
+                            ratingsByPlayerId: ratings,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        Expanded(child: LivePitchField(lineupTeam: lineups[1], accent: colorA, title: visitante, ratingsByPlayerId: ratings)),
+                        Expanded(
+                          child: LivePitchField(
+                            lineupTeam: lineups[1],
+                            accent: colorA,
+                            title: _lineupDisplayName(lineups[1], visitante),
+                            teamId: _lineupTeamApiId(lineups[1]),
+                            ratingsByPlayerId: ratings,
+                          ),
+                        ),
                       ],
                     ),
                   ),

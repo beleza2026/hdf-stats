@@ -1,7 +1,90 @@
 import 'package:flutter/material.dart';
 
 import '../image_decode_helper.dart';
+import '../services/sportmonks_service.dart';
 import 'live_fixture_bundle.dart';
+
+/// Fila Sportmonks bajo el nombre del equipo: Future propio para no acoplar cargas.
+class _PitchSquadSportmonksRow extends StatefulWidget {
+  const _PitchSquadSportmonksRow({
+    super.key,
+    required this.teamId,
+    required this.teamName,
+    required this.accent,
+  });
+
+  final int teamId;
+  final String teamName;
+  final Color accent;
+
+  @override
+  State<_PitchSquadSportmonksRow> createState() => _PitchSquadSportmonksRowState();
+}
+
+class _PitchSquadSportmonksRowState extends State<_PitchSquadSportmonksRow> {
+  late final Future<SportmonksSquadInfo?> _future =
+      SportmonksService().getSquadInfo(widget.teamId, teamName: widget.teamName);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<SportmonksSquadInfo?>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: SizedBox(
+              height: 20,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: widget.accent.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        final data = snap.data;
+        if (data == null || !data.hasAnyData) {
+          return const SizedBox.shrink();
+        }
+        final chips = <Widget>[];
+        if (data.averageAge != null) {
+          chips.add(
+            Text(
+              '👥 Edad prom: ${data.averageAge!.toStringAsFixed(1)}',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 9, height: 1.2),
+            ),
+          );
+        }
+        if (data.totalMarketValueEuros != null && data.totalMarketValueEuros! > 0) {
+          chips.add(
+            Text(
+              '💰 Valor plantel: ${SportmonksService.formatMarketValueCompactEur(data.totalMarketValueEuros!)}',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 9, height: 1.2),
+            ),
+          );
+        }
+        if (chips.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: chips,
+          ),
+        );
+      },
+    );
+  }
+}
 
 /// Mini cancha con jugadores según `grid` de la API.
 class LivePitchField extends StatelessWidget {
@@ -10,12 +93,15 @@ class LivePitchField extends StatelessWidget {
     required this.lineupTeam,
     required this.accent,
     required this.title,
+    required this.teamId,
     this.ratingsByPlayerId = const {},
   });
 
   final Map<String, dynamic> lineupTeam;
   final Color accent;
   final String title;
+  /// ID del club en API-Football (clave de caché); el nombre [title] resuelve el equipo en Sportmonks.
+  final int teamId;
   final Map<int, double> ratingsByPlayerId;
 
   static (double x, double y) _gridToXY(String? grid, {required bool flipVertical}) {
@@ -42,6 +128,12 @@ class LivePitchField extends StatelessWidget {
         Text(
           title.toUpperCase(),
           style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+        ),
+        _PitchSquadSportmonksRow(
+          key: ValueKey('sm-sq-$teamId-${title.hashCode}'),
+          teamId: teamId,
+          teamName: title,
+          accent: accent,
         ),
         const SizedBox(height: 6),
         AspectRatio(
