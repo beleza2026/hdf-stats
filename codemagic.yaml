@@ -14,8 +14,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.hdfstats.app
-        certificate_name: "MatchGol Distribution"
-        provisioning_profile_name: "MatchGol AppStore"
     scripts:
       - name: Flutter pub get
         script: flutter pub get
@@ -23,9 +21,10 @@ workflows:
         script: |
           cd ios
           pod install
+      - name: Set up code signing
+        script: xcode-project use-profiles
       - name: Build IPA
-        script: |
-          flutter build ipa --release
+        script: flutter build ipa --release
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
