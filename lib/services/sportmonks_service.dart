@@ -116,6 +116,43 @@ class SportmonksPlayerMarketSnapshot {
   bool get isSuccess => errorMessage == null && data != null;
 }
 
+/// Una fila de jugador lesionado (LPF) desde Sportmonks `sidelined` activo.
+class SportmonksInjuryRow {
+  const SportmonksInjuryRow({
+    required this.playerName,
+    required this.teamName,
+    this.category,
+    this.typeLabel,
+    this.startDate,
+    this.endDate,
+    this.gamesMissed,
+  });
+
+  final String playerName;
+  final String teamName;
+  final String? category;
+  final String? typeLabel;
+  final String? startDate;
+  final String? endDate;
+  final int? gamesMissed;
+}
+
+/// Listado de lesionados LPF vía Sportmonks ([SportmonksService.getLigaProfesionalArgentinaInjuries]).
+class SportmonksLpfInjuriesSnapshot {
+  const SportmonksLpfInjuriesSnapshot({
+    required this.rows,
+    this.errorMessage,
+    this.resolvedSeasonId,
+  });
+
+  final List<SportmonksInjuryRow> rows;
+  final String? errorMessage;
+  /// Temporada Sportmonks usada para `teams/seasons/{id}` (útil si forzás ID con dart-define).
+  final int? resolvedSeasonId;
+
+  bool get isSuccess => errorMessage == null;
+}
+
 /// Cliente [Sportmonks Football API v3](https://docs.sportmonks.com/v3/welcome/welcome).
 ///
 /// Token: compilación con **una** de estas opciones:
@@ -123,10 +160,14 @@ class SportmonksPlayerMarketSnapshot {
 /// - `--dart-define-from-file=dart_defines.json` (copiá `dart_defines.example.json` → `dart_defines.json`; está en `.gitignore`)
 ///
 /// Base opcional: `--dart-define=SPORTMONKS_API_BASE_URL=https://api.sportmonks.com/v3/football`
+///
+/// Lesionados LPF: opcional `--dart-define=SPORTMONKS_LPF_SEASON_ID=…` (ID de temporada en Sportmonks).
+/// Si no se define, se intenta `leagues/search` + `currentSeason` para la liga en Argentina.
 class SportmonksService {
   SportmonksService();
 
   static const String _defaultBase = 'https://api.sportmonks.com/v3/football';
+  static const Duration _lpfInjuriesTtl = Duration(minutes: 12);
 
   static String _normalizeBase(String raw) {
     var s = raw.trim();
@@ -185,6 +226,8 @@ class SportmonksService {
 
   static final Map<String, dynamic> _cache = {};
   static final Map<String, SportmonksSquadInfo?> _squadInfoCache = {};
+  static SportmonksLpfInjuriesSnapshot? _lpfInjuriesMem;
+  static DateTime? _lpfInjuriesMemAt;
 
   static String _cacheKey(String kind, String id) => '$kind:${id.trim()}';
 
@@ -834,6 +877,244 @@ class SportmonksService {
     return info;
   }
 
+  static int? _lpfSeasonIdFromEnv() {
+    const raw = String.fromEnvironment('SPORTMONKS_LPF_SEASON_ID', defaultValue: '');
+    final id = int.tryParse(raw.trim());
+    if (id == null || id <= 0) return null;
+    return id;
+  }
+
+  static bool _looksLikeSuspension(String categoryLower, String typeLower) {
+    final s = '$categoryLower $typeLower';
+    if (s.isEmpty) return false;
+    return s.contains('suspension') ||
+        s.contains('suspended') ||
+        s.contains('suspensión') ||
+        s.contains('red card') ||
+        s.contains('discipline') ||
+        s.contains('disciplinary') ||
+        s.contains('ban ') ||
+        s.contains('banned') ||
+        (s.contains('tarjeta') && s.contains('roja'));
+  }
+
+  static bool _isInjurySidelined(Map<String, dynamic> row, Map<String, dynamic>? typeMap) {
+    final cat = (_asString(row['category']) ?? '').toLowerCase();
+    final typeName = (_asString(_pick(typeMap ?? {}, ['name', 'developer_name'])) ?? '').toLowerCase();
+    if (_looksLikeSuspension(cat, typeName)) return false;
+    return true;
+  }
+
+  static bool _paginationHasMore(Map<String, dynamic>? root) {
+    if (root == null) return false;
+    final p = _asMap(root['pagination']);
+    if (p == null) return false;
+    final hm = p['has_more'];
+    if (hm is bool) return hm;
+    if (hm is num) return hm != 0;
+    final nx = p['next_page'];
+    if (nx == null) return false;
+    if (nx is num) return nx > 0;
+    return nx.toString().trim().isNotEmpty && nx.toString() != 'null';
+  }
+
+  static Future<({int? id, String? error})> _resolveLpfSeasonSportmonksId(String token) async {
+    final fromEnv = _lpfSeasonIdFromEnv();
+    if (fromEnv != null) return (id: fromEnv, error: null);
+
+    const cacheKey = 'lpfSeasonSm:v1';
+    final hit = _cache[cacheKey];
+    if (hit is int && hit > 0) return (id: hit, error: null);
+
+    try {
+      final uri = Uri.parse('$_baseUrl/leagues/search/${Uri.encodeComponent('Liga Profesional')}').replace(queryParameters: {
+        'api_token': token.trim(),
+        'include': 'currentSeason;country',
+        'per_page': '40',
+      });
+      final res = await _httpGet(uri, token: token);
+      if (res.statusCode != 200) {
+        return (id: null, error: _userFacingHttpError(res.statusCode));
+      }
+      final root = _asMap(json.decode(res.body));
+      if (_apiErrorsPresent(root)) {
+        return (id: null, error: 'Sportmonks: no se pudo resolver la temporada LPF (liga).');
+      }
+      final data = root['data'];
+      if (data is! List) {
+        return (id: null, error: 'Sportmonks: respuesta de ligas inválida.');
+      }
+      int? pickSeason(Map<String, dynamic> league) {
+        final cs = _asMap(league['currentSeason']);
+        final sid = _parseIntLoose(cs?['id']);
+        if (sid != null && sid > 0) return sid;
+        final seasons = league['seasons'];
+        if (seasons is List && seasons.isNotEmpty) {
+          final first = _asMap(seasons.first);
+          return _parseIntLoose(first?['id']);
+        }
+        return null;
+      }
+
+      for (final e in data) {
+        final league = _asMap(e);
+        if (league == null) continue;
+        final country = _asMap(league['country']);
+        final cname = (country?['name'] as String?)?.toLowerCase() ?? '';
+        if (cname != 'argentina') continue;
+        final name = (league['name'] as String?)?.toLowerCase() ?? '';
+        final looksLpf = name.contains('profesional') || name.contains('lpf');
+        final looksPrimera = name.contains('primera');
+        if (!looksLpf && !looksPrimera) continue;
+        final sid = pickSeason(league);
+        if (sid != null) {
+          _cache[cacheKey] = sid;
+          return (id: sid, error: null);
+        }
+      }
+      return (
+        id: null,
+        error: 'No se encontró temporada actual de LPF en Sportmonks. '
+            'Definí SPORTMONKS_LPF_SEASON_ID en dart_defines.json.',
+      );
+    } catch (e) {
+      return (id: null, error: e.toString());
+    }
+  }
+
+  static String? _playerDisplayFromSidelined(Map<String, dynamic> row) {
+    final pl = _asMap(row['player']);
+    if (pl != null) {
+      final n = _asString(_pick(pl, ['display_name', 'name', 'common_name']));
+      if (n != null) return n;
+    }
+    return null;
+  }
+
+  /// Lesionados de la **Liga Profesional (Argentina)** según Sportmonks: equipos de la temporada con `sidelined` activo,
+  /// excluyendo suspensiones obvias (palabras clave en `category` / `type`).
+  Future<SportmonksLpfInjuriesSnapshot> getLigaProfesionalArgentinaInjuries({bool forceRefresh = false}) async {
+    final token = _pickToken();
+    if (token == null) {
+      return const SportmonksLpfInjuriesSnapshot(
+        rows: [],
+        errorMessage:
+            'Falta el token Sportmonks. Usá --dart-define=SPORTMONKS_API_TOKEN=… o dart_defines.json.',
+      );
+    }
+    if (!forceRefresh &&
+        _lpfInjuriesMem != null &&
+        _lpfInjuriesMemAt != null &&
+        DateTime.now().difference(_lpfInjuriesMemAt!) < _lpfInjuriesTtl) {
+      return _lpfInjuriesMem!;
+    }
+
+    try {
+      final seasonPick = await _resolveLpfSeasonSportmonksId(token);
+      final seasonId = seasonPick.id;
+      if (seasonId == null) {
+        final snap = SportmonksLpfInjuriesSnapshot(rows: const [], errorMessage: seasonPick.error ?? 'Sin temporada LPF.');
+        _lpfInjuriesMem = snap;
+        _lpfInjuriesMemAt = DateTime.now();
+        return snap;
+      }
+
+      final merged = <SportmonksInjuryRow>[];
+      final seenPlayer = <String>{};
+      var page = 1;
+      var hasMore = true;
+
+      while (hasMore) {
+        final uri = Uri.parse('$_baseUrl/teams/seasons/$seasonId').replace(queryParameters: {
+          'api_token': token.trim(),
+          'include': 'sidelined.player;sidelined.type',
+          'per_page': '50',
+          'page': '$page',
+        });
+        final res = await _httpGet(uri, token: token, timeout: _timeoutProfile);
+        if (res.statusCode != 200) {
+          final snap = SportmonksLpfInjuriesSnapshot(
+            rows: merged,
+            errorMessage: _userFacingHttpError(res.statusCode),
+            resolvedSeasonId: seasonId,
+          );
+          _lpfInjuriesMem = snap;
+          _lpfInjuriesMemAt = DateTime.now();
+          return snap;
+        }
+        final root = _asMap(json.decode(res.body));
+        if (_apiErrorsPresent(root)) {
+          final snap = SportmonksLpfInjuriesSnapshot(
+            rows: merged,
+            errorMessage: 'Sportmonks: error al listar equipos de la temporada.',
+            resolvedSeasonId: seasonId,
+          );
+          _lpfInjuriesMem = snap;
+          _lpfInjuriesMemAt = DateTime.now();
+          return snap;
+        }
+        final data = root['data'];
+        final teams = data is List ? data : const <dynamic>[];
+        for (final t in teams) {
+          final team = _asMap(t);
+          if (team == null) continue;
+          final teamName = _asString(team['name']) ?? '—';
+          final sidelined = team['sidelined'];
+          if (sidelined is! List) continue;
+          for (final raw in sidelined) {
+            final row = _asMap(raw);
+            if (row == null) continue;
+            if (row['completed'] == true) continue;
+            final typeMap = _asMap(row['type']);
+            if (!_isInjurySidelined(row, typeMap)) continue;
+            final pid = row['player_id']?.toString() ?? '';
+            final dedupeKey = pid.isNotEmpty ? pid : '${teamName}_${_asString(row['category'])}_${_asString(row['start_date'])}';
+            if (seenPlayer.contains(dedupeKey)) continue;
+            seenPlayer.add(dedupeKey);
+            final pname = _playerDisplayFromSidelined(row) ?? (pid.isNotEmpty ? 'Jugador #$pid' : '—');
+            final gm = _parseIntLoose(row['games_missed']);
+            merged.add(SportmonksInjuryRow(
+              playerName: pname,
+              teamName: teamName,
+              category: _asString(row['category']),
+              typeLabel: _asString(_pick(typeMap ?? {}, ['name', 'developer_name'])),
+              startDate: _asString(row['start_date']),
+              endDate: _asString(row['end_date']),
+              gamesMissed: gm,
+            ));
+          }
+        }
+        hasMore = _paginationHasMore(root);
+        page++;
+        if (page > 40) break;
+      }
+
+      merged.sort((a, b) {
+        final c = a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase());
+        if (c != 0) return c;
+        return a.playerName.toLowerCase().compareTo(b.playerName.toLowerCase());
+      });
+
+      final snap = SportmonksLpfInjuriesSnapshot(rows: merged, resolvedSeasonId: seasonId);
+      _lpfInjuriesMem = snap;
+      _lpfInjuriesMemAt = DateTime.now();
+      return snap;
+    } on TimeoutException {
+      const snap = SportmonksLpfInjuriesSnapshot(
+        rows: [],
+        errorMessage: 'Sportmonks tardó demasiado al cargar lesionados. Probá de nuevo.',
+      );
+      _lpfInjuriesMem = snap;
+      _lpfInjuriesMemAt = DateTime.now();
+      return snap;
+    } catch (e) {
+      final snap = SportmonksLpfInjuriesSnapshot(rows: const [], errorMessage: e.toString());
+      _lpfInjuriesMem = snap;
+      _lpfInjuriesMemAt = DateTime.now();
+      return snap;
+    }
+  }
+
   /// Busca por nombre en Sportmonks y arma el snapshot del **primer** resultado de la API.
   Future<SportmonksPlayerMarketSnapshot> searchPlayerByName(String nombreJugador) async {
     final token = _pickToken();
@@ -976,6 +1257,8 @@ class SportmonksService {
   static void clearCache() {
     _cache.clear();
     _squadInfoCache.clear();
+    _lpfInjuriesMem = null;
+    _lpfInjuriesMemAt = null;
   }
 
   static void invalidatePlayer(String playerId) {
