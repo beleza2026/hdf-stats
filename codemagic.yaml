@@ -14,6 +14,8 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.hdfstats.app
+        certificate_name: "MatchGol Distribution"
+        provisioning_profile_name: "MatchGol AppStore"
     scripts:
       - name: Flutter pub get
         script: flutter pub get
