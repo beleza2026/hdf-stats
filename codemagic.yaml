@@ -2,8 +2,6 @@ workflows:
   ios-release:
     name: MatchGol Stats - iOS Release
     max_build_duration: 60
-    integrations:
-      app_store_connect: Codemagic
     environment:
       flutter: stable
       xcode: latest
@@ -22,11 +20,11 @@ workflows:
       - name: Install pods
         script: |
           cd ios
-          pod repo update
           pod install
       - name: Build IPA
         script: |
-          flutter build ipa --release
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
