@@ -937,10 +937,14 @@ class SportmonksService {
         return (id: null, error: _userFacingHttpError(res.statusCode));
       }
       final root = _asMap(json.decode(res.body));
+      if (root == null) {
+        return (id: null, error: 'Sportmonks: no se pudo resolver la temporada LPF (liga).');
+      }
       if (_apiErrorsPresent(root)) {
         return (id: null, error: 'Sportmonks: no se pudo resolver la temporada LPF (liga).');
       }
-      final data = root['data'];
+      final Map<String, dynamic> rootMap = root;
+      final data = rootMap['data'];
       if (data is! List) {
         return (id: null, error: 'Sportmonks: respuesta de ligas inválida.');
       }
@@ -1043,7 +1047,7 @@ class SportmonksService {
           return snap;
         }
         final root = _asMap(json.decode(res.body));
-        if (_apiErrorsPresent(root)) {
+        if (root == null || _apiErrorsPresent(root)) {
           final snap = SportmonksLpfInjuriesSnapshot(
             rows: merged,
             errorMessage: 'Sportmonks: error al listar equipos de la temporada.',
@@ -1053,7 +1057,8 @@ class SportmonksService {
           _lpfInjuriesMemAt = DateTime.now();
           return snap;
         }
-        final data = root['data'];
+        final Map<String, dynamic> rootMap = root;
+        final data = rootMap['data'];
         final teams = data is List ? data : const <dynamic>[];
         for (final t in teams) {
           final team = _asMap(t);

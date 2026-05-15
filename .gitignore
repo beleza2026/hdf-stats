@@ -10,7 +10,6 @@ android/local.properties
 key.properties
 *.jks
 google-services.json
-firebase_options.dart
 
 dart_defines.json
 
