@@ -8,6 +8,7 @@ import 'mundial_simulador_screen.dart';
 import 'penales_shootout_helper.dart';
 import 'image_decode_helper.dart';
 import 'nationality_flags.dart';
+import 'widgets/premium_gate.dart';
 
 /// Nombres que devuelve la API a veces no coinciden con el mapa de países; normalizamos para la bandera.
 String _mundialNombreParaBandera(String teamName) {
@@ -194,9 +195,9 @@ class _MundialScreenState extends State<MundialScreen>
             const Tab(text: 'HOY'),
             const Tab(text: 'FIXTURE'),
             const Tab(text: 'GRUPOS'),
-            const Tab(text: 'GOLEADORES'),
-            const Tab(text: 'CRUCES'),
-            const Tab(text: 'SIMULADOR'),
+            Tab(text: widget.esPremium ? 'GOLEADORES' : 'GOLEADORES 🔒'),
+            Tab(text: widget.esPremium ? 'CRUCES' : 'CRUCES 🔒'),
+            Tab(text: widget.esPremium ? 'SIMULADOR' : 'SIMULADOR 🔒'),
             Tab(text: widget.esPremium ? 'MEJORES ⭐' : 'MEJORES 🔒'),
           ],
         ),
@@ -204,12 +205,18 @@ class _MundialScreenState extends State<MundialScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _TabHoy(),
-          _TabFixture(),
+          _TabHoy(esPremium: widget.esPremium),
+          _TabFixture(esPremium: widget.esPremium),
           _TabGrupos(),
-          _TabGoleadores(),
-          _TabCruces(),
-          const MundialSimuladorScreen(),
+          widget.esPremium
+              ? _TabGoleadores()
+              : const _MundialTabPremiumLocked(title: 'Goleadores del Mundial'),
+          widget.esPremium
+              ? _TabCruces()
+              : const _MundialTabPremiumLocked(title: 'Cruces del Mundial'),
+          widget.esPremium
+              ? const MundialSimuladorScreen()
+              : const _MundialTabPremiumLocked(title: 'Simulador del Mundial'),
           _TabMejores(esPremium: widget.esPremium),
         ],
       ),
@@ -220,7 +227,27 @@ class _MundialScreenState extends State<MundialScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB HOY
 // ─────────────────────────────────────────────────────────────────────────────
+class _MundialTabPremiumLocked extends StatelessWidget {
+  const _MundialTabPremiumLocked({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumGate(
+      esPremium: false,
+      title: title,
+      subtitle: 'Activá Premium para desbloquear esta pestaña del Mundial.',
+      child: const SizedBox.shrink(),
+    );
+  }
+}
+
 class _TabHoy extends StatefulWidget {
+  const _TabHoy({required this.esPremium});
+
+  final bool esPremium;
+
   @override
   State<_TabHoy> createState() => _TabHoyState();
 }
@@ -259,7 +286,7 @@ class _TabHoyState extends State<_TabHoy> {
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _partidos.length,
-        itemBuilder: (context, i) => _cardPartido(context, _partidos[i]),
+        itemBuilder: (context, i) => _cardPartido(context, _partidos[i], esPremium: widget.esPremium),
       ),
     );
   }
@@ -269,6 +296,10 @@ class _TabHoyState extends State<_TabHoy> {
 // TAB FIXTURE
 // ─────────────────────────────────────────────────────────────────────────────
 class _TabFixture extends StatefulWidget {
+  const _TabFixture({required this.esPremium});
+
+  final bool esPremium;
+
   @override
   State<_TabFixture> createState() => _TabFixtureState();
 }
@@ -341,7 +372,7 @@ class _TabFixtureState extends State<_TabFixture> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: (_porRonda[_rondaSeleccionada] ?? [])
-              .map((p) => _cardPartido(context, p))
+              .map((p) => _cardPartido(context, p, esPremium: widget.esPremium))
               .toList(),
         ),
       ),
@@ -991,7 +1022,7 @@ DateTime? _mundialFixtureLocal(Map<String, dynamic> fixture) {
   return null;
 }
 
-Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
+Widget _cardPartido(BuildContext context, Map<String, dynamic> partido, {required bool esPremium}) {
   final fixtureRaw = partido['fixture'];
   final fixture = fixtureRaw is Map
       ? Map<String, dynamic>.from(fixtureRaw)
@@ -1024,7 +1055,7 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido) {
   return Material(
     color: Colors.transparent,
     child: InkWell(
-      onTap: () => showMundialPartidoSheet(context, partido),
+      onTap: () => showMundialPartidoSheet(context, partido, esPremium: esPremium),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),

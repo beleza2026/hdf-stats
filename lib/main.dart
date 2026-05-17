@@ -25,6 +25,8 @@ import 'widgets/datos_mercado_sportmonks_section.dart';
 import 'widgets/sportmonks_lesionados_lpf_section.dart';
 import 'widgets/remontada_liga_tabla_widget.dart';
 import 'widgets/remontada_comparacion_widget.dart';
+import 'widgets/premium_gate.dart';
+import 'paywall_screen.dart';
 import 'image_decode_helper.dart';
 import 'penales_shootout_helper.dart';
 import 'live_section/live_fixture_bundle.dart';
@@ -169,6 +171,38 @@ class _MainScreenState extends State<MainScreen> {
     _actualizarEnVivo();
     _timerEnVivo = Timer.periodic(const Duration(seconds: 30), (_) => _actualizarEnVivo());
     _cargarFavorito();
+    _cargarPremium();
+  }
+
+  Future<void> _cargarPremium() async {
+    if (kIsWeb) return;
+    final v = await PremiumService.isPremium();
+    if (mounted) setState(() => _esPremium = v);
+  }
+
+  static const Set<int> _indicesSeccionPremium = {3, 6, 8, 11, 12, 13, 14, 16};
+
+  Future<bool> _asegurarPremium() async {
+    if (_esPremium) return true;
+    if (kIsWeb) return false;
+    final ok = await PaywallScreen.open(context);
+    if (ok == true) await _cargarPremium();
+    return _esPremium;
+  }
+
+  Widget _gatePremium(
+    Widget child, {
+    String title = 'Contenido Premium',
+    String subtitle = 'Activá Premium para ver esta sección.',
+    bool compact = false,
+  }) {
+    return PremiumGate(
+      esPremium: _esPremium,
+      title: title,
+      subtitle: subtitle,
+      compact: compact,
+      child: child,
+    );
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _getTablaMoralCached() {
@@ -1037,7 +1071,9 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  void _irSeccion(int index) {
+  Future<void> _irSeccion(int index) async {
+    if (_indicesSeccionPremium.contains(index) && !await _asegurarPremium()) return;
+    if (!mounted) return;
     setState(() {
       if (_showDashboard) {
         _parentBeforeSection = 0;
@@ -1093,7 +1129,8 @@ class _MainScreenState extends State<MainScreen> {
   void _irCopaArgentina() => _irSeccion(15);
 
   Widget _buildIndiceMatchgol() {
-    return FutureBuilder<Map<String, dynamic>>(
+    return _gatePremium(
+      FutureBuilder<Map<String, dynamic>>(
       future: ApiService.getIndiceMatchgol(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
@@ -1123,10 +1160,14 @@ class _MainScreenState extends State<MainScreen> {
                 _buildIndiceTop10(top10),
               ],
             );
-            },
-        ); // FutureBuilder
-      }
- Widget _buildIndiceDestacado(Map<String, dynamic> p) {
+      },
+    ),
+      title: 'Índice MatchGol™',
+      subtitle: 'Ranking de rendimiento por jugador con Premium.',
+    );
+  }
+
+  Widget _buildIndiceDestacado(Map<String, dynamic> p) {
     final foto = p['photo'] as String? ?? '';
     final rating = (p['rating'] as double?) ?? 0.0;
     return Container(
@@ -1386,7 +1427,10 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
 
           // TABLA MORAL destacada
           GestureDetector(
-            onTap: () => _irSeccion(1),
+            onTap: () async {
+              if (!await _asegurarPremium()) return;
+              await _irSeccion(1);
+            },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -1404,31 +1448,36 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                   const Text('Ver completa ›', style: TextStyle(color: Colors.white38, fontSize: 10)),
                 ]),
                 const SizedBox(height: 10),
-                FutureBuilder<List<Map<String, dynamic>>>(
-                  future: ApiService.getTablaMoral().then((m) {
-                    final lista = <Map<String, dynamic>>[];
-                    m.forEach((zona, equipos) { for (final eq in equipos) lista.add(eq); });
-                    lista.sort((a, b) => ((b['pts'] as int? ?? 0).compareTo(a['pts'] as int? ?? 0)));
-                    return lista;
-                  }),
-                  builder: (context, snap) {
-                    if (!snap.hasData) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(color: Color(0xFF00C853), strokeWidth: 2)));
-                    final top3 = snap.data!.take(3).toList();
-                    return Column(children: top3.asMap().entries.map((e) {
-                      final i = e.key;
-                      final eq = e.value;
-                      final medals = ['🥇', '🥈', '🥉'];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: Row(children: [
-                          Text(medals[i], style: const TextStyle(fontSize: 14)),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(eq['nombre'] as String? ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12))),
-                          Text('${eq['pts']} pts', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold)),
-                        ]),
-                      );
-                    }).toList());
-                  },
+                _gatePremium(
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: ApiService.getTablaMoral().then((m) {
+                      final lista = <Map<String, dynamic>>[];
+                      m.forEach((zona, equipos) { for (final eq in equipos) lista.add(eq); });
+                      lista.sort((a, b) => ((b['pts'] as int? ?? 0).compareTo(a['pts'] as int? ?? 0)));
+                      return lista;
+                    }),
+                    builder: (context, snap) {
+                      if (!snap.hasData) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(color: Color(0xFF00C853), strokeWidth: 2)));
+                      final top3 = snap.data!.take(3).toList();
+                      return Column(children: top3.asMap().entries.map((e) {
+                        final i = e.key;
+                        final eq = e.value;
+                        final medals = ['🥇', '🥈', '🥉'];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(children: [
+                            Text(medals[i], style: const TextStyle(fontSize: 14)),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(eq['nombre'] as String? ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                            Text('${eq['pts']} pts', style: const TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ]),
+                        );
+                      }).toList());
+                    },
+                  ),
+                  title: 'Tabla Moral',
+                  subtitle: 'Vista previa y tabla completa con Premium.',
+                  compact: true,
                 ),
               ]),
             ),
@@ -1715,18 +1764,18 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
       case 0: return _buildResultados();
       case 1: return _buildTablas();
       case 2: return _buildEquipos();
-      case 3: return _buildArqueros();
+      case 3: return _gatePremium(_buildArqueros(), title: 'Arqueros', subtitle: 'Estadísticas de arqueros con Premium.');
       case 4: return _buildFixture();
       case 5: return _buildEnVivo();
-      case 6: return _buildPredicciones();
+      case 6: return _gatePremium(_buildPredicciones(), title: 'Predicciones', subtitle: 'Predicciones de la fecha con Premium.');
       case 7: return _buildMundial();
-      case 8: return _buildNoticias();
-      case 9: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista));
-      case 10: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista));
-      case 11: return _buildAlFilo();
-      case 12: return _buildExpulsados();
-      case 13: return _buildTablaPosesion();
-      case 14: return _buildCuerdaFloja();
+      case 8: return _gatePremium(_buildNoticias(), title: 'Noticias', subtitle: 'Noticias personalizadas con Premium.');
+      case 9: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
+      case 10: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
+      case 11: return _gatePremium(_buildAlFilo(), title: 'Al filo', subtitle: 'Tarjetas al filo de suspensión con Premium.');
+      case 12: return _gatePremium(_buildExpulsados(), title: 'Expulsados', subtitle: 'Expulsados de la última fecha con Premium.');
+      case 13: return _gatePremium(_buildTablaPosesion(), title: 'Tabla de posesión', subtitle: 'Posesión promedio por equipo con Premium.');
+      case 14: return _gatePremium(_buildCuerdaFloja(), title: 'Cuerda floja', subtitle: 'DT en zona de riesgo con Premium.');
       case 15: return CopaScreen(
             leagueId: CopaService.leagueCopaArgentina,
             nombreCopa: 'Copa Argentina',
@@ -1741,8 +1790,9 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                     isLive: isLive,
                     minuto: minuto,
                     sourceLeagueId: sourceLeagueId,
-                    partidoLista: partidoLista));
-      case 16: return _buildRemontadaLigaSeccion();
+                    partidoLista: partidoLista,
+                    datosFixtureCompletos: true));
+      case 16: return _gatePremium(_buildRemontadaLigaSeccion(), title: 'Remontada', subtitle: 'Estadística de remontadas LPF con Premium.');
       case 17: return _buildLesionadosSportmonks();
       default: return _buildResultados();
     }
@@ -2622,14 +2672,9 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
   );
 }
   Widget _buildMundial() {
-    return FutureBuilder<bool>(
-      future: PremiumService.isPremium(),
-      builder: (context, snap) {
-        return MundialScreen(
-          onIrInicio: () => setState(() => _selectedIndex = 0),
-          esPremium: snap.data ?? false,
-        );
-      },
+    return MundialScreen(
+      onIrInicio: () => setState(() => _selectedIndex = 0),
+      esPremium: _esPremium,
     );
   }
 
@@ -3354,18 +3399,18 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         ),
         Expanded(child: TabBarView(children: [
           _tabPosiciones(),
-          _tabRendimiento('home'),
-          _tabRendimiento('away'),
-          _tabUltimos5(),
-          _tabTiempo('first'),
-          _tabTiempo('second'),
-          _tabArbitros(),
-          _buildTablaMoral(),
-          _buildCruces(),
+          _gatePremium(_tabRendimiento('home'), title: 'Tabla local', subtitle: 'Rendimiento como local con Premium.', compact: true),
+          _gatePremium(_tabRendimiento('away'), title: 'Tabla visitante', subtitle: 'Rendimiento como visitante con Premium.', compact: true),
+          _gatePremium(_tabUltimos5(), title: 'Últimos 5', subtitle: 'Forma reciente con Premium.', compact: true),
+          _gatePremium(_tabTiempo('first'), title: '1.er tiempo', subtitle: 'Estadísticas del 1.er tiempo con Premium.', compact: true),
+          _gatePremium(_tabTiempo('second'), title: '2.do tiempo', subtitle: 'Estadísticas del 2.do tiempo con Premium.', compact: true),
+          _gatePremium(_tabArbitros(), title: 'Árbitros', subtitle: 'Estadísticas por árbitro con Premium.', compact: true),
+          _gatePremium(_buildTablaMoral(), title: 'Tabla Moral', subtitle: 'Tabla moral con Premium.', compact: true),
+          _gatePremium(_buildCruces(), title: 'Cruces', subtitle: 'Cruces / eliminatorias con Premium.', compact: true),
           _tabAnual(),
           _tabPromedios(),
-          _tabEquipoDeFecha(),
-          const TablaRachasTab(),
+          _gatePremium(_tabEquipoDeFecha(), title: 'Equipo de la fecha', subtitle: 'Equipo de la semana con Premium.', compact: true),
+          _gatePremium(const TablaRachasTab(), title: 'Rachas', subtitle: 'Rachas de equipos con Premium.', compact: true),
         ])),
       ]),
     );
@@ -5064,8 +5109,8 @@ Widget _tabTiempo(String tipo) {
         ),
         Expanded(child: TabBarView(children: [
           _tabGoleadores(),
-          _tabAsistencias(),
-          _tabEficacia(),
+          _gatePremium(_tabAsistencias(), title: 'Asistencias', subtitle: 'Tabla de asistencias con Premium.', compact: true),
+          _gatePremium(_tabEficacia(), title: 'Eficiencia goleadora', subtitle: 'Eficiencia de delanteros con Premium.', compact: true),
         ])),
       ]),
     );
@@ -5539,7 +5584,7 @@ Widget _tabTiempo(String tipo) {
           Expanded(child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              ..._bloqueRemontadaLigaArgentinaEnFixture(partidos),
+              if (_esPremium) ..._bloqueRemontadaLigaArgentinaEnFixture(partidos),
               ...partidos.map((p) {
               final local = p['teams']['home']['name'];
               final visitante = p['teams']['away']['name'];
@@ -5562,7 +5607,7 @@ Widget _tabTiempo(String tipo) {
               return GestureDetector(
                 onTap: () => _mostrarDetalle(context, local, visitante,
                     PenalesShootoutHelper.resultadoConPenales('$golesL - $golesV', p, null),
-                    esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, partidoLista: p, sourceLeagueId: (p['league']?['id'] as num?)?.toInt()),
+                    esJugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, partidoLista: p, sourceLeagueId: (p['league']?['id'] as num?)?.toInt(), datosFixtureCompletos: _esPremium),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
@@ -5856,7 +5901,8 @@ Widget _tabTiempo(String tipo) {
     );
   }
 
-  void _mostrarDetalle(BuildContext context, String local, String visitante, String resultado, bool jugado, {int? fixtureId, int? homeId, int? awayId, String? fechaPartido, bool isLive = false, String minuto = '', int? sourceLeagueId, Map<String, dynamic>? partidoLista, bool modalDesdeSeccionEnVivo = false}) {
+  void _mostrarDetalle(BuildContext context, String local, String visitante, String resultado, bool jugado, {int? fixtureId, int? homeId, int? awayId, String? fechaPartido, bool isLive = false, String minuto = '', int? sourceLeagueId, Map<String, dynamic>? partidoLista, bool modalDesdeSeccionEnVivo = false, bool datosFixtureCompletos = true}) {
+    final datosCompletos = datosFixtureCompletos || modalDesdeSeccionEnVivo || isLive;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1B2A3B),
@@ -5865,7 +5911,9 @@ Widget _tabTiempo(String tipo) {
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, expand: false,
         builder: (context, scrollController) => FutureBuilder<List<dynamic>>(
-          future: (jugado || isLive) && fixtureId != null
+          future: !datosCompletos
+              ? Future.value(<dynamic>[null, <dynamic>[], <dynamic>[], null, <dynamic>[]])
+              : ((jugado || isLive) && fixtureId != null
             ? (sourceLeagueId == CopaService.leagueCopaArgentina
                 ? Future.wait([
                     Future.value(null),
@@ -5905,7 +5953,7 @@ Widget _tabTiempo(String tipo) {
                         ApiService.getPreviewEquipo(homeId ?? 0),
                         ApiService.getPreviewEquipo(awayId ?? 0),
                       ]))
-                : Future.wait([Future.value(null), Future.value(<dynamic>[]), Future.value(<dynamic>[]), Future.value(null), Future.value(<dynamic>[]), ApiService.getUltimos5(homeId ?? 0), ApiService.getUltimos5(awayId ?? 0), Future.value(<String, dynamic>{}), Future.value(<String, dynamic>{})]),
+                : Future.wait([Future.value(null), Future.value(<dynamic>[]), Future.value(<dynamic>[]), Future.value(null), Future.value(<dynamic>[]), ApiService.getUltimos5(homeId ?? 0), ApiService.getUltimos5(awayId ?? 0), Future.value(<String, dynamic>{}), Future.value(<String, dynamic>{})])),
           builder: (context, snap) {
             final stats = snap.data?[0] as Map<String, dynamic>?;
             final eventos = List<Map<String, dynamic>>.from(snap.data?[1] ?? []);
@@ -6011,6 +6059,41 @@ Widget _tabTiempo(String tipo) {
                   'ts': FieldValue.serverTimestamp(),
                 }, SetOptions(merge: true));
               }
+            }
+            if (!datosCompletos) {
+              final fechaTxt = matchDateTime != null
+                  ? '${matchDateTime.day}/${matchDateTime.month} · $horario hs'
+                  : (horario.isNotEmpty ? '$horario hs' : '');
+              return ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                    Expanded(child: Text(local, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), textAlign: TextAlign.center)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
+                      child: Text(resultadoCabecera, style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 24)),
+                    ),
+                    Expanded(child: Text(visitante, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), textAlign: TextAlign.center)),
+                  ]),
+                  if (fechaTxt.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(fechaTxt, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                  ],
+                  const SizedBox(height: 20),
+                  PremiumGate(
+                    esPremium: false,
+                    title: jugado ? 'Resultado final' : 'Pre-partido',
+                    subtitle: jugado
+                        ? 'Con Premium ves estadísticas, incidencias, formaciones y análisis completo.'
+                        : 'Con Premium ves datos pre-partido, H2H, rachas y alineaciones probables.',
+                    child: const SizedBox.shrink(),
+                  ),
+                ],
+              );
             }
             return ListView(
               controller: scrollController,

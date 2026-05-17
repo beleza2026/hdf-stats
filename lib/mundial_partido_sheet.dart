@@ -6,6 +6,7 @@ import 'mundial_service.dart';
 import 'nationality_flags.dart';
 import 'penales_shootout_helper.dart';
 import 'player_career_sheet.dart';
+import 'widgets/premium_gate.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Detalle / insert de partido Mundial (prematch + jugado en vivo / finalizado)
@@ -107,7 +108,7 @@ Widget _encabezadoEquipoSeleccion(
   );
 }
 
-void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido) {
+void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido, {required bool esPremium}) {
   final fixture = partido['fixture'] as Map<String, dynamic>? ?? {};
   final teams = partido['teams'] as Map<String, dynamic>? ?? {};
   final goals = partido['goals'] as Map<String, dynamic>? ?? {};
@@ -133,6 +134,67 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido)
       : '-';
 
   if (fixtureId == null) return;
+
+  if (!esPremium) {
+    final fechaRaw = fixture['date'] as String?;
+    final fechaLocal = fechaRaw != null ? DateTime.tryParse(fechaRaw)?.toLocal() : null;
+    final horario = fechaLocal != null
+        ? '${fechaLocal.day}/${fechaLocal.month} · ${fechaLocal.hour.toString().padLeft(2, '0')}:${fechaLocal.minute.toString().padLeft(2, '0')} hs'
+        : '';
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1B2A3B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: Text(local, textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+                Text(resultado,
+                    style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22)),
+                Expanded(
+                  child: Text(visitante, textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ],
+            ),
+            if (horario.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(horario, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+            const SizedBox(height: 16),
+            PremiumGate(
+              esPremium: false,
+              title: jugado ? 'Resultado Mundial' : 'Pre-partido Mundial',
+              subtitle: jugado
+                  ? 'Premium: estadísticas completas, incidencias y datos post-partido.'
+                  : 'Premium: análisis pre-partido, alineaciones y contexto del encuentro.',
+              child: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+    return;
+  }
 
   showModalBottomSheet<void>(
     context: context,
