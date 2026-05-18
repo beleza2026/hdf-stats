@@ -2,6 +2,7 @@ workflows:
   ios-release:
     name: MatchGol Stats - iOS Release
     max_build_duration: 60
+    instance_type: mac_mini_m2
     environment:
       flutter: stable
       xcode: latest
@@ -23,8 +24,27 @@ workflows:
           pod install
       - name: Set up code signing
         script: xcode-project use-profiles
+      - name: Create ExportOptions
+        script: |
+          cat > $CM_BUILD_DIR/ios/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.hdfstats.app</key>
+              <string>MatchGol AppStore</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
       - name: Build IPA
-        script: flutter build ipa --release
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
