@@ -9,8 +9,12 @@ Future<void> showPlayerCareerSheet(
   required int playerId,
   required int clubTeamId,
   String? playerName,
+  String? clubTeamName,
 }) async {
-  if (playerId <= 0 || clubTeamId <= 0) return;
+  final nombre = playerName?.trim();
+  if (nombre == null || nombre.isEmpty) {
+    if (playerId <= 0) return;
+  }
   await showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
@@ -25,6 +29,7 @@ Future<void> showPlayerCareerSheet(
         playerId: playerId,
         clubTeamId: clubTeamId,
         fallbackName: playerName,
+        clubTeamName: clubTeamName,
       ),
     ),
   );
@@ -34,11 +39,13 @@ class _PlayerCareerBody extends StatefulWidget {
   final int playerId;
   final int clubTeamId;
   final String? fallbackName;
+  final String? clubTeamName;
 
   const _PlayerCareerBody({
     required this.playerId,
     required this.clubTeamId,
     this.fallbackName,
+    this.clubTeamName,
   });
 
   @override
@@ -54,6 +61,8 @@ class _PlayerCareerBodyState extends State<_PlayerCareerBody> {
     _future = ApiService.getPlayerCareerSnapshot(
       playerId: widget.playerId,
       clubTeamId: widget.clubTeamId,
+      playerName: widget.fallbackName,
+      clubTeamName: widget.clubTeamName,
     );
   }
 

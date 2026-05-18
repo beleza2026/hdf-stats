@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 /// Tamaño en píxeles para [Image.network] / [ResizeImage]: misma apariencia en pantalla,
 /// pero se decodifica a resolución cercana a la física (menos RAM y trabajo en listas largas).
 int imageDecodeCachePx(double logicalExtent, double devicePixelRatio) {
+  if (!logicalExtent.isFinite || logicalExtent <= 0) return 1;
+  if (!devicePixelRatio.isFinite || devicePixelRatio <= 0) return 1;
   final v = (logicalExtent * devicePixelRatio).round();
-  if (v < 1) return 1;
+  if (!v.isFinite || v < 1) return 1;
   if (v > 2048) return 2048;
   return v;
 }
@@ -48,15 +50,17 @@ class DecodedNetworkImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    final w = width.isFinite && width > 0 ? width : height;
+    final h = height.isFinite && height > 0 ? height : w;
     return Image.network(
       url,
-      width: width,
-      height: height,
+      width: w.isFinite ? w : null,
+      height: h.isFinite ? h : null,
       fit: fit,
       alignment: alignment,
       filterQuality: filterQuality,
-      cacheWidth: imageDecodeCachePx(width, dpr),
-      cacheHeight: imageDecodeCachePx(height, dpr),
+      cacheWidth: imageDecodeCachePx(w, dpr),
+      cacheHeight: imageDecodeCachePx(h, dpr),
       errorBuilder: errorBuilder,
     );
   }

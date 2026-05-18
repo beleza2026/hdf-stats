@@ -11,6 +11,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'api_service.dart';
+import 'services/sportmonks_service.dart';
 import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -23,6 +24,7 @@ import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
 import 'widgets/datos_mercado_sportmonks_section.dart';
 import 'widgets/sportmonks_lesionados_lpf_section.dart';
+import 'widgets/club_sportmonks_header.dart';
 import 'widgets/remontada_liga_tabla_widget.dart';
 import 'widgets/remontada_comparacion_widget.dart';
 import 'widgets/premium_gate.dart';
@@ -42,12 +44,21 @@ class PremiumService {
   static const String _entitlement = 'premium';
   static const String _rcApiKeyAndroid = 'goog_QRuxqIqpLsLTHWZKcoPKvcYfijG';
 
+  /// Solo en **tu** máquina: `DESIGNER_UNLOCK_ALL=true` en `dart_defines.json` (está en
+  /// `.gitignore`, no va al repo ni a Play Store). Los usuarios finales siempre pasan por RevenueCat.
+  static bool get unlockAllForPreview {
+    const flag = String.fromEnvironment('DESIGNER_UNLOCK_ALL', defaultValue: '');
+    final f = flag.trim().toLowerCase();
+    return f == 'true' || f == '1' || f == 'yes';
+  }
+
   static Future<void> init() async {
     await Purchases.setLogLevel(LogLevel.debug);
     await Purchases.configure(PurchasesConfiguration(_rcApiKeyAndroid));
   }
 
   static Future<bool> isPremium() async {
+    if (unlockAllForPreview) return true;
     try {
       final info = await Purchases.getCustomerInfo();
       return info.entitlements.active.containsKey(_entitlement);
@@ -140,7 +151,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  bool _esPremium = false;
+  bool _esPremium = PremiumService.unlockAllForPreview;
   int _selectedIndex = 0;
   bool _showDashboard = true;
   bool _showTorneos = false;
@@ -175,6 +186,10 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _cargarPremium() async {
+    if (PremiumService.unlockAllForPreview) {
+      if (mounted) setState(() => _esPremium = true);
+      return;
+    }
     if (kIsWeb) return;
     final v = await PremiumService.isPremium();
     if (mounted) setState(() => _esPremium = v);
@@ -183,7 +198,7 @@ class _MainScreenState extends State<MainScreen> {
   static const Set<int> _indicesSeccionPremium = {3, 6, 8, 11, 12, 13, 14, 16};
 
   Future<bool> _asegurarPremium() async {
-    if (_esPremium) return true;
+    if (PremiumService.unlockAllForPreview || _esPremium) return true;
     if (kIsWeb) return false;
     final ok = await PaywallScreen.open(context);
     if (ok == true) await _cargarPremium();
@@ -732,7 +747,9 @@ class _MainScreenState extends State<MainScreen> {
 
 
   void _mostrarPerfilClub(BuildContext context, int teamId, String nombre, String? logo) {
-    final info = _clubInfo[teamId];
+    final apiId = SportmonksService.reconcileLpfApiFootballTeamId(teamId, nombre);
+    final info = _clubInfo[apiId] ?? _clubInfo[teamId];
+    final clubNombre = (info?['nombre'] as String?) ?? nombre;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -753,7 +770,7 @@ class _MainScreenState extends State<MainScreen> {
                         errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 48)),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(nombre, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(clubNombre, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       if (info != null) Text('Fundado en ${info["fundacion"]}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ])),
                   ]),
@@ -768,6 +785,12 @@ class _MainScreenState extends State<MainScreen> {
                   child: TabBarView(children: [
                         ListView(controller: sc, padding: const EdgeInsets.all(16), children: [
                           if (info != null) ...[
+                            ClubSportmonksHeader(
+                              apiFootballTeamId: apiId,
+                              teamName: clubNombre,
+                              staticEstadio: info['estadio'] as String?,
+                              staticCapacidad: info['capacidad'] as String?,
+                            ),
                             _clubInfoRow('Estadio', info['estadio'] as String),
                             _clubInfoRow('Capacidad', '${info["capacidad"]} espectadores'),
                             _clubInfoRow('Presidente', info['presidente'] as String),
@@ -805,7 +828,10 @@ class _MainScreenState extends State<MainScreen> {
                           _clubInfoRow('Ultimo internacional', info['ultimoTituloInternacional'] as String),
                         ]),
                         // TAB PLANTEL
-                        _PlantelTab(teamId: teamId),
+                        _PlantelTab(
+                          teamId: apiId,
+                          teamName: clubNombre,
+                        ),
                       ]),
                 ),
               ]),
@@ -6603,18 +6629,6 @@ Widget _tabTiempo(String tipo) {
                         ],
                         const SizedBox(height: 16),
                       ],
-                      if (effectiveHomeId != null && effectiveAwayId != null && effectiveHomeId > 0 && effectiveAwayId > 0) ...[
-                        SizedBox(height: snap.connectionState == ConnectionState.waiting ? 8 : 12),
-                        _detalleSeccion('REMONTADAS'),
-                        const SizedBox(height: 6),
-                        RemontadaComparacionWidget(
-                          homeTeamId: effectiveHomeId,
-                          awayTeamId: effectiveAwayId,
-                          homeName: local,
-                          awayName: visitante,
-                          season: ApiService.temporadaLigaPrincipal,
-                        ),
-                      ],
                     ],
                   ),
                 ],
@@ -8282,7 +8296,8 @@ Widget _tabTiempo(String tipo) {
 // ══ PLANTEL TAB — StatefulWidget propio para evitar pérdida de estado ═══════
 class _PlantelTab extends StatefulWidget {
   final int teamId;
-  const _PlantelTab({required this.teamId});
+  final String teamName;
+  const _PlantelTab({required this.teamId, required this.teamName});
   @override
   State<_PlantelTab> createState() => _PlantelTabState();
 }
@@ -8293,10 +8308,15 @@ class _PlantelTabState extends State<_PlantelTab> {
   bool _error = false;
   final Map<int, Future<Map<String, dynamic>>> _careerPorJugador = {};
 
-  Future<Map<String, dynamic>> _careerSnapshot(int playerId) {
+  Future<Map<String, dynamic>> _careerSnapshot(int playerId, String playerName) {
     return _careerPorJugador.putIfAbsent(
       playerId,
-      () => ApiService.getPlayerCareerSnapshot(playerId: playerId, clubTeamId: widget.teamId),
+      () => ApiService.getPlayerCareerSnapshot(
+        playerId: playerId,
+        clubTeamId: widget.teamId,
+        playerName: playerName,
+        clubTeamName: widget.teamName,
+      ),
     );
   }
 
@@ -8308,7 +8328,7 @@ class _PlantelTabState extends State<_PlantelTab> {
 
   Future<void> _cargar() async {
     try {
-      final data = await ApiService.getPlantillaClub(widget.teamId);
+      final data = await ApiService.getPlantillaClub(widget.teamId, teamName: widget.teamName);
       if (mounted) setState(() { _plantel = data; _loading = false; });
     } catch (_) {
       if (mounted) setState(() { _loading = false; _error = true; });
@@ -8490,7 +8510,7 @@ class _PlantelTabState extends State<_PlantelTab> {
                     )
                   else
                     FutureBuilder<Map<String, dynamic>>(
-                      future: _careerSnapshot(playerId),
+                      future: _careerSnapshot(playerId, nombre),
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const Padding(

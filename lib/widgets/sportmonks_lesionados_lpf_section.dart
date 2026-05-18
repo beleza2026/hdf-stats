@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../image_decode_helper.dart';
 import '../services/sportmonks_service.dart';
 
 /// Tarjeta compacta en el hub Liga Argentina: resumen + ir al listado completo.
@@ -208,9 +209,28 @@ class _SportmonksLesionadosLpfFullPageState extends State<SportmonksLesionadosLp
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.25)),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (r.playerPhotoUrl != null && r.playerPhotoUrl!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: DecodedNetworkImage(
+                  r.playerPhotoUrl!,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.person, color: Colors.white38, size: 40),
+                ),
+              ),
+            ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           Text(r.playerName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
           const SizedBox(height: 2),
           Text(r.teamName, style: const TextStyle(color: Colors.white38, fontSize: 11)),
@@ -223,6 +243,9 @@ class _SportmonksLesionadosLpfFullPageState extends State<SportmonksLesionadosLp
             Text([fechas, gm].where((s) => s.isNotEmpty).join(' · '),
                 style: const TextStyle(color: Colors.white54, fontSize: 10)),
           ],
+              ],
+            ),
+          ),
         ],
       ),
     );

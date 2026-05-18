@@ -3,6 +3,12 @@ import 'package:flutter/material.dart';
 
 import '../paywall_screen.dart';
 
+bool _designerUnlockAll() {
+  const flag = String.fromEnvironment('DESIGNER_UNLOCK_ALL', defaultValue: '');
+  final f = flag.trim().toLowerCase();
+  return f == 'true' || f == '1' || f == 'yes';
+}
+
 /// Bloquea [child] si el usuario no tiene premium; ofrece abrir [PaywallScreen].
 class PremiumGate extends StatelessWidget {
   const PremiumGate({
@@ -22,7 +28,7 @@ class PremiumGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (esPremium) return child;
+    if (esPremium || _designerUnlockAll()) return child;
     return _LockedPremiumPanel(
       title: title,
       subtitle: subtitle,

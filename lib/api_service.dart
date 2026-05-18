@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'racha_model.dart';
+import 'services/sportmonks_service.dart';
 
 class ApiService {
   static const String _baseUrl = 'https://v3.football.api-sports.io';
@@ -648,7 +649,13 @@ class ApiService {
       return [];
     }
   }
+  static final SportmonksService _sportmonks = SportmonksService();
+
   static Future<List<Map<String, dynamic>>> getAsistencias() async {
+    if (SportmonksService.hasConfiguredToken) {
+      final sm = await _sportmonks.fetchLpfAsistenciasApiFormat();
+      if (sm != null && sm.isNotEmpty) return sm;
+    }
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl/players/topassists?league=$_ligaArgentina&season=$_season'),
@@ -666,6 +673,10 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> getGoleadores() async {
+    if (SportmonksService.hasConfiguredToken) {
+      final sm = await _sportmonks.fetchLpfGoleadoresApiFormat();
+      if (sm != null && sm.isNotEmpty) return sm;
+    }
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl/players/topscorers?league=$_ligaArgentina&season=$_season'),
@@ -3413,13 +3424,31 @@ for (final f in jugados) {
     } catch (e) { return []; }
   }
 
-  // Plantel LPF — usa /players?league&season&team para obtener datos completos
-  static Future<List<dynamic>> getPlantillaClub(int teamId) async {
+  // Plantel LPF — solo Sportmonks si hay token (misma fuente que goleadores/lesionados).
+  static Future<List<dynamic>> getPlantillaClub(int teamId, {String? teamName}) async {
+    final nombre = teamName?.trim();
+    final resolvedName = (nombre != null && nombre.isNotEmpty)
+        ? nombre
+        : SportmonksService.primaryAliasForApiFootballTeam(teamId);
+    final apiId = teamId > 0 && resolvedName != null && resolvedName.isNotEmpty
+        ? SportmonksService.reconcileLpfApiFootballTeamId(teamId, resolvedName)
+        : teamId;
+    if (SportmonksService.hasConfiguredToken &&
+        resolvedName != null &&
+        resolvedName.isNotEmpty &&
+        apiId > 0) {
+      final sm = await _sportmonks.fetchPlantillaClubApiFormat(
+        resolvedName,
+        apiFootballTeamId: apiId,
+      );
+      if (sm != null && sm.isNotEmpty) return sm;
+      // Sportmonks falló o vino vacío: API-Football para no dejar el tab en blanco.
+    }
     try {
       final List<dynamic> todos = [];
       int page = 1;
       while (true) {
-        final uri = Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&team=$teamId&page=$page');
+        final uri = Uri.parse('$_baseUrl/players?league=$_ligaArgentina&season=$_season&team=$apiId&page=$page');
         final res = await http.get(uri, headers: _headers);
         if (res.statusCode != 200) break;
         final data = jsonDecode(res.body);
@@ -3904,6 +3933,59 @@ for (final f in jugados) {
 
   // ── FOTO DE ESTADIO ──────────────────────────────────────────────────────
   static final Map<int, String?> _venueFotoCache = {};
+  static final Map<int, String?> _venueFotoByTeamCache = {};
+
+  /// Foto del estadio vía API-Football (`teams?id=` → `venue.image` o `/venues`).
+  static Future<String?> getVenueFotoForLpfTeam(int teamId) async {
+    if (teamId <= 0) return null;
+    if (_venueFotoByTeamCache.containsKey(teamId)) {
+      return _venueFotoByTeamCache[teamId];
+    }
+    try {
+      final res = await http
+          .get(
+            Uri.parse('$_baseUrl/teams?id=$teamId'),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) {
+        _venueFotoByTeamCache[teamId] = null;
+        return null;
+      }
+      final decoded = jsonDecode(res.body);
+      if (_apiSportsDecodedHasErrors(decoded)) {
+        _venueFotoByTeamCache[teamId] = null;
+        return null;
+      }
+      final list = decoded['response'] as List? ?? [];
+      if (list.isEmpty) {
+        _venueFotoByTeamCache[teamId] = null;
+        return null;
+      }
+      final team = list[0] as Map<String, dynamic>?;
+      final venue = team?['venue'] as Map<String, dynamic>?;
+      final direct = venue?['image'] as String?;
+      if (direct != null && direct.trim().isNotEmpty) {
+        _venueFotoByTeamCache[teamId] = direct.trim();
+        return direct.trim();
+      }
+      final venueId = (venue?['id'] as num?)?.toInt();
+      final fromVenue = await getVenueFoto(venueId);
+      if (fromVenue != null && fromVenue.trim().isNotEmpty) {
+        _venueFotoByTeamCache[teamId] = fromVenue.trim();
+        return fromVenue.trim();
+      }
+      final reconciled = SportmonksService.reconcileLpfApiFootballTeamId(teamId, '');
+      final fallback = SportmonksService.stadiumPhotoFallbackForApiTeam(reconciled);
+      _venueFotoByTeamCache[teamId] = fallback;
+      return fallback;
+    } catch (_) {
+      final reconciled = SportmonksService.reconcileLpfApiFootballTeamId(teamId, '');
+      final fallback = SportmonksService.stadiumPhotoFallbackForApiTeam(reconciled);
+      _venueFotoByTeamCache[teamId] = fallback;
+      return fallback;
+    }
+  }
 
   static Future<String?> getVenueFoto(int? venueId) async {
     if (venueId == null) return null;
@@ -4352,12 +4434,130 @@ for (final f in jugados) {
     }
   }
 
-  /// Equipo de club más reciente del jugador, excluyendo la selección ([excluirTeamId]).
-  static Future<Map<String, dynamic>?> getClubActualExcluyendoEquipo(
+  static bool _apiTeamEsSeleccion(Map<String, dynamic> team, int excluirTeamId) {
+    final tid = (team['id'] as num?)?.toInt() ?? int.tryParse('${team['id']}') ?? 0;
+    if (tid > 0 && tid == excluirTeamId) return true;
+    if (team['national'] == true) return true;
+    final name = (team['name'] as String? ?? '').toLowerCase();
+    if (name.isEmpty) return false;
+    if (name.contains(' u20') || name.contains(' u23') || name.contains(' u21')) return true;
+    const soloSeleccion = {
+      'argentina',
+      'brazil',
+      'uruguay',
+      'chile',
+      'colombia',
+      'peru',
+      'ecuador',
+      'paraguay',
+      'bolivia',
+      'venezuela',
+      'mexico',
+      'usa',
+      'united states',
+      'england',
+      'france',
+      'germany',
+      'spain',
+      'italy',
+      'portugal',
+      'netherlands',
+    };
+    if (soloSeleccion.contains(name.trim())) return true;
+    return false;
+  }
+
+  /// Club actual vía API-Football: transferencias recientes → LPF 2026 → historial por temporada.
+  static Future<Map<String, dynamic>?> _clubActualFromApiFootball(
     int playerId,
     int excluirTeamId,
   ) async {
     if (playerId <= 0) return null;
+
+    Map<String, dynamic>? fromTransfers;
+    try {
+      final tr = await http
+          .get(
+            Uri.parse('$_baseUrl/transfers?player=$playerId'),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 10));
+      if (tr.statusCode == 200 && !_apiSportsDecodedHasErrors(jsonDecode(tr.body))) {
+        final blocks = jsonDecode(tr.body)['response'] as List? ?? [];
+        final allMoves = <({DateTime date, Map<String, dynamic> team})>[];
+        for (final block in blocks) {
+          if (block is! Map) continue;
+          final moves = block['transfers'] as List? ?? [];
+          for (final mv in moves) {
+            if (mv is! Map) continue;
+            final teamsIn = mv['teams'];
+            if (teamsIn is! Map) continue;
+            final inTeam = teamsIn['in'];
+            if (inTeam is! Map) continue;
+            final tm = Map<String, dynamic>.from(inTeam);
+            if (_apiTeamEsSeleccion(tm, excluirTeamId)) continue;
+            final ds = mv['date'] as String? ?? '';
+            final dt = DateTime.tryParse(ds) ?? DateTime(1970);
+            allMoves.add((date: dt, team: tm));
+          }
+        }
+        allMoves.sort((a, b) => b.date.compareTo(a.date));
+        if (allMoves.isNotEmpty) {
+          final tm = allMoves.first.team;
+          fromTransfers = {
+            'id': (tm['id'] as num?)?.toInt() ?? 0,
+            'nombre': tm['name'] as String? ?? '',
+            'logo': tm['logo'] as String? ?? '',
+            'temporada': allMoves.first.date.year,
+          };
+        }
+      }
+    } catch (_) {}
+
+    Map<String, dynamic>? fromLpf2026;
+    try {
+      final r = await http
+          .get(
+            Uri.parse('$_baseUrl/players?id=$playerId&season=$_season'),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 10));
+      if (r.statusCode == 200 && !_apiSportsDecodedHasErrors(jsonDecode(r.body))) {
+        final resp = jsonDecode(r.body)['response'] as List? ?? [];
+        if (resp.isNotEmpty && resp.first is Map) {
+          final row = Map<String, dynamic>.from(resp.first as Map);
+          final stats = row['statistics'] as List? ?? [];
+          for (final s in stats) {
+            if (s is! Map) continue;
+            final sm = Map<String, dynamic>.from(s);
+            final league = sm['league'];
+            if (league is! Map) continue;
+            if ((league['id'] as num?)?.toInt() != _ligaArgentina) continue;
+            final team = sm['team'];
+            if (team is! Map) continue;
+            final tm = Map<String, dynamic>.from(team);
+            if (_apiTeamEsSeleccion(tm, excluirTeamId)) continue;
+            fromLpf2026 = {
+              'id': (tm['id'] as num?)?.toInt() ?? 0,
+              'nombre': tm['name'] as String? ?? '',
+              'logo': tm['logo'] as String? ?? '',
+              'temporada': _season,
+            };
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (fromLpf2026 != null &&
+        (fromLpf2026['nombre'] as String?)?.trim().isNotEmpty == true) {
+      return fromLpf2026;
+    }
+    if (fromTransfers != null &&
+        (fromTransfers['nombre'] as String?)?.trim().isNotEmpty == true) {
+      return fromTransfers;
+    }
+
     try {
       final r = await http.get(
         Uri.parse('$_baseUrl/players/teams?player=$playerId'),
@@ -4371,8 +4571,9 @@ for (final f in jugados) {
         if (row is! Map) continue;
         final team = row['team'] as Map<String, dynamic>?;
         if (team == null) continue;
+        if (_apiTeamEsSeleccion(team, excluirTeamId)) continue;
         final tid = (team['id'] as num?)?.toInt() ?? int.tryParse('${team['id']}') ?? 0;
-        if (tid == excluirTeamId || tid <= 0) continue;
+        if (tid <= 0) continue;
         final seasons = row['seasons'] as List? ?? [];
         for (final s in seasons) {
           final y = s is int ? s : int.tryParse('$s') ?? 0;
@@ -4393,18 +4594,65 @@ for (final f in jugados) {
     }
   }
 
+  /// Equipo de club más reciente del jugador, excluyendo la selección ([excluirTeamId]).
+  static Future<Map<String, dynamic>?> getClubActualExcluyendoEquipo(
+    int playerId,
+    int excluirTeamId, {
+    String? playerName,
+    String? excludeNationalTeamName,
+  }) async {
+    final pname = playerName?.trim();
+    final exclName = excludeNationalTeamName?.trim();
+
+    if (playerId > 0) {
+      final apiClub = await _clubActualFromApiFootball(playerId, excluirTeamId);
+      if (apiClub != null && (apiClub['nombre'] as String?)?.trim().isNotEmpty == true) {
+        return apiClub;
+      }
+    }
+
+    if (SportmonksService.hasConfiguredToken &&
+        pname != null &&
+        pname.isNotEmpty &&
+        exclName != null &&
+        exclName.isNotEmpty) {
+      final sm = await _sportmonks.fetchClubActualExcluyendoSeleccion(
+        playerName: pname,
+        excludeNationalTeamName: exclName,
+      );
+      if (sm != null) return sm;
+    }
+
+    if (playerId <= 0) return null;
+    return _clubActualFromApiFootball(playerId, excluirTeamId);
+  }
+
+  static void invalidateClubActualExcluyendoCache() {
+    _clubExcluirFutureCache.clear();
+  }
+
   /// Misma data que [getClubActualExcluyendoEquipo], con caché por jugador y selección (plantel Mundial).
   static final Map<String, Future<Map<String, dynamic>?>> _clubExcluirFutureCache = {};
 
   static Future<Map<String, dynamic>?> getClubActualExcluyendoEquipoCached(
     int playerId,
-    int excluirTeamId,
-  ) {
-    if (playerId <= 0) return Future<Map<String, dynamic>?>.value(null);
-    final k = '$playerId-$excluirTeamId';
+    int excluirTeamId, {
+    String? playerName,
+    String? excludeNationalTeamName,
+  }) {
+    if (playerId <= 0 &&
+        (playerName == null || playerName.trim().isEmpty)) {
+      return Future<Map<String, dynamic>?>.value(null);
+    }
+    final k = 'v2|${playerName ?? ''}|$playerId|$excluirTeamId|${excludeNationalTeamName ?? ''}';
     return _clubExcluirFutureCache.putIfAbsent(
       k,
-      () => getClubActualExcluyendoEquipo(playerId, excluirTeamId),
+      () => getClubActualExcluyendoEquipo(
+        playerId,
+        excluirTeamId,
+        playerName: playerName,
+        excludeNationalTeamName: excludeNationalTeamName,
+      ),
     );
   }
 
@@ -4539,14 +4787,197 @@ for (final f in jugados) {
     }
   }
 
+  static String _normPlayerNameKey(String s) {
+    var t = s.toLowerCase().trim();
+    const from = 'áàäâãåéèëêíìïîóòöôõúùüûñç';
+    const to = 'aaaaaaeeeeiiiioooooouuuunc';
+    for (var i = 0; i < from.length; i++) {
+      t = t.replaceAll(from[i], to[i]);
+    }
+    return t.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  static bool _playerNamesMatchLoose(String a, String b) {
+    final na = _normPlayerNameKey(a);
+    final nb = _normPlayerNameKey(b);
+    if (na.isEmpty || nb.isEmpty) return false;
+    if (na == nb) return true;
+    final pa = na.split(' ').where((e) => e.length > 1).toList();
+    final pb = nb.split(' ').where((e) => e.length > 1).toList();
+    if (pa.isEmpty || pb.isEmpty) return false;
+    if (pa.last == pb.last && pa.last.length >= 4) {
+      return pa.first == pb.first ||
+          pa.first.startsWith(pb.first) ||
+          pb.first.startsWith(pa.first);
+    }
+    return false;
+  }
+
+  /// Resuelve id API-Football por nombre (plantel LPF del club o perfil por id).
+  static Future<int?> findApiFootballPlayerId(
+    String playerName, {
+    int? preferTeamId,
+    int? fallbackPlayerId,
+  }) async {
+    final target = playerName.trim();
+    if (target.isEmpty) return null;
+
+    if (fallbackPlayerId != null && fallbackPlayerId > 0) {
+      try {
+        final r = await http.get(
+          Uri.parse('$_baseUrl/players/profiles?player=$fallbackPlayerId'),
+          headers: _headers,
+        ).timeout(const Duration(seconds: 8));
+        if (r.statusCode == 200 && !_apiSportsDecodedHasErrors(jsonDecode(r.body))) {
+          final resp = jsonDecode(r.body)['response'] as List? ?? [];
+          if (resp.isNotEmpty) {
+            final pl = resp.first['player'] as Map<String, dynamic>? ?? resp.first as Map?;
+            final name = pl is Map ? (pl['name'] as String? ?? '') : '';
+            if (_playerNamesMatchLoose(name, target)) {
+              return fallbackPlayerId;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    final teamId = preferTeamId != null && preferTeamId > 0
+        ? SportmonksService.reconcileLpfApiFootballTeamId(preferTeamId, '')
+        : 0;
+    if (teamId <= 0) return null;
+
+    try {
+      var page = 1;
+      while (page <= 6) {
+        final r = await http.get(
+          Uri.parse(
+            '$_baseUrl/players?league=$_ligaArgentina&season=$_season&team=$teamId&page=$page',
+          ),
+          headers: _headers,
+        ).timeout(const Duration(seconds: 10));
+        if (r.statusCode != 200 || _apiSportsDecodedHasErrors(jsonDecode(r.body))) break;
+        final decoded = jsonDecode(r.body);
+        final list = decoded['response'] as List? ?? [];
+        for (final row in list) {
+          if (row is! Map) continue;
+          final pl = row['player'] as Map<String, dynamic>? ?? row;
+          final name = pl['name'] as String? ?? '';
+          if (_playerNamesMatchLoose(name, target)) {
+            return (pl['id'] as num?)?.toInt();
+          }
+        }
+        final pg = decoded['paging'];
+        final total = pg is Map ? (pg['total'] as num?)?.toInt() ?? 1 : 1;
+        if (page >= total) break;
+        page++;
+      }
+
+      final sq = await http.get(
+        Uri.parse('$_baseUrl/players/squads?team=$teamId'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+      if (sq.statusCode == 200 && !_apiSportsDecodedHasErrors(jsonDecode(sq.body))) {
+        final resp = jsonDecode(sq.body)['response'] as List? ?? [];
+        for (final block in resp) {
+          if (block is! Map) continue;
+          final players = block['players'] as List? ?? [];
+          for (final p in players) {
+            if (p is! Map) continue;
+            final name = p['name'] as String? ?? '';
+            if (_playerNamesMatchLoose(name, target)) {
+              return (p['id'] as num?)?.toInt();
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  static List<Map<String, dynamic>> _mergeClubHistorialDisplay(
+    List<Map<String, dynamic>> a,
+    List<Map<String, dynamic>> b,
+  ) {
+    final byKey = <String, Map<String, dynamic>>{};
+    for (final row in [...a, ...b]) {
+      final tid = row['teamId'] as int? ?? 0;
+      final y = row['anio'] as int? ?? 0;
+      if (y <= 0) continue;
+      final nombre = (row['nombre'] as String?)?.trim() ?? '';
+      if (nombre.isEmpty) continue;
+      byKey['$tid|$y'] = {
+        'teamId': tid,
+        'nombre': nombre,
+        'logo': row['logo'] as String? ?? '',
+        'anio': y,
+      };
+    }
+    final out = byKey.values.toList();
+    out.sort((x, y) => (y['anio'] as int).compareTo(x['anio'] as int));
+    return out;
+  }
+
   /// Agrega PJ / goles / rojas recorriendo historial club+temporada (tope de requests).
   static Future<Map<String, dynamic>> getPlayerCareerSnapshot({
     required int playerId,
     required int clubTeamId,
+    String? playerName,
+    String? clubTeamName,
   }) async {
+    final pname = playerName?.trim();
+    final clubHint = clubTeamName?.trim();
+    final clubApiId = clubTeamId > 0
+        ? SportmonksService.reconcileLpfApiFootballTeamId(clubTeamId, clubHint ?? '')
+        : 0;
+
+    Map<String, dynamic>? sm;
+    if (SportmonksService.hasConfiguredToken && pname != null && pname.isNotEmpty) {
+      sm = await _sportmonks.fetchPlayerCareerSnapshot(
+        playerName: pname,
+        clubTeamNameHint: clubHint?.isNotEmpty == true ? clubHint : null,
+        clubApiFootballTeamId: clubApiId > 0 ? clubApiId : null,
+      );
+    }
+
+    final apiPid = (pname != null && pname.isNotEmpty)
+        ? await findApiFootballPlayerId(
+            pname,
+            preferTeamId: clubApiId > 0 ? clubApiId : null,
+            fallbackPlayerId: playerId > 0 ? playerId : null,
+          )
+        : (playerId > 0 ? playerId : null);
+
+    if (sm != null) {
+      if (apiPid != null && apiPid > 0) {
+        final apiHist = await getPlayerClubsHistoryDisplay(apiPid);
+        if (apiHist.isNotEmpty) {
+          sm = Map<String, dynamic>.from(sm);
+          sm['clubesHistorial'] = _mergeClubHistorialDisplay(
+            List<Map<String, dynamic>>.from(sm['clubesHistorial'] as List? ?? []),
+            apiHist,
+          );
+          final smTotal = sm['temporadasTotal'] as int? ?? 0;
+          if (apiHist.length > smTotal) {
+            sm['temporadasTotal'] = apiHist.length;
+          }
+        }
+      }
+      return sm;
+    }
+
+    final effectiveId = (apiPid != null && apiPid > 0) ? apiPid : playerId;
+    if (effectiveId <= 0) {
+      return {
+        'nombre': pname ?? '',
+        'foto': '',
+        'clubesHistorial': <Map<String, dynamic>>[],
+      };
+    }
+
     final inicio = await Future.wait([
-      getPlayerProfileApi(playerId),
-      getPlayerTeamSeasonHistory(playerId),
+      getPlayerProfileApi(effectiveId),
+      getPlayerTeamSeasonHistory(effectiveId),
     ]);
     final profileResp = inicio[0] as Map<String, dynamic>?;
     final rawPairs = (inicio[1] as List<Map<String, int>>).toList();
@@ -4564,8 +4995,8 @@ for (final f in jugados) {
     rawPairs.sort((a, b) {
       final ta = a['team']!;
       final tb = b['team']!;
-      final pa = ta == clubTeamId ? 1 : 0;
-      final pb = tb == clubTeamId ? 1 : 0;
+      final pa = ta == clubApiId ? 1 : 0;
+      final pb = tb == clubApiId ? 1 : 0;
       if (pb != pa) return pb.compareTo(pa);
       return (b['season']!).compareTo(a['season']!);
     });
@@ -4581,7 +5012,7 @@ for (final f in jugados) {
       final statsFutures = <Future<Map<String, int>?>>[];
       for (var k = 0; k < n; k++) {
         final row = rawPairs[i + k];
-        statsFutures.add(_fetchPlayerSeasonStatsTriple(playerId, row['team']!, row['season']!));
+        statsFutures.add(_fetchPlayerSeasonStatsTriple(effectiveId, row['team']!, row['season']!));
       }
       final outs = await Future.wait(statsFutures);
       for (var k = 0; k < n; k++) {
@@ -4593,7 +5024,7 @@ for (final f in jugados) {
         pjCar += s['pj']!;
         gCar += s['g']!;
         rCar += s['r']!;
-        if (tid == clubTeamId) {
+        if (tid == clubApiId) {
           pjClub += s['pj']!;
           gClub += s['g']!;
           rClub += s['r']!;
@@ -4603,18 +5034,18 @@ for (final f in jugados) {
     }
 
     final tail = await Future.wait([
-      _fetchPlayerFullRow(playerId),
-      getPlayerClubsHistoryDisplay(playerId),
+      _fetchPlayerFullRow(effectiveId),
+      getPlayerClubsHistoryDisplay(effectiveId),
     ]);
     final apiRow = tail[0] as Map<String, dynamic>?;
     final clubesHistorial = tail[1] as List<Map<String, dynamic>>;
-    final extra = _extraerDorsalYSeleccion(apiRow, clubTeamId);
+    final extra = _extraerDorsalYSeleccion(apiRow, clubApiId);
 
     var clubNombre = (extra['clubStatNombre'] as String?)?.trim() ?? '';
     var clubLogo = (extra['clubStatLogo'] as String?)?.trim() ?? '';
-    if (clubNombre.isEmpty && clubTeamId > 0) {
+    if (clubNombre.isEmpty && clubApiId > 0) {
       for (final row in clubesHistorial) {
-        if ((row['teamId'] as int?) == clubTeamId) {
+        if ((row['teamId'] as int?) == clubApiId) {
           clubNombre = (row['nombre'] as String?)?.trim() ?? '';
           clubLogo = (row['logo'] as String?)?.trim() ?? '';
           break;

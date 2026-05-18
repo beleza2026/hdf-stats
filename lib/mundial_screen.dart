@@ -1,9 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'paywall_screen.dart';
 import 'mundial_partido_sheet.dart';
+import 'mundial_seleccion_sheet.dart';
 import 'mundial_service.dart';
+import 'match_follow_service.dart';
+import 'mundial_prefs_service.dart';
+import 'mundial_premium_hub.dart';
 import 'mundial_simulador_screen.dart';
 import 'penales_shootout_helper.dart';
 import 'image_decode_helper.dart';
@@ -74,6 +79,90 @@ String _mundialNombreEquipoCorta(String raw) {
   if (lower.contains('côte') || lower.contains('cote d') || lower.contains('ivory')) return 'C. d\'Ivoire';
   final cut = name.substring(0, 8).trimRight();
   return cut.isEmpty ? name : '$cut…';
+}
+
+/// Nombre de selección tocable → ficha país (plantel, títulos, foto).
+Widget _mundialNombreTappable(
+  BuildContext context, {
+  required int teamId,
+  required String teamName,
+  String? teamLogo,
+  String? country,
+  required TextStyle style,
+  required TextAlign textAlign,
+  int maxLines = 2,
+}) {
+  final label = _mundialNombreEquipoCorta(teamName);
+  if (teamId <= 0 || teamName.trim().isEmpty) {
+    return Text(label, style: style, textAlign: textAlign, maxLines: maxLines, overflow: TextOverflow.ellipsis);
+  }
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => openMundialSeleccionPorEquipo(
+      context,
+      teamId: teamId,
+      teamName: teamName,
+      teamLogo: teamLogo,
+      country: country,
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+      child: Text(
+        label,
+        style: style.copyWith(
+          decoration: TextDecoration.underline,
+          decorationColor: const Color(0xFF00C853).withValues(alpha: 0.45),
+        ),
+        textAlign: textAlign,
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ),
+  );
+}
+
+/// Columna de equipo en tarjeta de partido: foto selección + nombre → ficha país.
+Widget _mundialCardEquipo(
+  BuildContext context, {
+  required int teamId,
+  required String teamName,
+  String? teamLogo,
+  String? country,
+  required bool alignEnd,
+}) {
+  final cross = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+  final textAlign = alignEnd ? TextAlign.right : TextAlign.left;
+
+  return Row(
+    mainAxisAlignment: alignEnd ? MainAxisAlignment.end : MainAxisAlignment.start,
+    children: [
+      if (!alignEnd && teamId > 0) ...[
+        mundialBanderaUnica(teamName: teamName, teamId: teamId, teamLogo: teamLogo, size: 22),
+        const SizedBox(width: 6),
+      ],
+      Expanded(
+        child: _mundialNombreTappable(
+          context,
+          teamId: teamId,
+          teamName: teamName,
+          teamLogo: teamLogo,
+          country: country,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            height: 1.2,
+          ),
+          textAlign: textAlign,
+          maxLines: 2,
+        ),
+      ),
+      if (alignEnd && teamId > 0) ...[
+        const SizedBox(width: 6),
+        mundialBanderaUnica(teamName: teamName, teamId: teamId, teamLogo: teamLogo, size: 22),
+      ],
+    ],
+  );
 }
 
 /// Solo emoji de bandera o monograma: **nunca** cargamos PNG del CDN en el fixture (evita marcas de agua).
@@ -151,7 +240,7 @@ class _MundialScreenState extends State<MundialScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
   }
 
   @override
@@ -199,6 +288,7 @@ class _MundialScreenState extends State<MundialScreen>
             Tab(text: widget.esPremium ? 'CRUCES' : 'CRUCES 🔒'),
             Tab(text: widget.esPremium ? 'SIMULADOR' : 'SIMULADOR 🔒'),
             Tab(text: widget.esPremium ? 'MEJORES ⭐' : 'MEJORES 🔒'),
+            Tab(text: widget.esPremium ? 'EXTRA ⭐' : 'EXTRA 🔒'),
           ],
         ),
       ),
@@ -218,6 +308,7 @@ class _MundialScreenState extends State<MundialScreen>
               ? const MundialSimuladorScreen()
               : const _MundialTabPremiumLocked(title: 'Simulador del Mundial'),
           _TabMejores(esPremium: widget.esPremium),
+          MundialPremiumHub(esPremium: widget.esPremium),
         ],
       ),
     );
@@ -264,7 +355,71 @@ class _TabHoyState extends State<_TabHoy> {
 
   Future<void> _cargar() async {
     final data = await MundialService.getPartidosHoy();
+    data.sort((a, b) {
+      final da = DateTime.tryParse(a['fixture']?['date'] as String? ?? '') ?? DateTime.now();
+      final db = DateTime.tryParse(b['fixture']?['date'] as String? ?? '') ?? DateTime.now();
+      return da.compareTo(db);
+    });
     if (mounted) setState(() { _partidos = data; _cargando = false; });
+  }
+
+  Widget _modoJornadaHeader() {
+    if (!widget.esPremium || _partidos.isEmpty) return const SizedBox.shrink();
+    final live = _partidos.where((p) {
+      final st = p['fixture']?['status']?['short'] as String? ?? '';
+      return const {'1H', '2H', 'HT', 'ET', 'P'}.contains(st);
+    }).length;
+    final fin = _partidos.where((p) => const {'FT', 'AET', 'PEN'}.contains(p['fixture']?['status']?['short'])).length;
+    DateTime? proximo;
+    String proximoTxt = '';
+    for (final p in _partidos) {
+      final st = p['fixture']?['status']?['short'] as String? ?? '';
+      if (const {'FT', 'AET', 'PEN', '1H', '2H', 'HT', 'ET', 'P'}.contains(st)) continue;
+      final dt = DateTime.tryParse(p['fixture']?['date'] as String? ?? '')?.toLocal();
+      if (dt == null) continue;
+      if (proximo == null || dt.isBefore(proximo)) {
+        proximo = dt;
+        final h = p['teams']?['home']?['name'] ?? '';
+        final a = p['teams']?['away']?['name'] ?? '';
+        proximoTxt = '$h vs $a';
+      }
+    }
+    String countdown = '';
+    if (proximo != null) {
+      final diff = proximo.difference(DateTime.now());
+      if (!diff.isNegative) {
+        countdown = diff.inHours > 0 ? 'En ${diff.inHours}h ${diff.inMinutes % 60}m' : 'En ${diff.inMinutes}m';
+      }
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFCA28).withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.calendar_today, color: Color(0xFFFFCA28), size: 16),
+              SizedBox(width: 6),
+              Text('MODO JORNADA', style: TextStyle(color: Color(0xFFFFCA28), fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('${_partidos.length} partidos · $live en vivo · $fin finalizados',
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          if (proximoTxt.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Próximo: $proximoTxt${countdown.isNotEmpty ? ' · $countdown' : ''}',
+                style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -285,8 +440,11 @@ class _TabHoyState extends State<_TabHoy> {
       color: const Color(0xFF00C853),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _partidos.length,
-        itemBuilder: (context, i) => _cardPartido(context, _partidos[i], esPremium: widget.esPremium),
+        itemCount: _partidos.length + 1,
+        itemBuilder: (context, i) {
+          if (i == 0) return _modoJornadaHeader();
+          return _cardPartido(context, _partidos[i - 1], esPremium: widget.esPremium);
+        },
       ),
     );
   }
@@ -309,11 +467,28 @@ class _TabFixtureState extends State<_TabFixture> {
   bool _cargando = true;
   String _rondaSeleccionada = '';
   Map<String, List<Map<String, dynamic>>> _porRonda = {};
+  bool _filtroEnVivo = false;
+  bool _filtroEliminatoria = false;
+  bool _filtroMiSeleccion = false;
+  int? _filterTeamId;
+  String _filterTeamName = '';
 
   @override
   void initState() {
     super.initState();
+    _cargarPrefs();
     _cargar();
+  }
+
+  Future<void> _cargarPrefs() async {
+    final id = await MundialPrefsService.getFilterTeamId();
+    final name = await MundialPrefsService.getFilterTeamName();
+    if (mounted) {
+      setState(() {
+        _filterTeamId = id;
+        _filterTeamName = name ?? '';
+      });
+    }
   }
 
   Future<void> _cargar() async {
@@ -333,50 +508,152 @@ class _TabFixtureState extends State<_TabFixture> {
     }
   }
 
+  List<Map<String, dynamic>> _filtrar(List<Map<String, dynamic>> lista) {
+    if (!widget.esPremium) return lista;
+    return MundialService.filtrarFixture(
+      partidos: lista,
+      soloEquipoId: _filtroMiSeleccion ? _filterTeamId : null,
+      soloEnVivo: _filtroEnVivo,
+      soloEliminatoria: _filtroEliminatoria,
+    );
+  }
+
+  Widget _chipsFiltro() {
+    if (!widget.esPremium) return const SizedBox.shrink();
+    return SizedBox(
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        children: [
+          _chipFiltro('Todos', !_filtroEnVivo && !_filtroEliminatoria && !_filtroMiSeleccion, () {
+            setState(() {
+              _filtroEnVivo = false;
+              _filtroEliminatoria = false;
+              _filtroMiSeleccion = false;
+            });
+          }),
+          _chipFiltro('En vivo', _filtroEnVivo, () => setState(() {
+                _filtroEnVivo = !_filtroEnVivo;
+                if (_filtroEnVivo) _filtroEliminatoria = false;
+              })),
+          _chipFiltro('Eliminatoria', _filtroEliminatoria, () => setState(() {
+                _filtroEliminatoria = !_filtroEliminatoria;
+                if (_filtroEliminatoria) _filtroEnVivo = false;
+              })),
+          _chipFiltro(
+            _filtroMiSeleccion && _filterTeamName.isNotEmpty ? _filterTeamName : 'Mi selección',
+            _filtroMiSeleccion,
+            () async {
+              if (_filterTeamId == null) {
+                final p = await SharedPreferences.getInstance();
+                final id = p.getInt('equipo_favorito_id');
+                final name = p.getString('equipo_favorito_nombre') ?? '';
+                if (id != null && id > 0) {
+                  await MundialPrefsService.setFilterTeam(id, name);
+                  setState(() {
+                    _filterTeamId = id;
+                    _filterTeamName = name;
+                    _filtroMiSeleccion = true;
+                  });
+                }
+                return;
+              }
+              setState(() => _filtroMiSeleccion = !_filtroMiSeleccion);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chipFiltro(String label, bool sel, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: sel ? const Color(0xFFFFCA28) : const Color(0xFF1B2A3B),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Center(
+          child: Text(label, style: TextStyle(color: sel ? Colors.black : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_cargando) return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
-    return Column(children: [
-      // Selector de ronda
-      SizedBox(
-        height: 44,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          itemCount: _porRonda.keys.length,
-          itemBuilder: (context, i) {
-            final ronda = _porRonda.keys.elementAt(i);
-            final sel = ronda == _rondaSeleccionada;
-            return GestureDetector(
-              onTap: () => setState(() => _rondaSeleccionada = ronda),
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: sel ? const Color(0xFF00C853) : const Color(0xFF1B2A3B),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Center(
-                  child: Text(ronda,
+    if (_cargando) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
+    }
+    if (_porRonda.isEmpty) {
+      return const Center(
+        child: Text(
+          'No hay partidos en el fixture',
+          style: TextStyle(color: Colors.white54, fontSize: 15),
+        ),
+      );
+    }
+    final partidosRonda = _filtrar(_porRonda[_rondaSeleccionada] ?? []);
+    return Column(
+      children: [
+        _chipsFiltro(),
+        SizedBox(
+          height: 44,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            itemCount: _porRonda.keys.length,
+            itemBuilder: (context, i) {
+              final ronda = _porRonda.keys.elementAt(i);
+              final sel = ronda == _rondaSeleccionada;
+              return GestureDetector(
+                onTap: () => setState(() => _rondaSeleccionada = ronda),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: sel ? const Color(0xFF00C853) : const Color(0xFF1B2A3B),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Center(
+                    child: Text(
+                      ronda,
                       style: TextStyle(
-                          color: sel ? Colors.black : Colors.white54,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold)),
+                        color: sel ? Colors.black : Colors.white54,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-      Expanded(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: (_porRonda[_rondaSeleccionada] ?? [])
-              .map((p) => _cardPartido(context, p, esPremium: widget.esPremium))
-              .toList(),
+        Expanded(
+          child: partidosRonda.isEmpty
+              ? const Center(
+                  child: Text(
+                    'Sin partidos en esta fase',
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: partidosRonda.length,
+                  itemBuilder: (context, i) => _cardPartido(
+                    context,
+                    partidosRonda[i],
+                    esPremium: widget.esPremium,
+                  ),
+                ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -467,6 +744,8 @@ class _TabGruposState extends State<_TabGrupos> {
           final p = all['lose'] ?? 0;
           final logo = team['logo'] as String? ?? '';
           final nombre = team['name'] as String? ?? '';
+          final tid = (team['id'] as num?)?.toInt() ?? 0;
+          final pais = team['country'] as String? ?? nombre;
           final clasifica = idx < 2;
 
           return Container(
@@ -497,9 +776,16 @@ class _TabGruposState extends State<_TabGrupos> {
                   : const Icon(Icons.sports_soccer, size: 20, color: Colors.white24),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(nombre,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                    overflow: TextOverflow.ellipsis),
+                child: _mundialNombreTappable(
+                  context,
+                  teamId: tid,
+                  teamName: nombre,
+                  teamLogo: logo,
+                  country: pais,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  textAlign: TextAlign.left,
+                  maxLines: 1,
+                ),
               ),
               for (final val in [pj, g, e, p])
                 SizedBox(
@@ -566,19 +852,10 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
     setState(() {
       _cargando = true;
     });
-    final data = await MundialService.getGoleadores();
-    final filtrados = data.where((item) {
-      final st = MundialService.statisticsMundialLiga1(item);
-      if (st == null) return false;
-      final league = st['league'];
-      if (league is! Map || (league['id'] as num?)?.toInt() != 1) return false;
-      final goals = MundialService.childMap(st['goals']);
-      final g = (goals['total'] as num?)?.toInt() ?? int.tryParse('${goals['total']}') ?? 0;
-      return g > 0;
-    }).toList();
+    final filtrados = await MundialService.getGoleadoresTorneoRanking();
     if (!mounted) return;
     setState(() {
-      _jugadores = filtrados;
+      _jugadores = filtrados.map((r) => r['raw'] as Map<String, dynamic>).toList();
       _cargando = false;
     });
   }
@@ -679,8 +956,18 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
                     DecodedNetworkImage(logoEq, width: 14, height: 14,
                         errorBuilder: (_, __, ___) => const SizedBox()),
                   const SizedBox(width: 4),
-                  Text(equipo,
-                      style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  Expanded(
+                    child: _mundialNombreTappable(
+                      context,
+                      teamId: (teamMap['id'] as num?)?.toInt() ?? 0,
+                      teamName: equipo,
+                      teamLogo: logoEq,
+                      country: equipo,
+                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                      textAlign: TextAlign.left,
+                      maxLines: 1,
+                    ),
+                  ),
                 ]),
               ]),
             ),
@@ -938,9 +1225,10 @@ class _TabCrucesState extends State<_TabCruces> {
           style: const TextStyle(color: Colors.white24, fontSize: 12),
           textAlign: align);
     }
-    final team = eq['team'] ?? {};
+    final team = eq['team'] is Map ? Map<String, dynamic>.from(eq['team'] as Map) : <String, dynamic>{};
     final nombre = team['name'] as String? ?? '';
     final logo = team['logo'] as String? ?? '';
+    final tid = (team['id'] as num?)?.toInt() ?? 0;
     final pts = eq['points'] ?? 0;
 
     final content = Row(
@@ -953,11 +1241,16 @@ class _TabCrucesState extends State<_TabCruces> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(nombre,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right),
+                    _mundialNombreTappable(
+                      context,
+                      teamId: tid,
+                      teamName: nombre,
+                      teamLogo: logo,
+                      country: nombre,
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                    ),
                     Text('$pts pts',
                         style: const TextStyle(color: Colors.white38, fontSize: 9)),
                   ],
@@ -980,11 +1273,16 @@ class _TabCrucesState extends State<_TabCruces> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(nombre,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.left),
+                    _mundialNombreTappable(
+                      context,
+                      teamId: tid,
+                      teamName: nombre,
+                      teamLogo: logo,
+                      country: nombre,
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.left,
+                      maxLines: 2,
+                    ),
                     Text('$pts pts',
                         style: const TextStyle(color: Colors.white38, fontSize: 9)),
                   ],
@@ -1031,10 +1329,16 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido, {require
   final goals = partido['goals'] ?? {};
   final league = partido['league'] ?? {};
 
-  final home = teams['home'] ?? {};
-  final away = teams['away'] ?? {};
+  final home = teams['home'] is Map ? Map<String, dynamic>.from(teams['home'] as Map) : <String, dynamic>{};
+  final away = teams['away'] is Map ? Map<String, dynamic>.from(teams['away'] as Map) : <String, dynamic>{};
   final homeName = home['name'] as String? ?? '';
   final awayName = away['name'] as String? ?? '';
+  final homeId = (home['id'] as num?)?.toInt() ?? 0;
+  final awayId = (away['id'] as num?)?.toInt() ?? 0;
+  final homeLogo = home['logo'] as String? ?? '';
+  final awayLogo = away['logo'] as String? ?? '';
+  final homeCountry = home['country'] as String? ?? homeName;
+  final awayCountry = away['country'] as String? ?? awayName;
   final homeGoals = goals['home'];
   final awayGoals = goals['away'];
   final status = fixture['status']?['short'] as String? ?? '';
@@ -1052,155 +1356,183 @@ Widget _cardPartido(BuildContext context, Map<String, dynamic> partido, {require
   final isFinished = const {'FT', 'AET', 'PEN'}.contains(status);
   final penSuf = PenalesShootoutHelper.sufijoMarcadorParentesis(partido);
 
-  return Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: () => showMundialPartidoSheet(context, partido, esPremium: esPremium),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: isLive
-              ? const Color(0xFF0D2137)
-              : const Color(0xFF1B2A3B),
-          borderRadius: BorderRadius.circular(10),
-          border: isLive
-              ? Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4))
-              : null,
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // Ronda
-      if (ronda.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(ronda,
-              style: const TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 0.5)),
-        ),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // [Nombre local + escudo] — flex mayor para texto largo
-          Expanded(
-            flex: 6,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Flexible(
-                  child: Text(
-                    _mundialNombreEquipoCorta(homeName),
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
-                    textAlign: TextAlign.right,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _mundialEscudoLista(teamHint: homeName),
-              ],
+  final fixtureId = (fixture['id'] as num?)?.toInt() ?? 0;
+  final venueRaw = fixture['venue'];
+  final venueId = venueRaw is Map ? (venueRaw['id'] as num?)?.toInt() : null;
+  final estadio = venueRaw is Map ? (venueRaw['name'] as String? ?? '') : '';
+  final ciudad = venueRaw is Map ? (venueRaw['city'] as String? ?? '') : '';
+
+  Widget centroPartido = Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (fechaLocal != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              _mundialDiaCortaEs(fechaLocal),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w600),
             ),
           ),
-          // [Hora / marcador] — columna central fija en proporción menor
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        if (isLive || isFinished)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (fechaLocal != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        _mundialDiaCortaEs(fechaLocal),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  if (isLive || isFinished)
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '${homeGoals ?? 0}',
-                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4),
-                              child: Text('-', style: TextStyle(color: Colors.white38, fontSize: 14)),
-                            ),
-                            Text(
-                              '${awayGoals ?? 0}',
-                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        if (penSuf != null && isFinished)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              penSuf,
-                              style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    )
-                  else
-                    Text(
-                      horario,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Color(0xFF00C853), fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
-                  if (isLive)
-                    Container(
-                      margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00C853),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        elapsed != null ? "$elapsed'" : 'EN VIVO',
-                        style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold),
-                      ),
-                    )
-                  else if (isFinished)
-                    const Text('FT', style: TextStyle(color: Colors.white38, fontSize: 9)),
+                  Text(
+                    '${homeGoals ?? 0}',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Text('-', style: TextStyle(color: Colors.white38, fontSize: 14)),
+                  ),
+                  Text(
+                    '${awayGoals ?? 0}',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
-            ),
-          ),
-          // [Escudo + nombre visitante]
-          Expanded(
-            flex: 6,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                _mundialEscudoLista(teamHint: awayName),
-                const SizedBox(width: 6),
-                Flexible(
+              if (penSuf != null && isFinished)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    _mundialNombreEquipoCorta(awayName),
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, height: 1.2),
-                    textAlign: TextAlign.left,
-                    maxLines: 2,
+                    penSuf,
+                    style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ],
-            ),
+            ],
+          )
+        else
+          Text(
+            horario,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF00C853), fontSize: 15, fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-        ],
-      ),
-      ),
+        if (isLive)
+          Container(
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C853),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              elapsed != null ? "$elapsed'" : 'EN VIVO',
+              style: const TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.bold),
+            ),
+          )
+        else if (isFinished)
+          const Text('FT', style: TextStyle(color: Colors.white38, fontSize: 9)),
+      ],
+    ),
+  );
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 10),
+    decoration: BoxDecoration(
+      color: isLive ? const Color(0xFF0D2137) : const Color(0xFF1B2A3B),
+      borderRadius: BorderRadius.circular(10),
+      border: isLive ? Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.4)) : null,
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (ronda.isNotEmpty)
+                    Expanded(
+                      child: Text(
+                        ronda,
+                        style: const TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 0.5),
+                      ),
+                    ),
+                  if (esPremium && fixtureId > 0) MatchFollowToggle(fixtureId: fixtureId),
+                ],
+              ),
+              if (ronda.isNotEmpty) const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: _mundialCardEquipo(
+                      context,
+                      teamId: homeId,
+                      teamName: homeName,
+                      teamLogo: homeLogo,
+                      country: homeCountry,
+                      alignEnd: true,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => showMundialPartidoSheet(context, partido, esPremium: esPremium),
+                      child: centroPartido,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 4,
+                    child: _mundialCardEquipo(
+                      context,
+                      teamId: awayId,
+                      teamName: awayName,
+                      teamLogo: awayLogo,
+                      country: awayCountry,
+                      alignEnd: false,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => showMundialPartidoSheet(context, partido, esPremium: esPremium),
+                child: mundialEstadioFotoTarjeta(
+                  venueId,
+                  venueName: estadio,
+                  city: ciudad,
+                  height: 64,
+                ),
+              ),
+              if (estadio.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: () => showMundialPartidoSheet(context, partido, esPremium: esPremium),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.stadium, color: Colors.white38, size: 13),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '$estadio${ciudad.isNotEmpty ? ", $ciudad" : ""}',
+                          style: const TextStyle(color: Colors.white38, fontSize: 10),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     ),
   );
 }
@@ -1296,8 +1628,12 @@ class _TabMejoresState extends State<_TabMejores> {
         final partidos = stats?['games']?['appearences'] ?? 0;
         final foto = player['photo'] as String? ?? '';
         final nombre = player['name'] as String? ?? '';
-        final equipo = stats?['team']?['name'] as String? ?? '';
-        final logoEq = stats?['team']?['logo'] as String? ?? '';
+        final teamMap = stats?['team'] is Map
+            ? Map<String, dynamic>.from(stats!['team'] as Map)
+            : <String, dynamic>{};
+        final equipo = teamMap['name'] as String? ?? '';
+        final logoEq = teamMap['logo'] as String? ?? '';
+        final teamIdTap = (teamMap['id'] as num?)?.toInt() ?? 0;
         final pos = stats?['games']?['position'] as String? ?? '';
 
         Color ratingColor = Colors.white54;
@@ -1340,7 +1676,18 @@ class _TabMejoresState extends State<_TabMejores> {
                     DecodedNetworkImage(logoEq, width: 14, height: 14,
                         errorBuilder: (_, __, ___) => const SizedBox()),
                   const SizedBox(width: 4),
-                  Text(equipo, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  Expanded(
+                    child: _mundialNombreTappable(
+                      context,
+                      teamId: teamIdTap,
+                      teamName: equipo,
+                      teamLogo: logoEq,
+                      country: equipo,
+                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                      textAlign: TextAlign.left,
+                      maxLines: 1,
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   Text(pos, style: const TextStyle(color: Colors.white24, fontSize: 10)),
                 ]),

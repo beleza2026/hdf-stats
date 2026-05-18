@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'api_service.dart';
+import 'image_decode_helper.dart';
 import 'mundial_seleccion_sheet.dart';
 import 'mundial_service.dart';
 import 'nationality_flags.dart';
 import 'penales_shootout_helper.dart';
 import 'player_career_sheet.dart';
+import 'mundial_premium_widgets.dart';
 import 'widgets/premium_gate.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,27 +57,33 @@ Widget _encabezadoEquipoSeleccion(
   required String country,
   required TextAlign textAlign,
 }) {
-  final flag = flagEmojiFromCountryName(country);
+  final crossAlign =
+      textAlign == TextAlign.right ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+
   final col = Column(
-    crossAxisAlignment:
-        textAlign == TextAlign.right ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    crossAxisAlignment: crossAlign,
+    mainAxisSize: MainAxisSize.min,
     children: [
-      if (teamLogo.isNotEmpty)
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            teamLogo,
-            width: 40,
-            height: 40,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const SizedBox(width: 40, height: 40),
-          ),
+      if (teamId > 0)
+        mundialBanderaUnica(
+          teamName: teamName,
+          teamId: teamId,
+          teamLogo: teamLogo,
+          size: 32,
         ),
-      if (flag.isNotEmpty) Text(flag, style: const TextStyle(fontSize: 20)),
+      const SizedBox(height: 6),
       Text(
         teamName,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          decoration: teamId > 0 ? TextDecoration.underline : null,
+          decorationColor: const Color(0xFF00C853).withValues(alpha: 0.45),
+        ),
         textAlign: textAlign,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
       if (teamId > 0)
         Text(
@@ -86,24 +94,357 @@ Widget _encabezadoEquipoSeleccion(
     ],
   );
 
-  if (teamId <= 0) {
-    return col;
+  if (teamId <= 0) return col;
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => openMundialSeleccionPorEquipo(
+      context,
+      teamId: teamId,
+      teamName: teamName,
+      teamLogo: teamLogo,
+      country: country.isNotEmpty ? country : null,
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+      child: col,
+    ),
+  );
+}
+
+/// Foto de la selección en tarjeta de partido o insert.
+Widget mundialSeleccionFotoMini({
+  required int teamId,
+  required String teamName,
+  String? teamLogo,
+  double height = 56,
+}) {
+  final url = MundialService.fotoSeleccionParaTarjeta(
+    teamId,
+    logo: teamLogo,
+    teamName: teamName,
+  );
+  if (url == null || url.isEmpty) {
+    return SizedBox(
+      height: height,
+      child: Center(
+        child: Text(
+          flagEmojiFromCountryName(teamName),
+          style: TextStyle(fontSize: height * 0.45),
+        ),
+      ),
+    );
   }
-  return Material(
-    color: Colors.transparent,
-    child: InkWell(
+  final esEscudo = MundialService.esEscudoApiSports(url);
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final w = constraints.maxWidth.isFinite && constraints.maxWidth > 8
+          ? constraints.maxWidth
+          : height * 1.4;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: w,
+          height: height,
+          child: ColoredBox(
+            color: const Color(0xFF0D1B2A),
+            child: DecodedNetworkImage(
+              url,
+              width: w,
+              height: height,
+              fit: esEscudo ? BoxFit.contain : BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  flagEmojiFromCountryName(teamName),
+                  style: TextStyle(fontSize: height * 0.4),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// Foto del estadio: solo se muestra si hay URL válida (sin cajas negras vacías).
+Widget mundialEstadioFotoTarjeta(
+  int? venueId, {
+  String? venueName,
+  String? city,
+  double height = 88,
+}) {
+  if ((venueId == null || venueId <= 0) &&
+      (venueName == null || venueName.trim().isEmpty)) {
+    return const SizedBox.shrink();
+  }
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final w = constraints.maxWidth.isFinite && constraints.maxWidth > 8
+          ? constraints.maxWidth
+          : 320.0;
+      return FutureBuilder<String?>(
+        future: MundialService.venueFotoMundial(venueId, venueName: venueName, city: city),
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const SizedBox.shrink();
+          }
+          final url = snap.data?.trim();
+          if (url == null || url.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: w,
+              height: height,
+              child: DecodedNetworkImage(
+                url,
+                width: w,
+                height: height,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Una sola bandera/escudo por selección (emoji o escudo API, nunca ambos).
+Widget mundialBanderaUnica({
+  required String teamName,
+  required int teamId,
+  String? teamLogo,
+  double size = 28,
+}) {
+  final flag = flagEmojiFromCountryName(teamName);
+  final url = teamId > 0
+      ? MundialService.fotoSeleccionParaTarjeta(teamId, logo: teamLogo, teamName: teamName)
+      : null;
+  final esEscudo = url != null && MundialService.esEscudoApiSports(url);
+
+  if (url != null && url.isNotEmpty && !esEscudo) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        width: size * 1.6,
+        height: size,
+        child: DecodedNetworkImage(
+          url,
+          width: size * 1.6,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Text(flag.isNotEmpty ? flag : '⚽', style: TextStyle(fontSize: size * 0.85)),
+        ),
+      ),
+    );
+  }
+
+  if (flag.isNotEmpty) {
+    return Text(flag, style: TextStyle(fontSize: size * 0.9));
+  }
+
+  return Container(
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: const Color(0xFF1A2838),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: Colors.white12),
+    ),
+    child: Text(
+      teamName.length >= 2 ? teamName.substring(0, 2).toUpperCase() : '?',
+      style: TextStyle(color: Colors.white54, fontSize: size * 0.35, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+/// Encabezado local / resultado / visitante en insert de partido (sin overflow).
+Widget _filaEncabezadoPartido(
+  BuildContext context, {
+  required int homeId,
+  required String local,
+  required String homeLogo,
+  required String homeCountry,
+  required int awayId,
+  required String visitante,
+  required String awayLogo,
+  required String awayCountry,
+  required Widget centro,
+}) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: _encabezadoEquipoSeleccion(
+          context,
+          teamId: homeId,
+          teamName: local,
+          teamLogo: homeLogo,
+          country: homeCountry,
+          textAlign: TextAlign.center,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 20, left: 4, right: 4),
+        child: centro,
+      ),
+      Expanded(
+        child: _encabezadoEquipoSeleccion(
+          context,
+          teamId: awayId,
+          teamName: visitante,
+          teamLogo: awayLogo,
+          country: awayCountry,
+          textAlign: TextAlign.center,
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _badgePremiumMundial() {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFCA28).withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFFFFCA28).withValues(alpha: 0.4)),
+    ),
+    child: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.workspace_premium, color: Color(0xFFFFCA28), size: 14),
+        SizedBox(width: 4),
+        Text('PREMIUM', style: TextStyle(color: Color(0xFFFFCA28), fontSize: 10, fontWeight: FontWeight.bold)),
+      ],
+    ),
+  );
+}
+
+Widget _resumenSeleccionDuelo(
+  String nombre,
+  Map<String, dynamic> perfil,
+  Map<String, dynamic> hist,
+) {
+  final titulos = List<String>.from(perfil['titulosMundial'] as List? ?? []);
+  final mejor = (perfil['mejorPuestoTexto'] as String?)?.trim() ?? '-';
+  final goleador = hist['goleadorHistoricoNombre'] as String? ?? '';
+  final golesG = hist['goleadorHistoricoGoles'] as int? ?? 0;
+  final presencias = hist['masPresenciasNombre'] as String? ?? '';
+  final pjPres = hist['masPresenciasPartidos'] as int? ?? 0;
+
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFF0D1B2A),
       borderRadius: BorderRadius.circular(10),
-      onTap: () => showMundialSeleccionSheet(
-        context,
-        teamId: teamId,
-        teamName: teamName,
-        teamLogo: teamLogo,
-        country: country.isNotEmpty ? country : null,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-        child: col,
-      ),
+      border: Border.all(color: Colors.white12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          nombre.toUpperCase(),
+          style: const TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+        ),
+        const SizedBox(height: 8),
+        if (titulos.isNotEmpty)
+          Text('🏆 ${titulos.length} título${titulos.length == 1 ? '' : 's'} (${titulos.join(', ')})',
+              style: const TextStyle(color: Colors.white70, fontSize: 11))
+        else
+          const Text('Sin títulos mundiales', style: TextStyle(color: Colors.white54, fontSize: 11)),
+        const SizedBox(height: 4),
+        Text('Mejor puesto: $mejor', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+        if (goleador.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text('Goleador hist. FIFA: $goleador ($golesG)', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+        ],
+        if (presencias.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text('Más presencias: $presencias ($pjPres)', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+        ],
+      ],
+    ),
+  );
+}
+
+Widget _h2hMundialCard(String local, String visitante, int homeId, int awayId, List<Map<String, dynamic>> h2h) {
+  if (h2h.isEmpty) return const SizedBox.shrink();
+
+  var gL = 0, gV = 0, gE = 0;
+  for (final f in h2h) {
+    final hg = (f['goals']?['home'] as num?)?.toInt() ?? 0;
+    final ag = (f['goals']?['away'] as num?)?.toInt() ?? 0;
+    final esLocal = (f['teams']?['home']?['id'] as num?)?.toInt() == homeId;
+    final ganoLocal = esLocal ? hg > ag : ag > hg;
+    final empate = hg == ag;
+    if (empate) {
+      gE++;
+    } else if (ganoLocal) {
+      gL++;
+    } else {
+      gV++;
+    }
+  }
+
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1B2A3B),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.25)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('HISTORIAL H2H', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+            const Spacer(),
+            Text('${h2h.length} partidos', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(children: [
+              Text('$gL', style: const TextStyle(color: Color(0xFF00C853), fontSize: 24, fontWeight: FontWeight.bold)),
+              Text(local, style: const TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.center),
+            ]),
+            Column(children: [
+              Text('$gE', style: const TextStyle(color: Colors.white38, fontSize: 24, fontWeight: FontWeight.bold)),
+              const Text('Empates', style: TextStyle(color: Colors.white38, fontSize: 10)),
+            ]),
+            Column(children: [
+              Text('$gV', style: const TextStyle(color: Color(0xFF1E88E5), fontSize: 24, fontWeight: FontWeight.bold)),
+              Text(visitante, style: const TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.center),
+            ]),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...h2h.take(5).map((f) {
+          final hg = (f['goals']?['home'] as num?)?.toInt() ?? 0;
+          final ag = (f['goals']?['away'] as num?)?.toInt() ?? 0;
+          final hn = f['teams']?['home']?['name'] as String? ?? '';
+          final an = f['teams']?['away']?['name'] as String? ?? '';
+          final fecha = (f['fixture']?['date'] as String? ?? '');
+          final fechaCorta = fecha.length >= 10 ? fecha.substring(0, 10) : fecha;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                SizedBox(width: 72, child: Text(fechaCorta, style: const TextStyle(color: Colors.white38, fontSize: 10))),
+                Expanded(child: Text('$hn $hg-$ag $an', style: const TextStyle(color: Colors.white60, fontSize: 11), overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          );
+        }),
+      ],
     ),
   );
 }
@@ -136,11 +477,8 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
   if (fixtureId == null) return;
 
   if (!esPremium) {
-    final fechaRaw = fixture['date'] as String?;
-    final fechaLocal = fechaRaw != null ? DateTime.tryParse(fechaRaw)?.toLocal() : null;
-    final horario = fechaLocal != null
-        ? '${fechaLocal.day}/${fechaLocal.month} · ${fechaLocal.hour.toString().padLeft(2, '0')}:${fechaLocal.minute.toString().padLeft(2, '0')} hs'
-        : '';
+    final homeLogoFree = home['logo'] as String? ?? '';
+    final awayLogoFree = away['logo'] as String? ?? '';
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF1B2A3B),
@@ -148,10 +486,14 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.42,
+        maxChildSize: 0.55,
+        minChildSize: 0.32,
+        expand: false,
+        builder: (ctx2, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: [
             Center(
               child: Container(
@@ -160,33 +502,35 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
                 decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: Text(local, textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                ),
-                Text(resultado,
-                    style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22)),
-                Expanded(
-                  child: Text(visitante, textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                ),
-              ],
-            ),
-            if (horario.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(horario, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            ],
             const SizedBox(height: 16),
+            _filaEncabezadoPartido(
+              ctx,
+              homeId: homeId,
+              local: local,
+              homeLogo: homeLogoFree,
+              homeCountry: homeCountry,
+              awayId: awayId,
+              visitante: visitante,
+              awayLogo: awayLogoFree,
+              awayCountry: awayCountry,
+              centro: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  resultado,
+                  style: const TextStyle(
+                    color: Color(0xFF00C853),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             PremiumGate(
               esPremium: false,
-              title: jugado ? 'Resultado Mundial' : 'Pre-partido Mundial',
-              subtitle: jugado
-                  ? 'Premium: estadísticas completas, incidencias y datos post-partido.'
-                  : 'Premium: análisis pre-partido, alineaciones y contexto del encuentro.',
+              title: 'Insert Premium · Mundial',
+              subtitle:
+                  'Activá Premium para ver estadio, clima, H2H, récords FIFA, formaciones, destacados del torneo y estadísticas en vivo.',
               child: const SizedBox.shrink(),
             ),
           ],
@@ -216,16 +560,19 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
                 ApiService.getLineupsPartido(fixtureId),
                 ApiService.getDetallePartido(fixtureId),
                 ApiService.getPlayersPartido(fixtureId.toString()),
-                MundialService.getPlantelMundialCompleto(homeId),
-                MundialService.getPlantelMundialCompleto(awayId),
+                MundialService.getPlantelMundialCompleto(homeId, teamName: local),
+                MundialService.getPlantelMundialCompleto(awayId, teamName: visitante),
               ])
             : Future.wait<dynamic>([
                 ApiService.getLineupsPartido(fixtureId),
                 ApiService.getDetallePartido(fixtureId),
-                MundialService.getPreviewEquipoMundial(homeId),
-                MundialService.getPreviewEquipoMundial(awayId),
-                MundialService.getPlantelMundialCompleto(homeId),
-                MundialService.getPlantelMundialCompleto(awayId),
+                MundialService.getProyeccionFavoritosTitulo(
+                  destacarLocalId: homeId,
+                  destacarVisitanteId: awayId,
+                ),
+                ApiService.getHeadToHead(homeId, awayId),
+                MundialService.getPlantelMundialCompleto(homeId, teamName: local),
+                MundialService.getPlantelMundialCompleto(awayId, teamName: visitante),
               ]),
         builder: (context, snap) {
           if (jugado) {
@@ -394,7 +741,12 @@ Widget _formacionLineal(
                           if (clubFormId != null && clubFormId > 0 && pid > 0)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
-                              child: mundialClubActualLine(pid, clubFormId),
+                              child: mundialClubActualLine(
+                                playerId: pid,
+                                playerName: pnombre,
+                                nationalTeamId: clubFormId!,
+                                nationalTeamName: nombre,
+                              ),
                             ),
                         ],
                       ),
@@ -507,8 +859,9 @@ Widget _prematchInfoCard(
   String estadio,
   String ciudad,
   String arbitroRaw,
-  DateTime? matchDateTime,
-) {
+  DateTime? matchDateTime, {
+  int? venueId,
+}) {
   final horario = matchDateTime != null
       ? '${matchDateTime.hour.toString().padLeft(2, '0')}:${matchDateTime.minute.toString().padLeft(2, '0')}'
       : '';
@@ -675,18 +1028,22 @@ Widget _buildListaPrematch({
 
   final lineups = List<Map<String, dynamic>>.from(snap.data?[0] ?? []);
   final detalle = snap.data?[1] as Map<String, dynamic>?;
-  final previewHome = snap.data?[2] as Map<String, dynamic>? ?? {};
-  final previewAway = snap.data?[3] as Map<String, dynamic>? ?? {};
+  final favoritos = snap.data?[2] as Map<String, dynamic>? ?? {};
+  final h2hRaw = snap.data?[3];
+  final h2h = h2hRaw is List ? List<Map<String, dynamic>>.from(h2hRaw) : <Map<String, dynamic>>[];
   final plantelHomeRaw = List<Map<String, dynamic>>.from(snap.data?[4] ?? []);
   final plantelAwayRaw = List<Map<String, dynamic>>.from(snap.data?[5] ?? []);
   final idxPlantelHome = MundialService.indexPlantelPorJugadorId(plantelHomeRaw);
   final idxPlantelAway = MundialService.indexPlantelPorJugadorId(plantelAwayRaw);
+  final ronda = partido['league']?['round'] as String? ?? '';
 
   final rawDate = detalle?['fixture']?['date'] as String? ?? partido['fixture']?['date'] as String?;
   final matchDateTime = rawDate != null ? DateTime.tryParse(rawDate)?.toLocal() : null;
   final arbitro = detalle?['fixture']?['referee']?.toString() ?? 'No disponible';
-  final estadio = detalle?['fixture']?['venue']?['name'] as String? ?? '';
-  final ciudad = detalle?['fixture']?['venue']?['city'] as String? ?? '';
+  final venueMap = detalle?['fixture']?['venue'];
+  final estadio = venueMap is Map ? (venueMap['name'] as String? ?? '') : '';
+  final ciudad = venueMap is Map ? (venueMap['city'] as String? ?? '') : '';
+  final venueId = venueMap is Map ? (venueMap['id'] as num?)?.toInt() : null;
 
   final teamsPartido = partido['teams'] as Map<String, dynamic>? ?? {};
   final th = teamsPartido['home'] as Map<String, dynamic>? ?? {};
@@ -707,55 +1064,67 @@ Widget _buildListaPrematch({
           decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 12),
       Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _encabezadoEquipoSeleccion(
-                context,
-                teamId: homeIdTap,
-                teamName: local,
-                teamLogo: homeLogoTap,
-                country: homeCountry,
+          _badgePremiumMundial(),
+          const Spacer(),
+          if (ronda.isNotEmpty)
+            Flexible(
+              child: Text(
+                ronda,
+                style: const TextStyle(color: Colors.white38, fontSize: 10),
                 textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text('VS', style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontWeight: FontWeight.bold)),
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _encabezadoEquipoSeleccion(
-                context,
-                teamId: awayIdTap,
-                teamName: visitante,
-                teamLogo: awayLogoTap,
-                country: awayCountry,
-                textAlign: TextAlign.left,
-              ),
-            ),
-          ),
         ],
       ),
-      const SizedBox(height: 16),
-      _prematchInfoCard(estadio, ciudad, arbitro, matchDateTime),
+      const SizedBox(height: 14),
+      _filaEncabezadoPartido(
+        context,
+        homeId: homeIdTap,
+        local: local,
+        homeLogo: homeLogoTap,
+        homeCountry: homeCountry,
+        awayId: awayIdTap,
+        visitante: visitante,
+        awayLogo: awayLogoTap,
+        awayCountry: awayCountry,
+        centro: Text(
+          'VS',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontWeight: FontWeight.bold),
+        ),
+      ),
+      const SizedBox(height: 14),
+      mundialEstadioFotoTarjeta(
+        venueId,
+        venueName: estadio,
+        city: ciudad,
+        height: 110,
+      ),
       const SizedBox(height: 12),
+      _prematchInfoCard(estadio, ciudad, arbitro, matchDateTime, venueId: venueId),
+      const SizedBox(height: 14),
+      _seccion('PROYECCIÓN AL TÍTULO'),
+      mundialFavoritosTituloCard(favoritos, local: local, visitante: visitante),
+      const SizedBox(height: 12),
+      _h2hMundialCard(local, visitante, homeIdTap, awayIdTap, h2h),
+      const SizedBox(height: 14),
       if (lineups.length >= 2) ...[
         _seccion('FORMACIONES'),
         _formacionLineal(context, lineups, local, visitante,
             plantelHome: idxPlantelHome, plantelAway: idxPlantelAway),
         const SizedBox(height: 8),
+        mundialDuelosClaveCard(
+          lineups: lineups,
+          local: local,
+          visitante: visitante,
+          plantelHome: idxPlantelHome,
+          plantelAway: idxPlantelAway,
+        ),
+        const SizedBox(height: 12),
       ],
-      _seccion('DESTACADOS EN EL MUNDIAL'),
-      _previewTorneoEquipo(local, previewHome),
-      const SizedBox(height: 6),
-      _previewTorneoEquipo(visitante, previewAway),
       const SizedBox(height: 24),
     ],
   );
@@ -805,15 +1174,22 @@ Widget _buildListaJugado({
   final awayCountryTap = ta['country'] as String? ?? '';
 
   final arbitro = detalle?['fixture']?['referee'] ?? 'No disponible';
-  final estadio = detalle?['fixture']?['venue']?['name'] ?? '';
-  final ciudad = detalle?['fixture']?['venue']?['city'] ?? '';
+  final venueJugado = detalle?['fixture']?['venue'];
+  final estadio = venueJugado is Map ? (venueJugado['name'] as String? ?? '') : '';
+  final ciudad = venueJugado is Map ? (venueJugado['city'] as String? ?? '') : '';
+  final venueIdJugado = venueJugado is Map ? (venueJugado['id'] as num?)?.toInt() : null;
 
   String moralLocal = '-', moralVisitante = '-', moralDesc = 'Calculando...';
-  if (stats != null && stats['response'] != null && (stats['response'] as List).length >= 2) {
-    final statLocal = List<Map<String, dynamic>>.from(stats['response'][0]['statistics'] ?? []);
+  double posLocal = 0, posVisit = 0;
+  int tirosLocal = 0, tirosVisit = 0, cornersLocal = 0, cornersVisit = 0;
+  final partesGoles = resultadoSoloGoles.split('-');
+  int glLocal = int.tryParse(partesGoles.isNotEmpty ? partesGoles[0].trim() : '0') ?? 0;
+  int glVisit = int.tryParse(partesGoles.length > 1 ? partesGoles[1].trim() : '0') ?? 0;
+  final tieneStats = stats != null && stats['response'] != null && (stats['response'] as List).length >= 2;
+
+  if (tieneStats) {
+    final statLocal = List<Map<String, dynamic>>.from(stats!['response'][0]['statistics'] ?? []);
     final statVisit = List<Map<String, dynamic>>.from(stats['response'][1]['statistics'] ?? []);
-    double posLocal = 0, posVisit = 0;
-    int tirosLocal = 0, tirosVisit = 0, cornersLocal = 0, cornersVisit = 0;
     for (var s in statLocal) {
       if (s['type'] == 'Ball Possession') posLocal = double.tryParse(s['value']?.toString().replaceAll('%', '') ?? '0') ?? 0;
       if (s['type'] == 'Shots on Goal') tirosLocal = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
@@ -824,9 +1200,6 @@ Widget _buildListaJugado({
       if (s['type'] == 'Shots on Goal') tirosVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
       if (s['type'] == 'Corner Kicks') cornersVisit = int.tryParse(s['value']?.toString() ?? '0') ?? 0;
     }
-    final partes = resultadoSoloGoles.split('-');
-    final int glLocal = int.tryParse(partes.isNotEmpty ? partes[0].trim() : '0') ?? 0;
-    final int glVisit = int.tryParse(partes.length > 1 ? partes[1].trim() : '0') ?? 0;
     int moralL = glLocal, moralV = glVisit;
     final double difPos = posLocal - posVisit;
     final int difTiros = tirosLocal - tirosVisit;
@@ -867,43 +1240,31 @@ Widget _buildListaJugado({
           decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
         ),
       ),
-      const SizedBox(height: 20),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _encabezadoEquipoSeleccion(
-                context,
-                teamId: homeIdTap,
-                teamName: local,
-                teamLogo: homeLogoTap,
-                country: homeCountryTap,
-                textAlign: TextAlign.right,
-              ),
+      const SizedBox(height: 16),
+      _filaEncabezadoPartido(
+        context,
+        homeId: homeIdTap,
+        local: local,
+        homeLogo: homeLogoTap,
+        homeCountry: homeCountryTap,
+        awayId: awayIdTap,
+        visitante: visitante,
+        awayLogo: awayLogoTap,
+        awayCountry: awayCountryTap,
+        centro: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D1B2A),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              resultadoCabecera,
+              style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 20),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(10)),
-            child: Text(resultadoCabecera, style: const TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 22)),
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _encabezadoEquipoSeleccion(
-                context,
-                teamId: awayIdTap,
-                teamName: visitante,
-                teamLogo: awayLogoTap,
-                country: awayCountryTap,
-                textAlign: TextAlign.left,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       if (isLive) ...[
         const SizedBox(height: 8),
@@ -916,27 +1277,82 @@ Widget _buildListaJugado({
           ),
         ),
       ],
+      const SizedBox(height: 10),
+      Row(children: [_badgePremiumMundial()]),
+      const SizedBox(height: 12),
+      mundialEstadioFotoTarjeta(
+        venueIdJugado,
+        venueName: estadio,
+        city: ciudad,
+        height: 100,
+      ),
+      if (tieneStats) ...[
+        const SizedBox(height: 14),
+        _seccion('CENTRO EN VIVO'),
+        mundialBarraMomento(
+          posesionLocal: posLocal,
+          posesionVisit: posVisit,
+          golesLocal: glLocal,
+          golesVisit: glVisit,
+          local: local,
+          visitante: visitante,
+        ),
+      ],
+      if (eventos.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        mundialTimelineEventos(eventos),
+      ],
+      if (lineups.length >= 2) ...[
+        const SizedBox(height: 12),
+        mundialDuelosClaveCard(
+          lineups: lineups,
+          local: local,
+          visitante: visitante,
+          plantelHome: idxPlantelHome,
+          plantelAway: idxPlantelAway,
+        ),
+      ],
       const SizedBox(height: 16),
       if (stats != null) ...[
         _seccion('INFO DEL PARTIDO'),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.sports, color: Color(0xFF00C853), size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Arbitro: $arbitro', style: const TextStyle(color: Colors.white70, fontSize: 13))),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('$estadio${ciudad.isNotEmpty ? " - $ciudad" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13))),
-                ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B2A3B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.sports, color: Color(0xFF00C853), size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('Arbitro: $arbitro', style: const TextStyle(color: Colors.white70, fontSize: 13))),
+                      ],
+                    ),
+                    if (estadio.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$estadio${ciudad.isNotEmpty ? " - $ciudad" : ""}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -1352,6 +1768,18 @@ Widget _buildListaJugado({
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 20),
           child: Text('No hay estadisticas disponibles', style: TextStyle(color: Colors.white38), textAlign: TextAlign.center),
+        ),
+      ],
+      if (tieneStats) ...[
+        const SizedBox(height: 12),
+        mundialResumen30Segundos(
+          local: local,
+          visitante: visitante,
+          moralDesc: moralDesc,
+          tirosLocal: tirosLocal,
+          tirosVisit: tirosVisit,
+          cornersLocal: cornersLocal,
+          cornersVisit: cornersVisit,
         ),
       ],
       const SizedBox(height: 20),

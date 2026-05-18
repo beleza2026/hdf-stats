@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'api_service.dart';
+import 'mundial_seleccion_sheet.dart';
 
 /// Simulador de cruces Mundial 2026: reordenar grupos, elegir 8 mejores terceros,
 /// avanzar bracket (R32 oficial FIFA) y ver un campeón proyectado.
@@ -143,6 +145,34 @@ class _MundialSimuladorScreenState extends State<MundialSimuladorScreen>
 
   Map<String, dynamic>? _wi(String id) =>
       _bracketWinners.containsKey(id) ? _bracketWinners[id] : null;
+
+  String _nombreEquipo(Map<String, dynamic>? t) {
+    if (t == null) return 'TBD';
+    final team = t['team'] as Map<String, dynamic>?;
+    return team?['name'] as String? ?? t['name'] as String? ?? 'TBD';
+  }
+
+  Future<void> _compartirBracket() async {
+    final buf = StringBuffer('🏆 Mi simulación Mundial 2026 — HDF Stats\n\n');
+    final r32 = _buildR32Matches();
+    buf.writeln('Dieciseisavos:');
+    for (var i = 0; i < r32.length; i++) {
+      final w = _wi('r32_$i');
+      final a = _nombreEquipo(r32[i][0]);
+      final b = _nombreEquipo(r32[i][1]);
+      buf.writeln('• $a vs $b → ${_nombreEquipo(w)}');
+    }
+    final campeon = _wi('f_0');
+    if (campeon != null) {
+      buf.writeln('\n🥇 Campeón: ${_nombreEquipo(campeon)}');
+    }
+    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bracket copiado · pegalo en WhatsApp o redes')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -294,9 +324,9 @@ class _MundialSimuladorScreenState extends State<MundialSimuladorScreen>
                       ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        t['name'] as String? ?? '',
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      child: _simNombreTappable(
+                        context,
+                        team: t,
                       ),
                     ),
                     Text(
@@ -403,10 +433,7 @@ class _MundialSimuladorScreenState extends State<MundialSimuladorScreen>
                       ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
-                        team['name'] as String? ?? '',
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                      ),
+                      child: _simNombreTappable(context, team: team),
                     ),
                     Text(
                       '$pts pts',
@@ -468,6 +495,16 @@ class _MundialSimuladorScreenState extends State<MundialSimuladorScreen>
         _buildMatchCard('f_0', _wi('sf_0'), _wi('sf_1')),
         const SizedBox(height: 8),
         _buildCampeon(),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _compartirBracket,
+            icon: const Icon(Icons.ios_share, color: Color(0xFF00C853), size: 18),
+            label: const Text('Compartir mi bracket', style: TextStyle(color: Color(0xFF00C853), fontWeight: FontWeight.bold)),
+            style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFF00C853))),
+          ),
+        ),
       ],
     );
   }
@@ -639,12 +676,51 @@ class _MundialSimuladorScreenState extends State<MundialSimuladorScreen>
               errorBuilder: (_, __, ___) => const SizedBox(height: 50),
             ),
           const SizedBox(height: 6),
-          Text(
-            t['name'] as String? ?? '',
-            style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+          _simNombreTappable(
+            context,
+            team: t,
+            lightOnDark: false,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            textColor: Colors.black,
           ),
         ],
       ),
     );
   }
+}
+
+Widget _simNombreTappable(
+  BuildContext context, {
+  required Map<String, dynamic> team,
+  bool lightOnDark = true,
+  double fontSize = 12,
+  FontWeight fontWeight = FontWeight.normal,
+  Color? textColor,
+}) {
+  final nombre = team['name'] as String? ?? '';
+  final tid = (team['id'] as num?)?.toInt() ?? 0;
+  final logo = team['logo'] as String? ?? '';
+  final color = textColor ?? (lightOnDark ? Colors.white : Colors.black);
+  final style = TextStyle(
+    color: color,
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    decoration: tid > 0 ? TextDecoration.underline : null,
+    decorationColor: const Color(0xFF00C853).withValues(alpha: 0.45),
+  );
+  if (tid <= 0 || nombre.trim().isEmpty) {
+    return Text(nombre, style: style.copyWith(decoration: null));
+  }
+  return InkWell(
+    onTap: () => openMundialSeleccionPorEquipo(
+      context,
+      teamId: tid,
+      teamName: nombre,
+      teamLogo: logo,
+      country: nombre,
+    ),
+    borderRadius: BorderRadius.circular(4),
+    child: Text(nombre, style: style),
+  );
 }
