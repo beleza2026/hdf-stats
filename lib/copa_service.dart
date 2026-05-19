@@ -1,6 +1,8 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'api_service.dart';
+
 class CopaService {
   static const String _baseUrl = 'https://v3.football.api-sports.io';
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
@@ -58,8 +60,11 @@ class CopaService {
   /// Temporadas a probar en orden (la API a veces usa 2025 u 2026 para la edición vigente).
   static const List<int> _seasonsCopa = [2026, 2025];
 
-  // HOY — Conmebol: solo partidos con algún equipo argentino. Copa Arg.: todos los del día.
+  // HOY — Conmebol: todos los partidos del día (sin filtro grupo/ronda/país). Copa Arg.: todos del día.
   static Future<List<Map<String, dynamic>>> getPartidosHoy(int leagueId) async {
+    if (leagueId == leagueLibertadores || leagueId == leagueSudamericana) {
+      return ApiService.getPartidosHoyConmebol(leagueId);
+    }
     final hoy = DateTime.now().toLocal();
     final fecha =
         '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
@@ -74,18 +79,15 @@ class CopaService {
         final data = jsonDecode(response.body);
         if (_apiErrorsPresent(data)) continue;
         final fixtures = data['response'] as List? ?? [];
-        final list = fixtures
-            .map((f) => f as Map<String, dynamic>)
-            .where((f) {
-              if (leagueId == leagueCopaArgentina) return true;
-              final homeCountry =
-                  f['teams']?['home']?['country'] as String? ?? '';
-              final awayCountry =
-                  f['teams']?['away']?['country'] as String? ?? '';
-              return homeCountry == 'Argentina' || awayCountry == 'Argentina';
-            })
-            .toList();
-        if (list.isNotEmpty) return list;
+        final list = fixtures.map((f) => f as Map<String, dynamic>).toList();
+        if (list.isNotEmpty) {
+          list.sort((a, b) {
+            final da = DateTime.tryParse(a['fixture']?['date']?.toString() ?? '');
+            final db = DateTime.tryParse(b['fixture']?['date']?.toString() ?? '');
+            return (da ?? DateTime(2100)).compareTo(db ?? DateTime(2100));
+          });
+          return list;
+        }
       } catch (_) {}
     }
     return [];

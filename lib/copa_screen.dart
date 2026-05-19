@@ -250,15 +250,22 @@ class _TabHoy extends StatelessWidget {
         if (partidos.isEmpty) {
           final msg = leagueId == CopaService.leagueCopaArgentina
               ? 'No hay partidos de Copa Argentina hoy'
-              : 'No hay partidos argentinos hoy';
+              : 'No hay partidos hoy';
           return Center(
             child: Text(msg, style: const TextStyle(color: Colors.white54)),
           );
         }
+        final ordenados = List<Map<String, dynamic>>.from(partidos)
+          ..sort((a, b) {
+            final da = DateTime.tryParse(a['fixture']?['date']?.toString() ?? '');
+            final db = DateTime.tryParse(b['fixture']?['date']?.toString() ?? '');
+            return (da ?? DateTime(2100)).compareTo(db ?? DateTime(2100));
+          });
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: partidos.length,
-        itemBuilder: (context, i) => buildCardPartido(partidos[i], context, onTapPartido, leagueId), 
+          itemCount: ordenados.length,
+          itemBuilder: (context, i) =>
+              buildCardPartido(ordenados[i], context, onTapPartido, leagueId),
         );
       },
     );

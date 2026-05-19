@@ -10,6 +10,9 @@ class ApiService {
   static const String _apiKey = 'e41f25b121cc73bca63f00b362424fff';
   static const int _ligaArgentina = 128;
   static const int _season = 2026;
+  static const int leagueLibertadores = 13;
+  /// Copa Sudamericana en API-Football (no confundir con 14).
+  static const int leagueSudamericana = 11;
 
   /// Temporada principal de la app (Liga Profesional en `getFixture`, etc.).
   static int get temporadaLigaPrincipal => _season;
@@ -243,40 +246,87 @@ class ApiService {
   }
   // ─────────────────────────────────────────────────────────────────
 
-  static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
-  final hoy = DateTime.now().toLocal();
-  final fecha = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-  final leagues = [_ligaArgentina, 13, 11]; // Liga + Libertadores + Sudamericana
-  final List<Map<String, dynamic>> todos = [];
-  try {
-    for (final league in leagues) {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$league&season=$_season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final fixtures = data['response'] as List;
-        // Para Copas, solo equipos argentinos
-        if (league != _ligaArgentina) {
-          final argIds = ['451','435','436','453','460','445','438','440','450','434','446','449','1064','452','441','456','457','463','2432'];
-          todos.addAll(fixtures
-            .map((f) => f as Map<String, dynamic>)
-            .where((f) {
-              final hId = f['teams']['home']['id'].toString();
-              final aId = f['teams']['away']['id'].toString();
-              return argIds.contains(hId) || argIds.contains(aId);
-            }).toList());
-        } else {
-          todos.addAll(fixtures.map((f) => f as Map<String, dynamic>).toList());
-        }
+  static int _fixtureKickoffMs(Map<String, dynamic> f) {
+    final d = DateTime.tryParse(f['fixture']?['date']?.toString() ?? '');
+    return d?.millisecondsSinceEpoch ?? 0;
+  }
+
+  static void _sortFixturesByKickoff(List<Map<String, dynamic>> list) {
+    list.sort((a, b) => _fixtureKickoffMs(a).compareTo(_fixtureKickoffMs(b)));
+  }
+
+  /// Fixtures de un día (Argentina). Sin `round` ni `group`; pagina si hace falta.
+  static Future<List<Map<String, dynamic>>> _fixturesByDateAllPages({
+    required int leagueId,
+    required int season,
+    required String fecha,
+  }) async {
+    final out = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final base =
+          'league=$leagueId&season=$season&date=$fecha&timezone=America/Argentina/Buenos_Aires';
+      final uri = page == 1
+          ? Uri.parse('$_baseUrl/fixtures?$base')
+          : Uri.parse('$_baseUrl/fixtures?$base&page=$page');
+      final response = await http.get(uri, headers: _headers);
+      if (response.statusCode != 200) break;
+      final data = jsonDecode(response.body);
+      if (_apiSportsDecodedHasErrors(data)) break;
+      final fixtures = (data as Map)['response'] as List? ?? [];
+      for (final f in fixtures) {
+        out.add(f as Map<String, dynamic>);
       }
+      final paging = (data as Map)['paging'];
+      final totalPages = paging is Map
+          ? (paging['total'] as num?)?.toInt() ?? 1
+          : 1;
+      if (page >= totalPages || fixtures.isEmpty) break;
+      page++;
     }
-    return todos;
-  } catch (e) {
+    return out;
+  }
+
+  /// Libertadores (13) / Sudamericana (11): todos los partidos del día local, cualquier grupo/ronda.
+  static Future<List<Map<String, dynamic>>> getPartidosHoyConmebol(int leagueId) async {
+    if (leagueId != leagueLibertadores && leagueId != leagueSudamericana) {
+      return [];
+    }
+    final fecha = _ymdApi(DateTime.now().toLocal());
+    for (final season in [_season, _season - 1]) {
+      try {
+        final list = await _fixturesByDateAllPages(
+          leagueId: leagueId,
+          season: season,
+          fecha: fecha,
+        );
+        if (list.isNotEmpty) {
+          _sortFixturesByKickoff(list);
+          return list;
+        }
+      } catch (_) {}
+    }
     return [];
   }
-}
+
+  static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
+    final fecha = _ymdApi(DateTime.now().toLocal());
+    final todos = <Map<String, dynamic>>[];
+    try {
+      final liga = await _fixturesByDateAllPages(
+        leagueId: _ligaArgentina,
+        season: _season,
+        fecha: fecha,
+      );
+      todos.addAll(liga);
+      todos.addAll(await getPartidosHoyConmebol(leagueLibertadores));
+      todos.addAll(await getPartidosHoyConmebol(leagueSudamericana));
+      _sortFixturesByKickoff(todos);
+      return todos;
+    } catch (_) {
+      return [];
+    }
+  }
 
   static DateTime _dateOnlyLocal(DateTime d) => DateTime(d.year, d.month, d.day);
 

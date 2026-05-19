@@ -33,6 +33,12 @@ import 'image_decode_helper.dart';
 import 'penales_shootout_helper.dart';
 import 'live_section/live_fixture_bundle.dart';
 import 'live_section/live_section_view.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/partido_detail.dart';
+import 'screens/splash_screen.dart';
+import 'screens/tabla_hinchas_screen.dart';
+import 'screens/mi_cuenta_screen.dart';
+import 'services/hinchas_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -139,7 +145,7 @@ class HDFStatsApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0D1B2A),
         colorScheme: const ColorScheme.dark(primary: Color(0xFF00C853)),
       ),
-      home: const OnboardingCheck(),
+      home: SplashScreen(onFinished: routeAfterSplash),
     );
   }
 }
@@ -1334,6 +1340,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
                 _dashBoton('🌍', 'Mundial 2026', 'Junio · USA, México, Canadá', const Color(0xFF2196F3), () => _irSeccion(7)),
                 const SizedBox(height: 12),
                 _dashBoton('📰', 'Noticias', 'Olé · TyC · ESPN', Colors.white54, () => _irSeccion(8)),
+                const SizedBox(height: 12),
+                _dashBoton('👥', 'Tabla de Hinchas', 'Ranking de fans en la app', const Color(0xFF00E650), () => _irSeccion(18)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1537,11 +1545,33 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               _ligaBoton('🪢', 'Cuerda Floja', 14),
               _ligaBoton('🔼', 'Remontada', 16),
               _ligaBoton('🏥', 'Lesionados', 17),
+              _ligaBotonIcon(Icons.people, 'Tabla Hinchas', 18),
             ],
            
           ),
            const SizedBox(height: 20),
                 _buildIndiceMatchgol(),
+        ]),
+      ),
+    );
+  }
+
+  Widget _ligaBotonIcon(IconData icon, String label, int index, {bool badge = false}) {
+    return GestureDetector(
+      onTap: () => _irSeccion(index),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B2A3B),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: badge ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.white10),
+        ),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: const Color(0xFF00E650), size: 22),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(
+            color: badge ? const Color(0xFF00C853) : Colors.white60,
+            fontSize: 9, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
         ]),
       ),
     );
@@ -1820,6 +1850,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                     datosFixtureCompletos: true));
       case 16: return _gatePremium(_buildRemontadaLigaSeccion(), title: 'Remontada', subtitle: 'Estadística de remontadas LPF con Premium.');
       case 17: return _buildLesionadosSportmonks();
+      case 18: return const TablaHinchasScreen();
       default: return _buildResultados();
     }
   }
@@ -1932,47 +1963,53 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               const SizedBox(height: 16),
               const Divider(color: Colors.white12),
               const SizedBox(height: 8),
-              const Text('HINCHAS HDF STATS', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-              const SizedBox(height: 10),
+              const Text('TABLA DE HINCHAS', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              if (_equipoFavoritoId == null || _equipoFavoritoId == -1)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final ok = await MiCuentaScreen.openTeamPicker(context);
+                      if (ok == true) await _cargarFavorito();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E650),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Elegí tu equipo', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                )
+              else
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.favorite, color: Color(0xFF00E650), size: 20),
+                  title: Text(_equipoFavoritoNombre ?? 'Tu equipo', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      final ok = await MiCuentaScreen.openTeamPicker(context);
+                      if (ok == true) await _cargarFavorito();
+                    },
+                    child: const Text('Cambiar', style: TextStyle(color: Color(0xFF00E650), fontSize: 12)),
+                  ),
+                ),
+              const SizedBox(height: 8),
               SizedBox(
-                height: 280,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('hinchas').orderBy('votos', descending: true).limit(10).snapshots(),
-                  builder: (context, hSnap) {
-                    if (hSnap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
-                    final hdocs = hSnap.data?.docs ?? [];
-                    if (hdocs.isEmpty) return const Center(child: Text('Sin datos aun', style: TextStyle(color: Colors.white38, fontSize: 12)));
-                    final htotal = hdocs.fold<int>(0, (s, d) => s + (((d.data() as Map<String, dynamic>)['votos'] as num?)?.toInt() ?? 0));
-                    return ListView.builder(
-                      itemCount: hdocs.length,
-                      itemBuilder: (ctx, hi) {
-                        final hdata = hdocs[hi].data() as Map<String, dynamic>;
-                        final hnombre = hdata['nombre'] as String? ?? '';
-                        final hescudo = hdata['escudo'] as String? ?? '';
-                        final hvotos = (hdata['votos'] as num?)?.toInt() ?? 0;
-                        final hpct = htotal > 0 ? hvotos / htotal : 0.0;
-                        final hesMio = _equipoFavoritoId?.toString() == hdocs[hi].id;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(children: [
-                            SizedBox(width: 20, child: Text('${hi+1}', style: TextStyle(color: hi==0?const Color(0xFFFFD700):hi==1?const Color(0xFFC0C0C0):hi==2?const Color(0xFFCD7F32):Colors.white38, fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                            const SizedBox(width: 6),
-                            if (hescudo.isNotEmpty) DecodedNetworkImage(hescudo, width: 22, height: 22, errorBuilder: (_, __, ___) => const SizedBox(width: 22)) else const SizedBox(width: 22),
-                            const SizedBox(width: 8),
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Row(children: [
-                                Expanded(child: Text(hnombre, style: TextStyle(color: hesMio ? const Color(0xFF00C853) : Colors.white70, fontSize: 12, fontWeight: hesMio ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)),
-                                Text('$hvotos', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                                if (hesMio) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.favorite, color: Color(0xFF00C853), size: 11)),
-                              ]),
-                              const SizedBox(height: 3),
-                              ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: hpct, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation<Color>(hi==0?const Color(0xFFFFD700):hesMio?const Color(0xFF00C853):const Color(0xFF1565C0)), minHeight: 4)),
-                            ])),
-                          ]),
-                        );
-                      },
-                    );
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _irSeccion(18);
                   },
+                  icon: const Icon(Icons.people, color: Color(0xFF00E650), size: 18),
+                  label: const Text('Ver tabla completa', style: TextStyle(color: Color(0xFF00E650), fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF00E650)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -5927,6 +5964,35 @@ Widget _tabTiempo(String tipo) {
     );
   }
 
+  List<Widget> _widgetsVotaDetalle({
+    required int? fixtureId,
+    required String local,
+    required String visitante,
+    required bool jugado,
+    required bool isLive,
+    required String? statusShort,
+    Map<String, dynamic>? partidoLista,
+    Map<String, dynamic>? detalle,
+  }) {
+    if (fixtureId == null) return [];
+    final homeLogo = partidoLista?['teams']?['home']?['logo'] as String? ??
+        detalle?['teams']?['home']?['logo'] as String?;
+    final awayLogo = partidoLista?['teams']?['away']?['logo'] as String? ??
+        detalle?['teams']?['away']?['logo'] as String?;
+    return [
+      PartidoDetailVotaSection(
+        fixtureId: fixtureId,
+        localName: local,
+        visitanteName: visitante,
+        homeLogo: homeLogo,
+        awayLogo: awayLogo,
+        jugado: jugado,
+        isLive: isLive,
+        statusShort: statusShort,
+      ),
+    ];
+  }
+
   void _mostrarDetalle(BuildContext context, String local, String visitante, String resultado, bool jugado, {int? fixtureId, int? homeId, int? awayId, String? fechaPartido, bool isLive = false, String minuto = '', int? sourceLeagueId, Map<String, dynamic>? partidoLista, bool modalDesdeSeccionEnVivo = false, bool datosFixtureCompletos = true}) {
     final datosCompletos = datosFixtureCompletos || modalDesdeSeccionEnVivo || isLive;
     showModalBottomSheet(
@@ -6145,6 +6211,16 @@ Widget _tabTiempo(String tipo) {
                   if (snap.connectionState == ConnectionState.waiting)
                     const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFF00C853))))
                   else if (esCopaArgDetalle) ...[
+                    ..._widgetsVotaDetalle(
+                      fixtureId: fixtureId,
+                      local: local,
+                      visitante: visitante,
+                      jugado: jugado,
+                      isLive: isLive,
+                      statusShort: shortStatusSheet,
+                      partidoLista: partidoLista,
+                      detalle: detalle,
+                    ),
                     _detalleSeccion('INCIDENCIAS'),
                     if (eventos.isEmpty)
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin incidencias disponibles', style: TextStyle(color: Colors.white38, fontSize: 13)))
@@ -6204,6 +6280,16 @@ Widget _tabTiempo(String tipo) {
                     if (modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle) ..._infoPartidoDetalleSheet(arbitro, estadio, ciudad),
                     if (stats != null) ...[
                       if (!(modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle)) ..._infoPartidoDetalleSheet(arbitro, estadio, ciudad),
+                      ..._widgetsVotaDetalle(
+                        fixtureId: fixtureId,
+                        local: local,
+                        visitante: visitante,
+                        jugado: jugado,
+                        isLive: isLive,
+                        statusShort: shortStatusSheet,
+                        partidoLista: partidoLista,
+                        detalle: detalle,
+                      ),
                       if (!(modalDesdeSeccionEnVivo && isLive && !jugado) || (List<Map<String, dynamic>>.from(snap.data?[4] ?? [])).any((j) => j['tieneRating'] == true)) ...[
                         _detalleSeccion('PODIO DEL PARTIDO'),
                         Builder(builder: (context) {
@@ -6571,6 +6657,16 @@ Widget _tabTiempo(String tipo) {
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
                     ],
                   ] else ...[
+                    ..._widgetsVotaDetalle(
+                      fixtureId: fixtureId,
+                      local: local,
+                      visitante: visitante,
+                      jugado: jugado,
+                      isLive: isLive,
+                      statusShort: shortStatusSheet,
+                      partidoLista: partidoLista,
+                      detalle: detalle,
+                    ),
                     if (modalDesdeSeccionEnVivo && isLive && !jugado && !esCopaArgDetalle)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -6594,6 +6690,16 @@ Widget _tabTiempo(String tipo) {
                           child: Center(child: CircularProgressIndicator(color: Color(0xFF00C853))),
                         )
                       else if (esCopaArgDetalle) ...[
+                        ..._widgetsVotaDetalle(
+                          fixtureId: fixtureId,
+                          local: local,
+                          visitante: visitante,
+                          jugado: jugado,
+                          isLive: isLive,
+                          statusShort: shortStatusSheet,
+                          partidoLista: partidoLista,
+                          detalle: detalle,
+                        ),
                         if (lineups.length >= 2) ...[
                           _detalleSeccion('FORMACIONES'),
                           _formacionLinealCard(lineups, local, visitante),
@@ -6604,6 +6710,16 @@ Widget _tabTiempo(String tipo) {
                         ],
                       ] else ...[
                         _prePartidoInfoCard(estadio, ciudad, arbitro, horario, matchDateTime, fuenteCopaArgentina: esCopaArgDetalle),
+                        ..._widgetsVotaDetalle(
+                          fixtureId: fixtureId,
+                          local: local,
+                          visitante: visitante,
+                          jugado: jugado,
+                          isLive: isLive,
+                          statusShort: shortStatusSheet,
+                          partidoLista: partidoLista,
+                          detalle: detalle,
+                        ),
                         const SizedBox(height: 10),
                         if (effectiveHomeId != null && effectiveAwayId != null) ...[
                           _h2hCard(local, visitante, effectiveHomeId!, effectiveAwayId!),
@@ -8203,93 +8319,6 @@ Widget _tabTiempo(String tipo) {
     );
   }
 
-  Widget _buildHinchas() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('hinchas')
-          .orderBy('votos', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
-        }
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const Center(child: Text('Aun no hay hinchas registrados', style: TextStyle(color: Colors.white54)));
-        }
-        final total = docs.fold<int>(0, (sum, d) => sum + (((d.data() as Map<String, dynamic>)['votos'] as num?)?.toInt() ?? 0));
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _sectionTitle('HINCHAS HDF STATS'),
-            const SizedBox(height: 4),
-            Center(child: Text('$total hinchas registrados en la app', style: const TextStyle(color: Colors.white38, fontSize: 12))),
-            const SizedBox(height: 16),
-            ...docs.asMap().entries.map((entry) {
-              final i = entry.key;
-              final data = entry.value.data() as Map<String, dynamic>;
-              final nombre = data['nombre'] as String? ?? 'Equipo';
-              final escudo = data['escudo'] as String? ?? '';
-              final votos = (data['votos'] as num?)?.toInt() ?? 0;
-              final pct = total > 0 ? votos / total : 0.0;
-              final esMio = _equipoFavoritoId?.toString() == entry.value.id;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1B2A3B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: esMio ? const Color(0xFF00C853).withValues(alpha: 0.7) : Colors.transparent,
-                    width: esMio ? 2 : 1,
-                  ),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Container(
-                      width: 28, height: 28,
-                      decoration: BoxDecoration(
-                        color: i == 0 ? const Color(0xFFFFD700) : i == 1 ? const Color(0xFFC0C0C0) : i == 2 ? const Color(0xFFCD7F32) : Colors.white12,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(child: Text('${i + 1}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12))),
-                    ),
-                    const SizedBox(width: 10),
-                    if (escudo.isNotEmpty)
-                      DecodedNetworkImage(escudo, width: 30, height: 30, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.white38, size: 30))
-                    else
-                      const Icon(Icons.shield, color: Colors.white38, size: 30),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(nombre, style: TextStyle(color: esMio ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
-                    Text('$votos', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(width: 4),
-                    Text(votos == 1 ? 'hincha' : 'hinchas', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                    if (esMio) ...[const SizedBox(width: 6), const Icon(Icons.favorite, color: Color(0xFF00C853), size: 14)],
-                  ]),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: pct,
-                      backgroundColor: Colors.white12,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        i == 0 ? const Color(0xFFFFD700) : esMio ? const Color(0xFF00C853) : const Color(0xFF1565C0),
-                      ),
-                      minHeight: 6,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text('${(pct * 100).toStringAsFixed(1)}% de los hinchas', style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                ]),
-              );
-            }),
-          ],
-        );
-      },
-    );
-  }
-
-
 }
 
 
@@ -8592,46 +8621,39 @@ class _PlantelTabState extends State<_PlantelTab> {
   }
 }
 
-class OnboardingCheck extends StatefulWidget {
-  const OnboardingCheck({super.key});
-  @override
-  State<OnboardingCheck> createState() => _OnboardingCheckState();
-}
-
-class _OnboardingCheckState extends State<OnboardingCheck> {
-  @override
-  void initState() {
-    super.initState();
-    _check();
-  }
-
-  Future<void> _check() async {
-    final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getInt('equipo_favorito_id');
-    if (!mounted) return;
-    if (id != null) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));
-    } else {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OnboardingScreen()));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF0D1B2A),
-      body: Center(child: CircularProgressIndicator(color: Color(0xFF00C853))),
+/// Tras el splash: onboarding (1ª vez) o directo al home / picker de equipo.
+Future<void> routeAfterSplash(BuildContext context) async {
+  if (!context.mounted) return;
+  final introSeen = await OnboardingScreen.wasIntroSeen();
+  if (!context.mounted) return;
+  if (!introSeen) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OnboardingScreen(onComplete: navigateAfterIntro),
+      ),
     );
+    return;
   }
+  await navigateAfterIntro(context);
 }
 
-class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+/// Tras el intro (o si ya se vio), va al home o al picker de equipo favorito.
+Future<void> navigateAfterIntro(BuildContext context) async {
+  final prefs = await SharedPreferences.getInstance();
+  if (!context.mounted) return;
+  final id = prefs.getInt('equipo_favorito_id');
+  final Widget next = id != null ? const MainScreen() : const FavoriteTeamOnboardingScreen();
+  Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => next));
+}
+
+class FavoriteTeamOnboardingScreen extends StatefulWidget {
+  const FavoriteTeamOnboardingScreen({super.key});
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  State<FavoriteTeamOnboardingScreen> createState() => _FavoriteTeamOnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _FavoriteTeamOnboardingScreenState extends State<FavoriteTeamOnboardingScreen> {
   List<Map<String, dynamic>> _equipos = [];
   bool _cargando = true;
   int? _seleccionado;
@@ -8668,17 +8690,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _guardar() async {
     if (_seleccionado == null) return;
     final prefs = await SharedPreferences.getInstance();
-    // Si ya habia elegido antes, descontar el voto anterior
     final anteriorId = prefs.getInt('equipo_favorito_id');
-    if (anteriorId != null && anteriorId != -1 && anteriorId != _seleccionado) {
-      await FirebaseFirestore.instance.collection('hinchas').doc(anteriorId.toString()).set(
-        {'votos': FieldValue.increment(-1), 'nombre': prefs.getString('equipo_favorito_nombre') ?? '', 'escudo': ''},
-        SetOptions(merge: true),
+    final equipoSelec = _equipos.firstWhere((e) => e['id'] == _seleccionado, orElse: () => {});
+    try {
+      await HinchasService.setFavoriteTeam(
+        teamId: _seleccionado!,
+        teamName: _nombreSeleccionado ?? '',
+        teamLogo: equipoSelec['escudo'] as String? ?? '',
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar tu equipo: $e')),
+        );
+      }
+      return;
     }
-    await prefs.setInt('equipo_favorito_id', _seleccionado!);
-    await prefs.setString('equipo_favorito_nombre', _nombreSeleccionado ?? '');
-    // Cambiar topic FCM
     if (!kIsWeb) {
       final messaging = FirebaseMessaging.instance;
       if (anteriorId != null && anteriorId != -1 && anteriorId != _seleccionado) {
@@ -8686,12 +8713,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
       await messaging.subscribeToTopic('equipo_${_seleccionado!}');
     }
-    // Registrar voto en Firestore
-    final equipoSelec = _equipos.firstWhere((e) => e['id'] == _seleccionado, orElse: () => {});
-    await FirebaseFirestore.instance.collection('hinchas').doc(_seleccionado!.toString()).set(
-      {'votos': FieldValue.increment(1), 'nombre': _nombreSeleccionado ?? '', 'escudo': equipoSelec['escudo'] ?? ''},
-      SetOptions(merge: true),
-    );
     if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));
   }
@@ -8796,8 +8817,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Center(
                 child: TextButton(
                   onPressed: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setInt('equipo_favorito_id', -1);
+                    await HinchasService.clearFavoriteTeam();
                     if (!mounted) return;
                     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainScreen()));
                   },
