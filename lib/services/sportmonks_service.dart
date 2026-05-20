@@ -1934,6 +1934,16 @@ class SportmonksService {
     return (teams: out, error: null);
   }
 
+  /// Jugadores que no deben figurar como lesionados (dato desactualizado en Sportmonks).
+  static bool _excluirLesionadoLpf(String playerName, String teamName) {
+    final p = playerName.toLowerCase();
+    final t = teamName.toLowerCase();
+    if (p.contains('cauteruccio') && t.contains('independiente') && !t.contains('rivadavia')) {
+      return true;
+    }
+    return false;
+  }
+
   List<SportmonksInjuryRow> _injuryRowsFromSeasonTeams(List<Map<String, dynamic>> teams) {
     final merged = <SportmonksInjuryRow>[];
     final seenPlayer = <String>{};
@@ -1956,6 +1966,7 @@ class SportmonksService {
         if (seenPlayer.contains(dedupeKey)) continue;
         seenPlayer.add(dedupeKey);
         final pname = _playerDisplayFromSidelined(row) ?? (pid.isNotEmpty ? 'Jugador #$pid' : '—');
+        if (_excluirLesionadoLpf(pname, teamName)) continue;
         merged.add(SportmonksInjuryRow(
           playerName: pname,
           teamName: teamName,
@@ -3081,5 +3092,458 @@ class SportmonksService {
     _cache.remove(_cacheKey('playerTeams', id));
     _cache.remove(_cacheKey('transfersPlayer', id));
     _cache.remove(_cacheKey('profile', id));
+  }
+
+  /// Sportmonks `countries.id` para Argentina (filtro de señal local).
+  static const int countryIdArgentina = 44;
+
+  static final Map<String, List<String>> _tvArgentinaCache = {};
+  static final Map<String, DateTime> _tvArgentinaCacheAt = {};
+  static final Map<String, List<Map<String, dynamic>>> _tvFixturesByDate = {};
+  static final Map<String, DateTime> _tvFixturesByDateAt = {};
+  static const Duration _tvArgentinaTtl = Duration(hours: 8);
+
+  static String _normTeamNameMatch(String raw) {
+    var s = raw.toLowerCase().trim();
+    const accents = {
+      'á': 'a',
+      'à': 'a',
+      'ä': 'a',
+      'â': 'a',
+      'é': 'e',
+      'è': 'e',
+      'ë': 'e',
+      'ê': 'e',
+      'í': 'i',
+      'ì': 'i',
+      'ï': 'i',
+      'î': 'i',
+      'ó': 'o',
+      'ò': 'o',
+      'ö': 'o',
+      'ô': 'o',
+      'ú': 'u',
+      'ù': 'u',
+      'ü': 'u',
+      'û': 'u',
+      'ñ': 'n',
+    };
+    for (final e in accents.entries) {
+      s = s.replaceAll(e.key, e.value);
+    }
+    s = s.replaceAll(RegExp(r'[^a-z0-9 ]'), ' ');
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static bool _teamTokensMatch(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return false;
+    if (a == b) return true;
+    if (a.contains(b) || b.contains(a)) return true;
+    final aw = a.split(' ').where((w) => w.length > 2);
+    final bw = b.split(' ').where((w) => w.length > 2);
+    for (final wa in aw) {
+      for (final wb in bw) {
+        if (wa == wb || wa.contains(wb) || wb.contains(wa)) return true;
+      }
+    }
+    return false;
+  }
+
+  static List<String> _tvMatchNameVariants(String name, int? apiFootballId) {
+    final out = <String>{_normTeamNameMatch(name)};
+    if (apiFootballId != null) {
+      final fixed = reconcileLpfApiFootballTeamId(apiFootballId, name);
+      for (final alias in _lpfApiFootballAliases[fixed] ?? const []) {
+        out.add(_normTeamNameMatch(alias));
+      }
+    }
+    return out.toList();
+  }
+
+  static bool _participantMatchesVariants(
+    Map<String, dynamic> participant,
+    List<String> variants, {
+    int? apiFootballId,
+    String? teamNameForReconcile,
+  }) {
+    final pid = _parseIntLoose(participant['id']);
+    if (pid != null && apiFootballId != null) {
+      final fixed = reconcileLpfApiFootballTeamId(apiFootballId, teamNameForReconcile ?? '');
+      final smId = _lpfHardcodedSportmonksTeamId[fixed];
+      if (smId != null && pid == smId) return true;
+    }
+    if (pid != null) {
+      for (final entry in _lpfHardcodedSportmonksTeamId.entries) {
+        if (entry.value != pid) continue;
+        final aliases = _lpfApiFootballAliases[entry.key] ?? const [];
+        if (variants.any((v) => aliases.any((a) => _teamTokensMatch(_normTeamNameMatch(a), v)))) {
+          return true;
+        }
+      }
+    }
+    final n = _asString(participant['name']) ?? _asString(_pick(participant, ['participant_name']));
+    if (n == null) return false;
+    final norm = _normTeamNameMatch(n);
+    return variants.any((v) => _teamTokensMatch(norm, v));
+  }
+
+  static int? _sportmonksTeamIdFromApiFootball(int? apiFootballId, String teamName) {
+    if (apiFootballId == null || apiFootballId <= 0) return null;
+    final fixed = reconcileLpfApiFootballTeamId(apiFootballId, teamName);
+    return _lpfHardcodedSportmonksTeamId[fixed];
+  }
+
+  static ({int? home, int? away}) _participantIdsByLocation(Map<String, dynamic> fx) {
+    int? home;
+    int? away;
+    for (final raw in fx['participants'] as List? ?? []) {
+      final p = _asMap(raw);
+      if (p == null) continue;
+      final pid = _parseIntLoose(p['id']);
+      if (pid == null) continue;
+      final meta = _asMap(p['meta']);
+      final loc = _asString(meta?['location'])?.toLowerCase();
+      if (loc == 'home') {
+        home = pid;
+      } else if (loc == 'away') {
+        away = pid;
+      }
+    }
+    return (home: home, away: away);
+  }
+
+  static bool _sportmonksFixtureMatchesTeams(
+    Map<String, dynamic> fx,
+    String homeName,
+    String awayName, {
+    int? homeApiFootballId,
+    int? awayApiFootballId,
+  }) {
+    final smHome = _sportmonksTeamIdFromApiFootball(homeApiFootballId, homeName);
+    final smAway = _sportmonksTeamIdFromApiFootball(awayApiFootballId, awayName);
+    final loc = _participantIdsByLocation(fx);
+    if (smHome != null &&
+        smAway != null &&
+        loc.home != null &&
+        loc.away != null &&
+        loc.home == smHome &&
+        loc.away == smAway) {
+      return true;
+    }
+
+    final homeVariants = _tvMatchNameVariants(homeName, homeApiFootballId);
+    final awayVariants = _tvMatchNameVariants(awayName, awayApiFootballId);
+
+    final title = _normTeamNameMatch(fx['name']?.toString() ?? '');
+    if (homeVariants.any((v) => _teamTokensMatch(title, v)) &&
+        awayVariants.any((v) => _teamTokensMatch(title, v))) {
+      return true;
+    }
+
+    final participants = fx['participants'] as List? ?? [];
+    if (participants.length < 2) return false;
+
+    var hasH = false;
+    var hasA = false;
+    for (final raw in participants) {
+      final p = _asMap(raw);
+      if (p == null) continue;
+      final meta = _asMap(p['meta']);
+      final locSide = _asString(meta?['location'])?.toLowerCase();
+      if (locSide == 'home' &&
+          _participantMatchesVariants(
+            p,
+            homeVariants,
+            apiFootballId: homeApiFootballId,
+            teamNameForReconcile: homeName,
+          )) {
+        hasH = true;
+      } else if (locSide == 'away' &&
+          _participantMatchesVariants(
+            p,
+            awayVariants,
+            apiFootballId: awayApiFootballId,
+            teamNameForReconcile: awayName,
+          )) {
+        hasA = true;
+      }
+    }
+    if (hasH && hasA) return true;
+
+    for (final raw in participants) {
+      final p = _asMap(raw);
+      if (p == null) continue;
+      if (!hasH &&
+          _participantMatchesVariants(
+            p,
+            homeVariants,
+            apiFootballId: homeApiFootballId,
+            teamNameForReconcile: homeName,
+          )) {
+        hasH = true;
+      }
+      if (!hasA &&
+          _participantMatchesVariants(
+            p,
+            awayVariants,
+            apiFootballId: awayApiFootballId,
+            teamNameForReconcile: awayName,
+          )) {
+        hasA = true;
+      }
+    }
+    return hasH && hasA;
+  }
+
+  static Future<List<Map<String, dynamic>>> _fetchFixturesBetweenPages({
+    required String token,
+    required String fromDate,
+    required String toDate,
+    String? seasonFilter,
+    int maxPages = 8,
+  }) async {
+    final fixtures = <Map<String, dynamic>>[];
+    var page = 1;
+    var hasMore = true;
+    while (hasMore && page <= maxPages) {
+      final params = <String, String>{
+        'api_token': token.trim(),
+        'include': 'participants;tvStations.tvstation;tvStations.country',
+        'per_page': '50',
+        'page': '$page',
+      };
+      if (seasonFilter != null && seasonFilter.isNotEmpty) {
+        params['filters'] = seasonFilter;
+      }
+      final uri = Uri.parse('$_baseUrl/fixtures/between/$fromDate/$toDate')
+          .replace(queryParameters: params);
+      final res = await _httpGet(uri, token: token);
+      if (res.statusCode == 403 || res.statusCode != 200) break;
+      final root = _asMap(json.decode(res.body));
+      if (root == null || _apiErrorsPresent(root)) break;
+      final data = root['data'];
+      if (data is List) {
+        for (final raw in data) {
+          final fx = _asMap(raw);
+          if (fx != null) fixtures.add(fx);
+        }
+      }
+      hasMore = _paginationHasMore(root);
+      page++;
+    }
+    return fixtures;
+  }
+
+  static void _mergeFixturesTvUnicos(
+    List<Map<String, dynamic>> dest,
+    Set<int> ids,
+    List<Map<String, dynamic>> src,
+  ) {
+    for (final fx in src) {
+      final id = _parseIntLoose(fx['id']);
+      if (id == null || !ids.add(id)) continue;
+      dest.add(fx);
+    }
+  }
+
+  /// Partidos del día con TV: prioriza **LPF** (temporada Sportmonks) y suma fecha global.
+  static Future<List<Map<String, dynamic>>> _fixturesTvDelDia(
+    String token,
+    String dateStr,
+  ) async {
+    final cacheKey = 'day|v2|$dateStr';
+    final cachedAt = _tvFixturesByDateAt[cacheKey];
+    if (cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _tvArgentinaTtl &&
+        _tvFixturesByDate.containsKey(cacheKey)) {
+      return List<Map<String, dynamic>>.from(_tvFixturesByDate[cacheKey]!);
+    }
+
+    final fixtures = <Map<String, dynamic>>[];
+    final ids = <int>{};
+
+    final seasonRes = await _resolveLpfSeasonSportmonksId(token);
+    if (seasonRes.id != null) {
+      final lpf = await _fetchFixturesBetweenPages(
+        token: token,
+        fromDate: dateStr,
+        toDate: dateStr,
+        seasonFilter: 'fixtureSeasons:${seasonRes.id}',
+        maxPages: 6,
+      );
+      _mergeFixturesTvUnicos(fixtures, ids, lpf);
+    }
+
+    final global = await _fetchFixturesBetweenPages(
+      token: token,
+      fromDate: dateStr,
+      toDate: dateStr,
+      maxPages: 4,
+    );
+    _mergeFixturesTvUnicos(fixtures, ids, global);
+
+    if (fixtures.isEmpty) {
+      var page = 1;
+      var hasMore = true;
+      while (hasMore && page <= 6) {
+        final uri = Uri.parse('$_baseUrl/fixtures/date/$dateStr').replace(
+          queryParameters: {
+            'api_token': token.trim(),
+            'include': 'participants;tvStations.tvstation;tvStations.country',
+            'per_page': '50',
+            'page': '$page',
+          },
+        );
+        final res = await _httpGet(uri, token: token);
+        if (res.statusCode != 200) break;
+        final root = _asMap(json.decode(res.body));
+        if (root == null || _apiErrorsPresent(root)) break;
+        final data = root['data'];
+        if (data is List) {
+          final batch = <Map<String, dynamic>>[];
+          for (final raw in data) {
+            final fx = _asMap(raw);
+            if (fx != null) batch.add(fx);
+          }
+          _mergeFixturesTvUnicos(fixtures, ids, batch);
+        }
+        hasMore = _paginationHasMore(root);
+        page++;
+      }
+    }
+
+    _tvFixturesByDate[cacheKey] = fixtures;
+    _tvFixturesByDateAt[cacheKey] = DateTime.now();
+    return fixtures;
+  }
+
+  static bool _tvRowEsArgentina(Map<String, dynamic> row) {
+    final countryId = _parseIntLoose(row['country_id']);
+    if (countryId == countryIdArgentina) return true;
+    final country = _asMap(row['country']);
+    final cid = _parseIntLoose(country?['id']);
+    if (cid == countryIdArgentina) return true;
+    final cname = (_asString(country?['name']) ?? '').toLowerCase();
+    return cname.contains('argentina');
+  }
+
+  static bool _nombreCanalArgentino(String name) {
+    final n = name.toLowerCase();
+    const hints = [
+      'tyc',
+      'espn',
+      'directv',
+      'telefe',
+      'fox sports',
+      'fox ',
+      'cablevision',
+      'flow',
+      'pack futbol',
+      'deportv',
+      'vtv',
+    ];
+    for (final h in hints) {
+      if (n.contains(h)) return true;
+    }
+    return false;
+  }
+
+  static List<String> _canalesTvArgentinaDesdeFixture(Map<String, dynamic> fx) {
+    final canales = <String>{};
+    final rows = (fx['tvstations'] ?? fx['tvStations']) as List? ?? [];
+    for (final raw in rows) {
+      final row = _asMap(raw);
+      if (row == null) continue;
+
+      final station = _asMap(row['tvstation']) ?? _asMap(row['tv_station']);
+      var name = _asString(station?['name']) ?? _asString(row['name']);
+      if (name == null || name.isEmpty) continue;
+
+      final esAr = _tvRowEsArgentina(row) || _nombreCanalArgentino(name);
+      if (!esAr) continue;
+
+      final lower = name.toLowerCase();
+      if (lower.contains('.com') && !lower.contains('tyc')) continue;
+      canales.add(name.trim());
+    }
+    final list = canales.toList()..sort();
+    return list;
+  }
+
+  /// Canales que transmiten el partido en **Argentina** (Sportmonks + filtro país 44).
+  static Future<List<String>> getCanalesTvArgentina({
+    required String homeName,
+    required String awayName,
+    String? fixtureDateIso,
+    int? homeApiFootballId,
+    int? awayApiFootballId,
+  }) async {
+    final token = _pickToken();
+    if (token == null) return [];
+
+    final dt = fixtureDateIso != null
+        ? DateTime.tryParse(fixtureDateIso)?.toLocal()
+        : null;
+    if (dt == null) return [];
+
+    final dateStr =
+        '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    final cacheKey =
+        'v2|$dateStr|${_normTeamNameMatch(homeName)}|${_normTeamNameMatch(awayName)}|$homeApiFootballId|$awayApiFootballId';
+    final cachedAt = _tvArgentinaCacheAt[cacheKey];
+    if (cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _tvArgentinaTtl &&
+        _tvArgentinaCache.containsKey(cacheKey)) {
+      return List<String>.from(_tvArgentinaCache[cacheKey]!);
+    }
+
+    try {
+      final fixtures = await _fixturesTvDelDia(token, dateStr);
+
+      Map<String, dynamic>? match;
+      for (final fx in fixtures) {
+        if (_sportmonksFixtureMatchesTeams(
+          fx,
+          homeName,
+          awayName,
+          homeApiFootballId: homeApiFootballId,
+          awayApiFootballId: awayApiFootballId,
+        )) {
+          match = fx;
+          break;
+        }
+      }
+
+      var canales = match != null ? _canalesTvArgentinaDesdeFixture(match) : <String>[];
+
+      if (canales.isEmpty && match == null) {
+        final smH = _sportmonksTeamIdFromApiFootball(homeApiFootballId, homeName);
+        final smA = _sportmonksTeamIdFromApiFootball(awayApiFootballId, awayName);
+        if (smH != null && smA != null) {
+          for (final fx in fixtures) {
+            final loc = _participantIdsByLocation(fx);
+            if (loc.home == smH && loc.away == smA) {
+              match = fx;
+              canales = _canalesTvArgentinaDesdeFixture(fx);
+              break;
+            }
+          }
+        }
+      }
+
+      _tvArgentinaCache[cacheKey] = canales;
+      _tvArgentinaCacheAt[cacheKey] = DateTime.now();
+      return canales;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Invalida caché de TV (p. ej. tras cambiar lógica de matching).
+  static void clearTvArgentinaCache() {
+    _tvArgentinaCache.clear();
+    _tvArgentinaCacheAt.clear();
+    _tvFixturesByDate.clear();
+    _tvFixturesByDateAt.clear();
   }
 }

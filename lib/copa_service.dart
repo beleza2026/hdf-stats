@@ -60,37 +60,15 @@ class CopaService {
   /// Temporadas a probar en orden (la API a veces usa 2025 u 2026 para la edición vigente).
   static const List<int> _seasonsCopa = [2026, 2025];
 
-  // HOY — Conmebol: todos los partidos del día (sin filtro grupo/ronda/país). Copa Arg.: todos del día.
+  // HOY + próxima semana — Conmebol: todos en ventana. Copa Arg.: misma ventana vía ApiService.
   static Future<List<Map<String, dynamic>>> getPartidosHoy(int leagueId) async {
     if (leagueId == leagueLibertadores || leagueId == leagueSudamericana) {
-      return ApiService.getPartidosHoyConmebol(leagueId);
+      return ApiService.getPartidosConmebolProximos(leagueId);
     }
-    final hoy = DateTime.now().toLocal();
-    final fecha =
-        '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
-    for (final season in _seasonsFor(leagueId)) {
-      try {
-        final response = await http.get(
-          Uri.parse(
-              '$_baseUrl/fixtures?league=$leagueId&season=$season&date=$fecha&timezone=America/Argentina/Buenos_Aires'),
-          headers: _headers,
-        );
-        if (response.statusCode != 200) continue;
-        final data = jsonDecode(response.body);
-        if (_apiErrorsPresent(data)) continue;
-        final fixtures = data['response'] as List? ?? [];
-        final list = fixtures.map((f) => f as Map<String, dynamic>).toList();
-        if (list.isNotEmpty) {
-          list.sort((a, b) {
-            final da = DateTime.tryParse(a['fixture']?['date']?.toString() ?? '');
-            final db = DateTime.tryParse(b['fixture']?['date']?.toString() ?? '');
-            return (da ?? DateTime(2100)).compareTo(db ?? DateTime(2100));
-          });
-          return list;
-        }
-      } catch (_) {}
-    }
-    return [];
+    return ApiService.getPartidosLigaProximos(
+      leagueId,
+      seasons: _seasonsFor(leagueId),
+    );
   }
 
   /// En este plan de API-Sports, `&page=1` con timezone devuelve error y 0 resultados; el primer GET va **sin** `page`.

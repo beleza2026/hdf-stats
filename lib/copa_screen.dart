@@ -1,12 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'api_service.dart';
 import 'match_follow_service.dart';
 import 'copa_service.dart';
 import 'nationality_flags.dart';
 import 'penales_shootout_helper.dart';
 import 'player_career_sheet.dart';
 import 'image_decode_helper.dart';
+import 'widgets/hoy_match_card.dart';
+import 'app_icons.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 typedef OnTapPartido = void Function(
   BuildContext context,
@@ -29,7 +33,9 @@ typedef OnTapPartido = void Function(
 class CopaScreen extends StatefulWidget {
   final int leagueId;
   final String nombreCopa;
+  /// Si se omite, se usa [titleIcon] en el AppBar.
   final String emoji;
+  final PhosphorIconData? titleIcon;
   final OnTapPartido onTapPartido;
 
   /// Cuando la pantalla está embebida en el home (no hay ruta encima), usar esto
@@ -40,7 +46,8 @@ class CopaScreen extends StatefulWidget {
     Key? key,
     required this.leagueId,
     required this.nombreCopa,
-    required this.emoji,
+    this.emoji = '',
+    this.titleIcon,
     required this.onTapPartido,
     this.onBack,
   }) : super(key: key);
@@ -86,8 +93,22 @@ class _CopaScreenState extends State<CopaScreen>
           }
         },
       ),
-      title: Text('${widget.emoji} ${widget.nombreCopa}',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.titleIcon != null) ...[
+            AppIcons.phosphor(widget.titleIcon!, size: 22, color: AppIcons.accent),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Text(
+              widget.nombreCopa,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     ),
     body: Column(
       children: [
@@ -130,105 +151,44 @@ class _CopaScreenState extends State<CopaScreen>
 }
 }
 
-// ─── HELPER CARD PARTIDO ────────────────────────────────────
+// ─── HELPER CARD PARTIDO (layout vertical HOY) ───────────────
 Widget buildCardPartido(Map<String, dynamic> partido, BuildContext context, OnTapPartido onTap, int leagueId) {
-  final teams = partido['teams'];
-  final goals = partido['goals'];
-  final fixture = partido['fixture'];
-  final status = fixture['status']['short'] as String;
-  final home = teams['home']['name'] as String;
-  final away = teams['away']['name'] as String;
-  final homeId = teams['home']['id'] as int?;
-  final awayId = teams['away']['id'] as int?;
+  final teams = partido['teams'] as Map<String, dynamic>?;
+  final fixture = partido['fixture'] as Map<String, dynamic>?;
+  final goals = partido['goals'] as Map<String, dynamic>?;
+  if (teams == null || fixture == null) return const SizedBox.shrink();
+
+  final home = teams['home']?['name']?.toString() ?? '';
+  final away = teams['away']?['name']?.toString() ?? '';
+  final homeId = teams['home']?['id'] as int?;
+  final awayId = teams['away']?['id'] as int?;
   final fixtureId = fixture['id'] as int?;
   final fechaPartido = fixture['date'] as String?;
-  final hScore = goals['home']?.toString() ?? '-';
-  final aScore = goals['away']?.toString() ?? '-';
+  final status = fixture['status']?['short']?.toString() ?? '';
+  final hScore = goals?['home']?.toString() ?? '-';
+  final aScore = goals?['away']?.toString() ?? '-';
   final marcadorConPen = '$hScore - $aScore${PenalesShootoutHelper.sufijoMarcadorParentesis(partido) ?? ''}';
-  final isLive = status.contains("'") || status == '1H' || status == '2H' || status == 'HT';
+  final isLive = status == '1H' || status == '2H' || status == 'HT' || status == 'ET' || status.contains("'");
   final isFinished = status == 'FT' || status == 'AET' || status == 'PEN';
-  final jugado = isFinished;
 
-  String displayStatus;
-  if (isFinished) {
-    displayStatus = 'FT';
-  } else if (isLive) {
-    displayStatus = status;
-  } else if (status == 'NS') {
-    final date = DateTime.parse(fixture['date'].toString()).toLocal();
-    displayStatus = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  } else {
-    displayStatus = status;
-  }
-
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      Expanded(
-        child: GestureDetector(
-          onTap: () => onTap(
-            context, home, away, marcadorConPen, jugado,
-            fixtureId: fixtureId, homeId: homeId, awayId: awayId,
-            fechaPartido: fechaPartido, isLive: isLive,
-            minuto: isLive ? status : '',
-            sourceLeagueId: leagueId,
-            partidoLista: partido,
-          ),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B2A3B),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(home,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                      textAlign: TextAlign.right,
-                      overflow: TextOverflow.ellipsis),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0D1B2A),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(marcadorConPen,
-                          style: TextStyle(
-                              color: isLive ? const Color(0xFF00C853) : Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(displayStatus,
-                        style: TextStyle(
-                            color: isLive ? const Color(0xFF00C853) : Colors.white38,
-                            fontSize: 11,
-                            fontWeight: isLive ? FontWeight.bold : FontWeight.normal)),
-                  ],
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(away,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      if (!kIsWeb && fixtureId != null) MatchFollowToggle(fixtureId: fixtureId),
-    ],
+  return HoyMatchCard(
+    partido: partido,
+    trailing: !kIsWeb && fixtureId != null ? MatchFollowToggle(fixtureId: fixtureId) : null,
+    onTap: () => onTap(
+      context,
+      home,
+      away,
+      marcadorConPen,
+      isFinished,
+      fixtureId: fixtureId,
+      homeId: homeId,
+      awayId: awayId,
+      fechaPartido: fechaPartido,
+      isLive: isLive,
+      minuto: isLive ? (fixture['status']?['elapsed']?.toString() ?? status) : '',
+      sourceLeagueId: leagueId,
+      partidoLista: partido,
+    ),
   );
 }
 
@@ -249,23 +209,36 @@ class _TabHoy extends StatelessWidget {
         final partidos = snapshot.data ?? [];
         if (partidos.isEmpty) {
           final msg = leagueId == CopaService.leagueCopaArgentina
-              ? 'No hay partidos de Copa Argentina hoy'
-              : 'No hay partidos hoy';
+              ? 'No hay partidos de Copa Argentina en los próximos 7 días'
+              : 'No hay partidos en los próximos 7 días';
           return Center(
             child: Text(msg, style: const TextStyle(color: Colors.white54)),
           );
         }
-        final ordenados = List<Map<String, dynamic>>.from(partidos)
-          ..sort((a, b) {
-            final da = DateTime.tryParse(a['fixture']?['date']?.toString() ?? '');
-            final db = DateTime.tryParse(b['fixture']?['date']?.toString() ?? '');
-            return (da ?? DateTime(2100)).compareTo(db ?? DateTime(2100));
-          });
-        return ListView.builder(
+        final porDia = ApiService.agruparPartidosPorDiaLocal(partidos);
+        final children = <Widget>[];
+        for (final entry in porDia.entries) {
+          children.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, top: 4),
+              child: Text(
+                ApiService.etiquetaDiaAgenda(entry.key),
+                style: const TextStyle(
+                  color: Color(0xFF00E650),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          );
+          for (final p in entry.value) {
+            children.add(buildCardPartido(p, context, onTapPartido, leagueId));
+          }
+        }
+        return ListView(
           padding: const EdgeInsets.all(16),
-          itemCount: ordenados.length,
-          itemBuilder: (context, i) =>
-              buildCardPartido(ordenados[i], context, onTapPartido, leagueId),
+          children: children,
         );
       },
     );

@@ -2,6 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../image_decode_helper.dart';
+import '../paywall_screen.dart';
+import '../services/premium_service.dart';
+import '../services/vota_mundial_service.dart';
 import '../services/vota_service.dart';
 
 /// Card de votación estilo Scouter (local / empate / visitante).
@@ -16,7 +19,11 @@ class VotaWidget extends StatefulWidget {
     required this.jugado,
     required this.isLive,
     this.statusShort,
+    this.mundial = false,
   });
+
+  /// Si `true`, usa Firestore `votos_mundial` (Mundial 2026).
+  final bool mundial;
 
   final int fixtureId;
   final String localName;
@@ -37,8 +44,12 @@ class _VotaWidgetState extends State<VotaWidget> {
   static const _cardBg = Color(0xFF1B2A3B);
 
   bool _submitting = false;
+  bool? _esPremium;
 
   String get _fixtureKey => widget.fixtureId.toString();
+
+  String get _votosCollection =>
+      widget.mundial ? VotaMundialService.collection : VotaService.collectionLiga;
 
   bool get _puedeVotar => VotaService.puedeVotar(
         jugado: widget.jugado,
@@ -81,7 +92,12 @@ class _VotaWidgetState extends State<VotaWidget> {
 
     setState(() => _submitting = true);
     try {
-      await VotaService.castVote(fixtureId: _fixtureKey, uid: uid, voto: voto);
+      await VotaService.castVote(
+        fixtureId: _fixtureKey,
+        uid: uid,
+        voto: voto,
+        collection: _votosCollection,
+      );
     } on VotaAlreadyVotedException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -100,16 +116,31 @@ class _VotaWidgetState extends State<VotaWidget> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _loadPremium();
+  }
+
+  Future<void> _loadPremium() async {
+    final v = await PremiumService.isPremium();
+    if (mounted) setState(() => _esPremium = v);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    final premium =
+        widget.mundial || (_esPremium ?? false) || PremiumService.unlockAllForPreview;
 
     return StreamBuilder<VotaTotals>(
-      stream: VotaService.watchTotals(_fixtureKey),
+      stream: VotaService.watchTotals(_fixtureKey, collection: _votosCollection),
       builder: (context, totalsSnap) {
         final totals = totalsSnap.data ?? VotaTotals.empty;
 
         return StreamBuilder<String?>(
-          stream: uid != null ? VotaService.watchUserVote(_fixtureKey, uid) : Stream.value(null),
+          stream: uid != null
+              ? VotaService.watchUserVote(_fixtureKey, uid, collection: _votosCollection)
+              : Stream.value(null),
           builder: (context, userSnap) {
             final userVote = userSnap.data;
             final yaVoto = userVote != null && userVote.isNotEmpty;
@@ -162,6 +193,8 @@ class _VotaWidgetState extends State<VotaWidget> {
                   const SizedBox(height: 14),
                   if (mostrarBotones)
                     _buildVoteButtons(userVote)
+                  else if (!premium)
+                    _buildResultadosPremiumLock()
                   else
                     _buildResults(totals, userVote, destacarGanador: widget.jugado || widget.isLive || yaVoto),
                   if (_submitting)
@@ -239,6 +272,30 @@ class _VotaWidgetState extends State<VotaWidget> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildResultadosPremiumLock() {
+    return Column(
+      children: [
+        const Text(
+          'Resultados detallados con Premium',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: () async {
+            final ok = await PaywallScreen.open(context);
+            if (ok == true) await _loadPremium();
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: _green,
+            foregroundColor: Colors.black,
+          ),
+          child: const Text('EMPEZAR PRUEBA GRATIS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        ),
+      ],
     );
   }
 

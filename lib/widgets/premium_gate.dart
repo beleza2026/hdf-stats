@@ -2,12 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../paywall_screen.dart';
+import '../services/premium_service.dart';
 
-bool _designerUnlockAll() {
-  const flag = String.fromEnvironment('DESIGNER_UNLOCK_ALL', defaultValue: '');
-  final f = flag.trim().toLowerCase();
-  return f == 'true' || f == '1' || f == 'yes';
-}
+bool _designerUnlockAll() => PremiumService.unlockAllForPreview;
 
 /// Bloquea [child] si el usuario no tiene premium; ofrece abrir [PaywallScreen].
 class PremiumGate extends StatelessWidget {
@@ -18,6 +15,7 @@ class PremiumGate extends StatelessWidget {
     this.title = 'Contenido Premium',
     this.subtitle = 'Activá Premium para ver esta sección.',
     this.compact = false,
+    this.onPremiumChanged,
   });
 
   final bool esPremium;
@@ -25,6 +23,7 @@ class PremiumGate extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool compact;
+  final Future<void> Function()? onPremiumChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +32,7 @@ class PremiumGate extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       compact: compact,
+      onPremiumChanged: onPremiumChanged,
     );
   }
 }
@@ -42,11 +42,13 @@ class _LockedPremiumPanel extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.compact = false,
+    this.onPremiumChanged,
   });
 
   final String title;
   final String subtitle;
   final bool compact;
+  final Future<void> Function()? onPremiumChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -58,8 +60,8 @@ class _LockedPremiumPanel extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.lock_outline, size: compact ? 40 : 52, color: const Color(0xFFFFCA28)),
-            SizedBox(height: compact ? 12 : 16),
+            const Text('🔒', style: TextStyle(fontSize: 40)),
+            SizedBox(height: compact ? 8 : 12),
             Text(
               title,
               textAlign: TextAlign.center,
@@ -79,13 +81,14 @@ class _LockedPremiumPanel extends StatelessWidget {
             if (!kIsWeb)
               FilledButton(
                 onPressed: () async {
-                  await PaywallScreen.open(context);
+                  final ok = await PaywallScreen.open(context);
+                  if (ok == true) await onPremiumChanged?.call();
                 },
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF00C853),
+                  backgroundColor: const Color(0xFF00E650),
                   foregroundColor: Colors.black,
                 ),
-                child: const Text('ACTIVAR PREMIUM', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text('EMPEZAR PRUEBA GRATIS', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
           ],
         ),

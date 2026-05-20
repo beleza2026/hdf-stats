@@ -15,7 +15,6 @@ import 'services/sportmonks_service.dart';
 import 'tabla_rachas_tab.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
 import 'copa_screen.dart';
 import 'copa_service.dart';
 import 'match_follow_service.dart';
@@ -24,11 +23,13 @@ import 'nationality_flags.dart';
 import 'player_career_sheet.dart';
 import 'widgets/datos_mercado_sportmonks_section.dart';
 import 'widgets/sportmonks_lesionados_lpf_section.dart';
+import 'widgets/partido_transmision_argentina.dart';
 import 'widgets/club_sportmonks_header.dart';
 import 'widgets/remontada_liga_tabla_widget.dart';
 import 'widgets/remontada_comparacion_widget.dart';
 import 'widgets/premium_gate.dart';
 import 'paywall_screen.dart';
+import 'services/premium_service.dart';
 import 'image_decode_helper.dart';
 import 'penales_shootout_helper.dart';
 import 'live_section/live_fixture_bundle.dart';
@@ -39,65 +40,13 @@ import 'screens/splash_screen.dart';
 import 'screens/tabla_hinchas_screen.dart';
 import 'screens/mi_cuenta_screen.dart';
 import 'services/hinchas_service.dart';
+import 'app_icons.dart';
+import 'widgets/hoy_match_card.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-}
-
-// ── REVENUECAT PREMIUM SERVICE ────────────────────────────────────────────────
-class PremiumService {
-  static const String _entitlement = 'premium';
-  static const String _rcApiKeyAndroid = 'goog_QRuxqIqpLsLTHWZKcoPKvcYfijG';
-
-  /// Solo en **tu** máquina: `DESIGNER_UNLOCK_ALL=true` en `dart_defines.json` (está en
-  /// `.gitignore`, no va al repo ni a Play Store). Los usuarios finales siempre pasan por RevenueCat.
-  static bool get unlockAllForPreview {
-    const flag = String.fromEnvironment('DESIGNER_UNLOCK_ALL', defaultValue: '');
-    final f = flag.trim().toLowerCase();
-    return f == 'true' || f == '1' || f == 'yes';
-  }
-
-  static Future<void> init() async {
-    await Purchases.setLogLevel(LogLevel.debug);
-    await Purchases.configure(PurchasesConfiguration(_rcApiKeyAndroid));
-  }
-
-  static Future<bool> isPremium() async {
-    if (unlockAllForPreview) return true;
-    try {
-      final info = await Purchases.getCustomerInfo();
-      return info.entitlements.active.containsKey(_entitlement);
-    } catch (e) {
-      debugPrint('RevenueCat isPremium error: $e');
-      return false;
-    }
-  }
-
-  static Future<bool> comprarPremium() async {
-    try {
-      final offerings = await Purchases.getOfferings();
-      final current = offerings.current;
-      if (current == null) return false;
-      final package = current.monthly ?? current.availablePackages.firstOrNull;
-      if (package == null) return false;
-      final result = await Purchases.purchasePackage(package);
-      return result.customerInfo.entitlements.active.containsKey(_entitlement);
-    } catch (e) {
-      debugPrint('RevenueCat comprar error: $e');
-      return false;
-    }
-  }
-
-  static Future<bool> restaurarCompras() async {
-    try {
-      final info = await Purchases.restorePurchases();
-      return info.entitlements.active.containsKey(_entitlement);
-    } catch (e) {
-      debugPrint('RevenueCat restaurar error: $e');
-      return false;
-    }
-  }
 }
 
 Future<Map<String, String>> _fetchClima(String ciudad) async {
@@ -130,7 +79,12 @@ void main() async {
     debugPrint('Firebase Auth anónimo falló: $e');
   }
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  if (!kIsWeb) await PremiumService.init();
+  if (!kIsWeb) {
+    await PremiumService.init();
+    debugPrint(
+      'main: Purchases.configure antes de runApp — configurado=${PremiumService.isConfigured}',
+    );
+  }
   runApp(const HDFStatsApp());
 }
 
@@ -201,7 +155,8 @@ class _MainScreenState extends State<MainScreen> {
     if (mounted) setState(() => _esPremium = v);
   }
 
-  static const Set<int> _indicesSeccionPremium = {3, 6, 8, 11, 12, 13, 14, 16};
+  /// Secciones Liga que abren paywall al entrar (Monitor de Bajas, Remontada, Árbitros…).
+  static const Set<int> _indicesSeccionPremium = {11, 12, 16, 17, 19};
 
   Future<bool> _asegurarPremium() async {
     if (PremiumService.unlockAllForPreview || _esPremium) return true;
@@ -222,6 +177,7 @@ class _MainScreenState extends State<MainScreen> {
       title: title,
       subtitle: subtitle,
       compact: compact,
+      onPremiumChanged: _cargarPremium,
       child: child,
     );
   }
@@ -1025,18 +981,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  final List<Map<String, dynamic>> _sections = [
-    {'icon': Icons.sports_soccer, 'label': 'Partidos de Hoy'},
-    {'icon': Icons.table_chart, 'label': 'Tablas'},
-    {'icon': Icons.sports_soccer, 'label': 'Goleadores'},
-    {'icon': Icons.sports_handball, 'label': 'Arqueros'},
-    {'icon': Icons.calendar_month, 'label': 'Fixture'},
-    {'icon': Icons.live_tv, 'label': 'En Vivo'},
-    {'icon': Icons.auto_graph, 'label': 'Predicción'},
-    {'icon': Icons.public, 'label': 'Mundial'},
-    {'icon': Icons.newspaper, 'label': 'Noticias'},
-  ];
-
   @override
   Widget build(BuildContext context) {
     final Widget shell;
@@ -1052,7 +996,7 @@ class _MainScreenState extends State<MainScreen> {
           backgroundColor: const Color(0xFF0D1B2A),
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF00C853), size: 20),
+            icon: AppIcons.phosphor(AppIcons.back, size: 22, color: AppIcons.accentAlt),
             tooltip: 'Atrás',
             onPressed: _atrasJerarquico,
           ),
@@ -1064,7 +1008,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.home_outlined, color: Colors.white54),
+              icon: AppIcons.phosphor(AppIcons.home, size: 22, color: Colors.white54),
               tooltip: 'Inicio',
               onPressed: _irInicio,
             ),
@@ -1084,7 +1028,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
             Builder(
               builder: (ctx) => IconButton(
-                icon: const Icon(Icons.person_outline, color: Colors.white70),
+                icon: AppIcons.phosphor(AppIcons.cuenta, size: 22, color: Colors.white70),
                 onPressed: () => _mostrarPanelCodigo(ctx),
               ),
             ),
@@ -1335,13 +1279,13 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             _buildDashboardPartidoDestacado(),
             Column(
               children: [
-                _dashBoton('🏆', 'Torneos', 'Liga · Copa · Libertadores', const Color(0xFF00C853), _irTorneos),
+                _dashBoton(AppIcons.torneos, 'Torneos', 'Liga · Copa · Libertadores', AppIcons.accentAlt, _irTorneos),
                 const SizedBox(height: 12),
-                _dashBoton('🌍', 'Mundial 2026', 'Junio · USA, México, Canadá', const Color(0xFF2196F3), () => _irSeccion(7)),
+                _dashBoton(AppIcons.mundial, 'Mundial 2026', 'Junio · USA, México, Canadá', const Color(0xFF2196F3), () => _irSeccion(7)),
                 const SizedBox(height: 12),
-                _dashBoton('📰', 'Noticias', 'Olé · TyC · ESPN', Colors.white54, () => _irSeccion(8)),
+                _dashBoton(AppIcons.noticias, 'Noticias', 'Olé · TyC · ESPN', Colors.white54, () => _irSeccion(8)),
                 const SizedBox(height: 12),
-                _dashBoton('👥', 'Tabla de Hinchas', 'Ranking de fans en la app', const Color(0xFF00E650), () => _irSeccion(18)),
+                _dashBoton(AppIcons.tablaHinchas, 'Tabla de Hinchas', 'Ranking de fans en la app', AppIcons.accent, () => _irSeccion(18)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1351,7 +1295,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
     );
   }
 
-  Widget _dashBoton(String emoji, String titulo, String sub, Color color, VoidCallback onTap) {
+  Widget _dashBoton(PhosphorIconData icon, String titulo, String sub, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1363,14 +1307,22 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(children: [
-          Text(emoji, style: const TextStyle(fontSize: 28)),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(child: AppIcons.phosphor(icon, size: 26, color: color)),
+          ),
           const SizedBox(width: 16),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(titulo, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 2),
             Text(sub, style: const TextStyle(color: Colors.white38, fontSize: 11)),
           ])),
-          Icon(Icons.chevron_right, color: color.withValues(alpha: 0.5), size: 22),
+          AppIcons.phosphor(AppIcons.chevron, size: 20, color: color.withValues(alpha: 0.5)),
         ]),
       ),
     );
@@ -1383,7 +1335,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         backgroundColor: const Color(0xFF0D1B2A),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.home_rounded, color: Color(0xFF00C853)),
+          icon: AppIcons.phosphor(AppIcons.home, size: 24, color: AppIcons.accentAlt),
           onPressed: _irInicio,
         ),
         title: const Text('TORNEOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5)),
@@ -1391,24 +1343,35 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _torneoItem('🇦🇷', 'Liga Argentina', 'LPF · Zona A/B · 2026', true, _irLiga),
-          _torneoItem('🇦🇷', 'Copa Argentina', 'AFA · fixture y tablas', true, _irCopaArgentina),
+          _torneoItem(flagEmoji: '🇦🇷', nombre: 'Liga Argentina', sub: 'LPF · Zona A/B · 2026', activo: true, onTap: _irLiga),
+          _torneoItem(icon: AppIcons.copaArgentina, nombre: 'Copa Argentina', sub: 'AFA · fixture y tablas', activo: true, onTap: _irCopaArgentina),
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-         _torneoItem('🏆', 'Copa Libertadores', 'CONMEBOL 2025', true, _irLibertadores),
-_torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana),
+          _torneoItem(icon: AppIcons.libertadores, nombre: 'Copa Libertadores', sub: 'CONMEBOL 2025', activo: true, onTap: _irLibertadores),
+          _torneoItem(icon: AppIcons.sudamericana, nombre: 'Copa Sudamericana', sub: 'CONMEBOL 2026', activo: true, onTap: _irSudamericana),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          _torneoItem('🇲🇽', 'Liga MX', 'Próximamente', false, null),
-          _torneoItem('🇧🇷', 'Brasileirao', 'Próximamente', false, null),
+          _torneoItem(flagEmoji: '🇲🇽', nombre: 'Liga MX', sub: 'Próximamente', activo: false, onTap: null),
+          _torneoItem(flagEmoji: '🇧🇷', nombre: 'Brasileirao', sub: 'Próximamente', activo: false, onTap: null),
         ],
       ),
     );
   }
 
-  Widget _torneoItem(String flag, String nombre, String sub, bool activo, VoidCallback? onTap) {
+  Widget _torneoItem({
+    PhosphorIconData? icon,
+    String? flagEmoji,
+    required String nombre,
+    required String sub,
+    required bool activo,
+    VoidCallback? onTap,
+  }) {
+    final accent = activo ? AppIcons.accentAlt : Colors.white24;
+    final Widget leadingChild = flagEmoji != null
+        ? Text(flagEmoji, style: const TextStyle(fontSize: 26))
+        : AppIcons.phosphor(icon ?? AppIcons.ligaInternacional, size: 22, color: accent);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1417,18 +1380,25 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
         decoration: BoxDecoration(
           color: const Color(0xFF1B2A3B),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: activo ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.white10),
+          border: Border.all(color: activo ? AppIcons.accentAlt.withValues(alpha: 0.4) : Colors.white10),
         ),
         child: Row(children: [
-          Text(flag, style: const TextStyle(fontSize: 22)),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: (activo ? AppIcons.accentAlt : Colors.white24).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(child: leadingChild),
+          ),
           const SizedBox(width: 14),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(nombre, style: TextStyle(color: activo ? Colors.white : Colors.white54, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 2),
-            Text(sub, style: TextStyle(color: activo ? const Color(0xFF00C853) : Colors.white24, fontSize: 11)),
+            Text(sub, style: TextStyle(color: activo ? AppIcons.accentAlt : Colors.white24, fontSize: 11)),
           ])),
-          if (activo) const Icon(Icons.chevron_right, color: Color(0xFF00C853), size: 20)
-          else const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+          AppIcons.phosphor(AppIcons.chevron, size: 18, color: accent),
         ]),
       ),
     );
@@ -1441,13 +1411,13 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
         backgroundColor: const Color(0xFF0D1B2A),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF00C853), size: 18),
+          icon: AppIcons.phosphor(AppIcons.back, size: 20, color: AppIcons.accentAlt),
           onPressed: _irTorneos,
         ),
         title: const Text('LIGA ARGENTINA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1.5)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.home_rounded, color: Colors.white38),
+            icon: AppIcons.phosphor(AppIcons.home, size: 22, color: Colors.white38),
             onPressed: _irInicio,
           ),
         ],
@@ -1475,7 +1445,7 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  const Icon(Icons.psychology, color: Color(0xFF00C853), size: 16),
+                  AppIcons.phosphor(AppIcons.tablaMoral, size: 18, color: AppIcons.accentAlt),
                   const SizedBox(width: 6),
                   const Text('TABLA MORAL', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   const Spacer(),
@@ -1518,9 +1488,6 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
           ),
           const SizedBox(height: 20),
 
-          SportmonksLesionadosLpfHubCard(onVerTodos: () => _irSeccion(17)),
-          const SizedBox(height: 20),
-
           // Grid secciones
           const Text('SECCIONES', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 10),
@@ -1532,20 +1499,21 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
             crossAxisSpacing: 8,
             childAspectRatio: 0.9,
             children: [
-              _ligaBoton('⚽', 'Partidos de Hoy', 0),
-              _ligaBoton('📊', 'Tablas', 1),
-              _ligaBoton('📅', 'Fixture', 4),
-              _ligaBoton('🔮', 'Predicciones', 6),
-              _ligaBoton('👟', 'Goleadores', 2),
-              _ligaBoton('🧤', 'Arqueros', 3),
-              _ligaBoton('📺', 'En Vivo', 5, badge: _hayEnVivo),
-              _ligaBoton('🟨', 'Al Filo', 11),
-              _ligaBoton('🟥', 'Expulsados', 12),
-              _ligaBoton('📈', 'Tabla Posesión', 13),
-              _ligaBoton('🪢', 'Cuerda Floja', 14),
-              _ligaBoton('🔼', 'Remontada', 16),
-              _ligaBoton('🏥', 'Lesionados', 17),
-              _ligaBotonIcon(Icons.people, 'Tabla Hinchas', 18),
+              _ligaBoton(0, 'Partidos de Hoy'),
+              _ligaBoton(1, 'Tablas'),
+              _ligaBoton(4, 'Fixture'),
+              _ligaBoton(6, 'Predicciones'),
+              _ligaBoton(2, 'Goleadores'),
+              _ligaBoton(3, 'Arqueros'),
+              _ligaBoton(5, 'En Vivo', badge: _hayEnVivo),
+              _ligaBoton(11, 'Al Filo'),
+              _ligaBoton(12, 'Expulsados'),
+              _ligaBoton(13, 'Tabla Posesión'),
+              _ligaBoton(14, 'Cuerda Floja'),
+              _ligaBoton(16, 'Remontada'),
+              _ligaBoton(17, 'Lesionados'),
+              _ligaBoton(18, 'Tabla Hinchas'),
+              _ligaBoton(19, 'Árbitros'),
             ],
            
           ),
@@ -1556,47 +1524,54 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
     );
   }
 
-  Widget _ligaBotonIcon(IconData icon, String label, int index, {bool badge = false}) {
+  Widget _ligaBoton(int index, String label, {bool badge = false}) {
+    final icon = AppIcons.ligaSection(index);
+    final accent = badge ? AppIcons.accentAlt : AppIcons.accent;
+    final locked = !_esPremium && _indicesSeccionPremium.contains(index);
     return GestureDetector(
       onTap: () => _irSeccion(index),
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1B2A3B),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: badge ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.white10),
+          border: Border.all(color: badge ? AppIcons.accentAlt.withValues(alpha: 0.45) : Colors.white10),
         ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, color: const Color(0xFF00E650), size: 22),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(
-            color: badge ? const Color(0xFF00C853) : Colors.white60,
-            fontSize: 9, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
-        ]),
-      ),
-    );
-  }
-
-  Widget _ligaBoton(String emoji, String label, int index, {bool badge = false}) {
-    return GestureDetector(
-      onTap: () => _irSeccion(index),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1B2A3B),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: badge ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.white10),
-        ),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Stack(alignment: Alignment.topRight, children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
-            if (badge) Container(width: 8, height: 8,
-              decoration: const BoxDecoration(color: Color(0xFF00C853), shape: BoxShape.circle)),
+          Stack(clipBehavior: Clip.none, alignment: Alignment.topRight, children: [
+            AppIcons.phosphor(icon, size: 24, color: badge ? AppIcons.accentAlt : accent),
+            if (locked)
+              const Positioned(
+                top: -6,
+                right: -8,
+                child: Text('🔒', style: TextStyle(fontSize: 11)),
+              ),
+            if (badge)
+              Positioned(
+                top: -4,
+                right: locked ? 10 : -6,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(color: AppIcons.accentAlt, shape: BoxShape.circle),
+                ),
+              ),
           ]),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(
-            color: badge ? const Color(0xFF00C853) : Colors.white60,
-            fontSize: 9, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: badge ? AppIcons.accentAlt : Colors.white60,
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                height: 1.15,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ]),
       ),
     );
@@ -1820,22 +1795,22 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
       case 0: return _buildResultados();
       case 1: return _buildTablas();
       case 2: return _buildEquipos();
-      case 3: return _gatePremium(_buildArqueros(), title: 'Arqueros', subtitle: 'Estadísticas de arqueros con Premium.');
+      case 3: return _buildArqueros();
       case 4: return _buildFixture();
       case 5: return _buildEnVivo();
-      case 6: return _gatePremium(_buildPredicciones(), title: 'Predicciones', subtitle: 'Predicciones de la fecha con Premium.');
+      case 6: return _buildPredicciones();
       case 7: return _buildMundial();
-      case 8: return _gatePremium(_buildNoticias(), title: 'Noticias', subtitle: 'Noticias personalizadas con Premium.');
-      case 9: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', emoji: '🏆', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
-      case 10: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', emoji: '🥈', onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
-      case 11: return _gatePremium(_buildAlFilo(), title: 'Al filo', subtitle: 'Tarjetas al filo de suspensión con Premium.');
-      case 12: return _gatePremium(_buildExpulsados(), title: 'Expulsados', subtitle: 'Expulsados de la última fecha con Premium.');
-      case 13: return _gatePremium(_buildTablaPosesion(), title: 'Tabla de posesión', subtitle: 'Posesión promedio por equipo con Premium.');
-      case 14: return _gatePremium(_buildCuerdaFloja(), title: 'Cuerda floja', subtitle: 'DT en zona de riesgo con Premium.');
+      case 8: return _buildNoticias();
+      case 9: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', titleIcon: AppIcons.libertadores, onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
+      case 10: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', titleIcon: AppIcons.sudamericana, onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
+      case 11: return _gatePremium(_buildAlFilo(), title: 'Monitor de Bajas', subtitle: 'Al filo de suspensión con Premium.');
+      case 12: return _gatePremium(_buildExpulsados(), title: 'Monitor de Bajas', subtitle: 'Expulsados y sanciones con Premium.');
+      case 13: return _buildTablaPosesion();
+      case 14: return _buildCuerdaFloja();
       case 15: return CopaScreen(
             leagueId: CopaService.leagueCopaArgentina,
             nombreCopa: 'Copa Argentina',
-            emoji: '🇦🇷',
+            titleIcon: AppIcons.copaArgentina,
             onTapPartido: (ctx, local, visitante, resultado, jugado,
                     {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) =>
                 _mostrarDetalle(ctx, local, visitante, resultado, jugado,
@@ -1849,10 +1824,88 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                     partidoLista: partidoLista,
                     datosFixtureCompletos: true));
       case 16: return _gatePremium(_buildRemontadaLigaSeccion(), title: 'Remontada', subtitle: 'Estadística de remontadas LPF con Premium.');
-      case 17: return _buildLesionadosSportmonks();
+      case 17: return _gatePremium(_buildLesionadosSportmonks(), title: 'Monitor de Bajas', subtitle: 'Lesionados LPF con Premium.');
       case 18: return const TablaHinchasScreen();
+      case 19: return _gatePremium(_tabArbitros(), title: 'Árbitros', subtitle: 'Estadísticas por árbitro con Premium.');
       default: return _buildResultados();
     }
+  }
+
+  Widget _miCuentaPremiumBlock(BuildContext context, void Function(void Function()) setModalState) {
+    if (kIsWeb) {
+      return const Text('Premium disponible en la app móvil.', style: TextStyle(color: Colors.white38, fontSize: 12));
+    }
+    return FutureBuilder<PremiumSubscriptionStatus>(
+      future: PremiumService.getSubscriptionStatus(),
+      builder: (context, snap) {
+        final status = snap.data;
+        final premium = _esPremium || (status?.isPremium ?? false);
+        if (snap.connectionState == ConnectionState.waiting && status == null) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E650)))),
+          );
+        }
+        if (premium) {
+          final trial = status?.isInTrial ?? false;
+          final exp = status?.formatExpirationEs() ?? '—';
+          final plan = status?.planLabel ?? 'Premium';
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E650).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF00E650).withValues(alpha: 0.45)),
+                ),
+                child: const Row(
+                  children: [
+                    Text('PREMIUM ⭐', style: TextStyle(color: Color(0xFF00E650), fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text('Plan: $plan', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text(
+                trial ? 'Período de prueba gratuita' : 'Suscripción activa',
+                style: TextStyle(color: trial ? const Color(0xFFFFCA28) : Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              Text('Vence: $exp', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Activá Premium para desbloquear estadísticas exclusivas.', style: TextStyle(color: Colors.white54, fontSize: 13)),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final ok = await PaywallScreen.open(context);
+                  if (ok == true) {
+                    await _cargarPremium();
+                    if (context.mounted) setModalState(() {});
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00E650),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('VER MATCHGOL PREMIUM', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _mostrarPanelCodigo(BuildContext context) {
@@ -1879,6 +1932,10 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
                 const Spacer(),
                 IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(context)),
               ]),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 12),
+              _miCuentaPremiumBlock(context, setModalState),
+              const SizedBox(height: 16),
               const Divider(color: Colors.white12),
               const SizedBox(height: 12),
         const Text('CÓDIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
@@ -2023,117 +2080,102 @@ _torneoItem('🏆', 'Copa Sudamericana', 'CONMEBOL 2026', true, _irSudamericana)
 
   Widget _buildResultados() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: ApiService.getPartidosHoy(),
+      future: ApiService.getPartidosAgendaArgentina(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('No hay partidos hoy', style: TextStyle(color: Colors.white54)));
+        final partidos = snapshot.data ?? [];
+        if (partidos.isEmpty) {
+          return const Center(
+            child: Text(
+              'No hay partidos argentinos hoy 🇦🇷',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 15),
+            ),
+          );
         }
-        final ligaPartidos = snapshot.data!;
 
-        Widget buildCard(Map<String, dynamic> partido) {
-          final teams = partido['teams'];
-          final goals = partido['goals'];
-          final fixture = partido['fixture'];
-          final status = fixture['status']['short'];
-          final local = teams['home']['name'] as String;
-          final visitante = teams['away']['name'] as String;
-          final homeId = teams['home']['id'] as int?;
-          final awayId = teams['away']['id'] as int?;
-          final golesLocal = goals['home']?.toString() ?? '-';
-          final golesVisitante = goals['away']?.toString() ?? '-';
-          final fixtureId = fixture['id'] as int?;
-          String statusDisplay;
-          bool jugado = false;
-          if (status == 'FT' || status == 'AET' || status == 'PEN') {
-            statusDisplay = 'FT'; jugado = true;
-          } else if (status == '1H' || status == '2H' || status == 'ET') {
-            statusDisplay = "${fixture['status']['elapsed']}'";
-          } else if (status == 'NS') {
-            final date = DateTime.parse(fixture['date'].toString()).toLocal();
-            statusDisplay = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-          } else {
-            statusDisplay = status;
-          }
-          final esFavorito = _equipoFavoritoId != null && _equipoFavoritoId != -1 &&
-              (homeId == _equipoFavoritoId || awayId == _equipoFavoritoId);
-          return _matchCard(local, visitante, golesLocal, golesVisitante, statusDisplay, jugado, fixtureId,
-              homeId: homeId, awayId: awayId, fechaPartido: fixture['date'] as String?, esFavorito: esFavorito, partidoMap: partido);
+        final porDia = ApiService.agruparPartidosPorDiaLocal(partidos);
+        final children = <Widget>[
+          _sectionTitle('PARTIDOS · PRÓXIMA SEMANA'),
+          if (!kIsWeb) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Liga (ambos argentinos) · Libertadores · Sudamericana · Copa Argentina.',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 11, height: 1.35),
+            ),
+          ],
+          const SizedBox(height: 12),
+        ];
+        for (final entry in porDia.entries) {
+          children.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, top: 4),
+              child: Text(
+                ApiService.etiquetaDiaAgenda(entry.key),
+                style: const TextStyle(
+                  color: Color(0xFF00E650),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          );
+          children.addAll(entry.value.map(_hoyPartidoCard));
         }
 
         return ListView(
           padding: const EdgeInsets.all(16),
-          children: [
-            _sectionTitle('PARTIDOS DE HOY'),
-            if (!kIsWeb) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Campana a la derecha: alertas push de ese partido (además de tu equipo favorito y avisos generales).',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 11, height: 1.35),
-              ),
-            ],
-            const SizedBox(height: 12),
-            ...ligaPartidos.map(buildCard),
-          ],
+          children: children,
         );
       },
     );
   }
 
-  Widget _matchCard(String home, String away, String hScore, String aScore, String status, bool jugado, int? fixtureId,
-      {int? homeId, int? awayId, String? fechaPartido, bool esFavorito = false, Map<String, dynamic>? partidoMap}) {
-    final bool isLive = status.contains("'");
-    final bool isFinished = status == 'FT';
-    final marcadorLinea = '$hScore - $aScore${PenalesShootoutHelper.sufijoMarcadorParentesis(partidoMap) ?? ''}';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => _mostrarDetalle(context, home, away, marcadorLinea, jugado || isFinished, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: status, partidoLista: partidoMap),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1B2A3B),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: esFavorito ? const Color(0xFFFFD700).withValues(alpha: 0.8) : isLive ? const Color(0xFF00C853).withValues(alpha: 0.5) : Colors.transparent,
-                  width: esFavorito ? 2.0 : 1.0,
-                ),
-              ),
-              child: Row(children: [
-                Expanded(child: Text(home, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1)),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: const Color(0xFF0D1B2A), borderRadius: BorderRadius.circular(8)),
-                  child: Text(marcadorLinea, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(away, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isLive ? const Color(0xFF00C853).withValues(alpha: 0.2) : isFinished ? Colors.white12 : const Color(0xFF1565C0).withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(status, style: TextStyle(color: isLive ? const Color(0xFF00C853) : Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ]),
-            ),
-          ),
-        ),
-        if (fixtureId != null && fixtureId > 0) ...[
-          const SizedBox(width: 2),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: MatchFollowToggle(fixtureId: fixtureId),
-          ),
-        ],
-      ],
+  Widget _hoyPartidoCard(Map<String, dynamic> partido) {
+    final teams = partido['teams'] as Map<String, dynamic>?;
+    final fixture = partido['fixture'] as Map<String, dynamic>?;
+    final goals = partido['goals'] as Map<String, dynamic>?;
+    if (teams == null || fixture == null) return const SizedBox.shrink();
+
+    final local = teams['home']?['name']?.toString() ?? '';
+    final visitante = teams['away']?['name']?.toString() ?? '';
+    final homeId = teams['home']?['id'] as int?;
+    final awayId = teams['away']?['id'] as int?;
+    final fixtureId = fixture['id'] as int?;
+    final status = fixture['status']?['short']?.toString() ?? '';
+    final isLive = status == '1H' || status == '2H' || status == 'HT' || status == 'ET' || status.contains("'");
+    final isFinished = status == 'FT' || status == 'AET' || status == 'PEN';
+    final hScore = goals?['home']?.toString() ?? '-';
+    final aScore = goals?['away']?.toString() ?? '-';
+    final marcadorLinea = '$hScore - $aScore${PenalesShootoutHelper.sufijoMarcadorParentesis(partido) ?? ''}';
+    final esFavorito = _equipoFavoritoId != null &&
+        _equipoFavoritoId != -1 &&
+        (homeId == _equipoFavoritoId || awayId == _equipoFavoritoId);
+
+    return HoyMatchCard(
+      partido: partido,
+      borderHighlight: esFavorito,
+      trailing: !kIsWeb && fixtureId != null && fixtureId > 0
+          ? MatchFollowToggle(fixtureId: fixtureId)
+          : null,
+      onTap: () => _mostrarDetalle(
+        context,
+        local,
+        visitante,
+        marcadorLinea,
+        isFinished,
+        fixtureId: fixtureId,
+        homeId: homeId,
+        awayId: awayId,
+        fechaPartido: fixture['date'] as String?,
+        isLive: isLive,
+        minuto: isLive ? (fixture['status']?['elapsed']?.toString() ?? status) : '',
+        sourceLeagueId: (partido['league']?['id'] as num?)?.toInt() ?? 128,
+        partidoLista: partido,
+      ),
     );
   }
 
@@ -2782,7 +2824,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 const SizedBox(height: 2),
                 Text(
                   tieneFavorito
-                      ? 'En foco: $teamName · deslizá para actualizar'
+                      ? 'Todas las notas · destacamos las de $teamName'
                       : 'Olé · TyC Sports · ESPN · Liga y copas · deslizá para actualizar',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.48), fontSize: 11, height: 1.3),
                 ),
@@ -2852,17 +2894,13 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                           Icon(Icons.rss_feed_rounded, color: Colors.white.withValues(alpha: 0.2), size: 56),
                           const SizedBox(height: 16),
                           Text(
-                            tieneFavorito
-                                ? 'No encontramos notas recientes que mencionen a $teamName'
-                                : 'No pudimos cargar noticias en este momento',
+                            'No pudimos cargar noticias en este momento',
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600, height: 1.35),
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            tieneFavorito
-                                ? 'Probá otro club en MI CUENTA o deslizá hacia abajo para reintentar.'
-                                : 'Deslizá hacia abajo para reintentar.',
+                            'Deslizá hacia abajo para reintentar.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.white.withValues(alpha: 0.38), fontSize: 12, height: 1.4),
                           ),
@@ -2880,20 +2918,98 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                 setState(() => _noticiasRefreshKey++);
                 await Future<void>.delayed(const Duration(milliseconds: 80));
               },
-              child: ListView.builder(
+              child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                itemCount: noticias.length,
-                itemBuilder: (ctx, i) {
-                  if (i == 0) return _buildNoticiaDestacada(noticias[i]);
-                  return _buildNoticiaCard(noticias[i]);
-                },
+                children: _buildNoticiasLista(noticias, tieneFavorito: tieneFavorito, teamName: teamName),
               ),
             );
           },
         ),
       ),
     ]);
+  }
+
+  List<Widget> _buildNoticiasLista(
+    List<Map<String, dynamic>> noticias, {
+    required bool tieneFavorito,
+    String? teamName,
+  }) {
+    if (!tieneFavorito) {
+      return [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 10, left: 4),
+          child: Text(
+            'TODAS LAS NOTICIAS',
+            style: TextStyle(
+              color: Color(0xFF00E650),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ),
+        for (final n in noticias) _buildNoticiaCard(n),
+      ];
+    }
+
+    final delEquipo = noticias.where((n) => n['esEquipoHincha'] == true).toList();
+    final resto = noticias.where((n) => n['esEquipoHincha'] != true).toList();
+    final out = <Widget>[];
+
+    if (delEquipo.isNotEmpty) {
+      out.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10, left: 4),
+          child: Row(
+            children: [
+              const Icon(Icons.star_rounded, color: Color(0xFF00E650), size: 18),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'DESTACADO · ${teamName ?? 'TU EQUIPO'}',
+                  style: const TextStyle(
+                    color: Color(0xFF00E650),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+              Text(
+                '${delEquipo.length}',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      );
+      for (final n in delEquipo) {
+        out.add(_buildNoticiaDestacada(n, esHincha: true));
+      }
+    }
+
+    if (resto.isNotEmpty) {
+      out.add(
+        Padding(
+          padding: EdgeInsets.only(top: delEquipo.isNotEmpty ? 8 : 0, bottom: 10, left: 4),
+          child: Text(
+            delEquipo.isEmpty ? 'TODAS LAS NOTICIAS' : 'MÁS NOTICIAS',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ),
+      );
+      for (final n in resto) {
+        out.add(_buildNoticiaCard(n));
+      }
+    }
+
+    return out;
   }
 
   Widget _noticiaFuenteMiniChip(String label, Color accent) {
@@ -2991,7 +3107,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     );
   }
 
-  Widget _buildNoticiaDestacada(Map<String, dynamic> noticia) {
+  Widget _buildNoticiaDestacada(Map<String, dynamic> noticia, {bool esHincha = false}) {
     final titulo = noticia['titulo'] as String? ?? '';
     final fecha = noticia['fecha'] as String? ?? '';
     final imagen = noticia['imagen'] as String? ?? '';
@@ -3012,7 +3128,18 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               child: Ink(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 14, offset: const Offset(0, 6))],
+                  border: esHincha
+                      ? Border.all(color: const Color(0xFF00E650).withValues(alpha: 0.65), width: 2)
+                      : null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: esHincha
+                          ? const Color(0xFF00E650).withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                   color: const Color(0xFF152535),
                 ),
                 child: ClipRRect(
@@ -3068,6 +3195,32 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
                             children: [
                               Row(children: [
                                 _noticiaChipFuente(fuente),
+                                if (esHincha) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF00E650).withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF00E650).withValues(alpha: 0.5)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.favorite, color: Color(0xFF00E650), size: 12),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'TU HINCHA',
+                                          style: TextStyle(
+                                            color: Color(0xFF00E650),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                                 const Spacer(),
                                 if (fecha.isNotEmpty)
                                   Row(children: [
@@ -3115,6 +3268,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
     final link = noticia['link'] as String?;
     final descCorta = descripcion.length > 130 ? '${descripcion.substring(0, 130)}…' : descripcion;
     final accent = _noticiaColorFuente(fuente);
+    final esHincha = noticia['esEquipoHincha'] == true;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -3122,7 +3276,14 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         color: const Color(0xFF1B2A3B),
         borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
+        child: Container(
+          decoration: esHincha
+              ? BoxDecoration(
+                  border: Border.all(color: const Color(0xFF00E650).withValues(alpha: 0.35)),
+                  borderRadius: BorderRadius.circular(14),
+                )
+              : null,
+          child: InkWell(
           onTap: () => _abrirLinkNoticia(link),
           child: IntrinsicHeight(
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -3194,6 +3355,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               ),
             ]),
           ),
+        ),
         ),
       ),
     );
@@ -3433,7 +3595,7 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
 
   Widget _buildTablas() {
     return DefaultTabController(
-      length: 13,
+      length: 12,
       child: Column(children: [
         Container(
           color: const Color(0xFF1B2A3B),
@@ -3450,7 +3612,6 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
               Tab(text: 'ULTIMOS 5'),
               Tab(text: '1ER TIEMPO'),
               Tab(text: '2DO TIEMPO'),
-              Tab(text: 'ÁRBITROS'),
               Tab(text: 'MORAL ✨'),
               Tab(text: 'CRUCES 🏆'),
               Tab(text: 'ANUAL 📅'),
@@ -3467,7 +3628,6 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
           _gatePremium(_tabUltimos5(), title: 'Últimos 5', subtitle: 'Forma reciente con Premium.', compact: true),
           _gatePremium(_tabTiempo('first'), title: '1.er tiempo', subtitle: 'Estadísticas del 1.er tiempo con Premium.', compact: true),
           _gatePremium(_tabTiempo('second'), title: '2.do tiempo', subtitle: 'Estadísticas del 2.do tiempo con Premium.', compact: true),
-          _gatePremium(_tabArbitros(), title: 'Árbitros', subtitle: 'Estadísticas por árbitro con Premium.', compact: true),
           _gatePremium(_buildTablaMoral(), title: 'Tabla Moral', subtitle: 'Tabla moral con Premium.', compact: true),
           _gatePremium(_buildCruces(), title: 'Cruces', subtitle: 'Cruces / eliminatorias con Premium.', compact: true),
           _tabAnual(),
@@ -6277,9 +6437,29 @@ Widget _tabTiempo(String tipo) {
                       const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
                     ],
                   ] else ...[
-                    if (modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle) ..._infoPartidoDetalleSheet(arbitro, estadio, ciudad),
+                    if (modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle)
+                      ..._infoPartidoDetalleSheet(
+                        arbitro,
+                        estadio,
+                        ciudad,
+                        local: local,
+                        visitante: visitante,
+                        fechaPartido: rawDate,
+                        homeTeamId: homeId,
+                        awayTeamId: awayId,
+                      ),
                     if (stats != null) ...[
-                      if (!(modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle)) ..._infoPartidoDetalleSheet(arbitro, estadio, ciudad),
+                      if (!(modalDesdeSeccionEnVivo && isLive && !esCopaArgDetalle))
+                        ..._infoPartidoDetalleSheet(
+                          arbitro,
+                          estadio,
+                          ciudad,
+                          local: local,
+                          visitante: visitante,
+                          fechaPartido: rawDate,
+                          homeTeamId: homeId,
+                          awayTeamId: awayId,
+                        ),
                       ..._widgetsVotaDetalle(
                         fixtureId: fixtureId,
                         local: local,
@@ -6709,7 +6889,19 @@ Widget _tabTiempo(String tipo) {
                           const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('Sin formaciones disponibles', style: TextStyle(color: Colors.white38, fontSize: 13))),
                         ],
                       ] else ...[
-                        _prePartidoInfoCard(estadio, ciudad, arbitro, horario, matchDateTime, fuenteCopaArgentina: esCopaArgDetalle),
+                        _prePartidoInfoCard(
+                          estadio,
+                          ciudad,
+                          arbitro,
+                          horario,
+                          matchDateTime,
+                          local: local,
+                          visitante: visitante,
+                          fechaPartido: rawDate,
+                          homeTeamId: homeId,
+                          awayTeamId: awayId,
+                          fuenteCopaArgentina: esCopaArgDetalle,
+                        ),
                         ..._widgetsVotaDetalle(
                           fixtureId: fixtureId,
                           local: local,
@@ -6795,7 +6987,16 @@ Widget _tabTiempo(String tipo) {
   }
 
   /// Árbitro + estadio en el sheet de detalle.
-  List<Widget> _infoPartidoDetalleSheet(String arbitro, String estadio, String ciudad) {
+  List<Widget> _infoPartidoDetalleSheet(
+    String arbitro,
+    String estadio,
+    String ciudad, {
+    required String local,
+    required String visitante,
+    String? fechaPartido,
+    int? homeTeamId,
+    int? awayTeamId,
+  }) {
     final arTxt = (arbitro != 'No disponible' && arbitro.isNotEmpty) ? arbitro : 'No informado por la API';
     final esTxt = estadio.isNotEmpty ? '$estadio${ciudad.isNotEmpty ? " - $ciudad" : ""}' : 'Estadio: no informado por la API';
     return [
@@ -6806,13 +7007,32 @@ Widget _tabTiempo(String tipo) {
           Row(children: [const Icon(Icons.sports, color: Color(0xFF00C853), size: 16), const SizedBox(width: 8), Expanded(child: Text('Árbitro: $arTxt', style: const TextStyle(color: Colors.white70, fontSize: 13)))]),
           const SizedBox(height: 6),
           Row(children: [const Icon(Icons.stadium, color: Color(0xFF00C853), size: 16), const SizedBox(width: 8), Expanded(child: Text(esTxt, style: const TextStyle(color: Colors.white70, fontSize: 13)))]),
+          PartidoTransmisionArgentina(
+            local: local,
+            visitante: visitante,
+            fechaPartido: fechaPartido,
+            homeTeamId: homeTeamId,
+            awayTeamId: awayTeamId,
+          ),
         ]),
       ),
       const SizedBox(height: 8),
     ];
   }
 
-  Widget _prePartidoInfoCard(String estadio, String ciudad, String arbitro, String horario, DateTime? matchDateTime, {bool fuenteCopaArgentina = false}) {
+  Widget _prePartidoInfoCard(
+    String estadio,
+    String ciudad,
+    String arbitro,
+    String horario,
+    DateTime? matchDateTime, {
+    required String local,
+    required String visitante,
+    String? fechaPartido,
+    int? homeTeamId,
+    int? awayTeamId,
+    bool fuenteCopaArgentina = false,
+  }) {
     final arbitroCorto = (arbitro != 'No disponible' && arbitro.isNotEmpty) ? arbitro.split(',')[0].trim() : '';
     return FutureBuilder<Map<String, dynamic>>(
       future: estadio.isNotEmpty ? ApiService.getClimaEstadio(estadio, matchTime: matchDateTime) : Future.value({}),
@@ -6883,6 +7103,12 @@ Widget _tabTiempo(String tipo) {
                   child: Text('Pronóstico al horario del partido', style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic)),
                 ),
             ],
+            PartidoTransmisionArgentina(
+              local: local,
+              visitante: visitante,
+              fechaPartido: fechaPartido ?? matchDateTime?.toIso8601String(),
+              compact: true,
+            ),
           ]),
         );
       },

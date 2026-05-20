@@ -9,6 +9,7 @@ import 'penales_shootout_helper.dart';
 import 'player_career_sheet.dart';
 import 'mundial_premium_widgets.dart';
 import 'widgets/premium_gate.dart';
+import 'widgets/vota_widget.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Detalle / insert de partido Mundial (prematch + jugado en vivo / finalizado)
@@ -35,6 +36,50 @@ int? _intFromDyn(dynamic v) {
 
 /// weekday 1 = lunes … 7 = domingo
 const _diasLunADom = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
+
+({bool isLive, bool isFinished, String statusShort}) _votaEstadoDesdePartido(
+  Map<String, dynamic> partido,
+) {
+  final fixture = partido['fixture'] as Map<String, dynamic>? ?? {};
+  final status = (fixture['status']?['short'] as String? ?? '').toUpperCase();
+  final isLive = const {'1H', '2H', 'HT', 'ET', 'P', 'BT', 'LIVE'}.contains(status);
+  final isFinished = const {'FT', 'AET', 'PEN'}.contains(status);
+  return (isLive: isLive, isFinished: isFinished, statusShort: status);
+}
+
+Widget _mundialVotaSection({
+  required Map<String, dynamic> partido,
+  required String local,
+  required String visitante,
+}) {
+  final fixture = partido['fixture'] as Map<String, dynamic>? ?? {};
+  final fixtureId = fixture['id'] as int?;
+  if (fixtureId == null) return const SizedBox.shrink();
+
+  final teams = partido['teams'] as Map<String, dynamic>? ?? {};
+  final home = teams['home'] as Map<String, dynamic>? ?? {};
+  final away = teams['away'] as Map<String, dynamic>? ?? {};
+  final vota = _votaEstadoDesdePartido(partido);
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _seccion('VOTA'),
+      VotaWidget(
+        fixtureId: fixtureId,
+        localName: local,
+        visitanteName: visitante,
+        homeLogo: home['logo'] as String?,
+        awayLogo: away['logo'] as String?,
+        jugado: vota.isFinished,
+        isLive: vota.isLive,
+        statusShort: vota.statusShort,
+        mundial: true,
+      ),
+      const SizedBox(height: 14),
+    ],
+  );
+}
 
 bool _statusEsModoJugado(String short) {
   return const {
@@ -487,9 +532,9 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.42,
-        maxChildSize: 0.55,
-        minChildSize: 0.32,
+        initialChildSize: 0.52,
+        maxChildSize: 0.72,
+        minChildSize: 0.38,
         expand: false,
         builder: (ctx2, scrollController) => ListView(
           controller: scrollController,
@@ -525,7 +570,9 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            _mundialVotaSection(partido: partido, local: local, visitante: visitante),
+            const SizedBox(height: 12),
             PremiumGate(
               esPremium: false,
               title: 'Insert Premium · Mundial',
@@ -1106,6 +1153,7 @@ Widget _buildListaPrematch({
       const SizedBox(height: 12),
       _prematchInfoCard(estadio, ciudad, arbitro, matchDateTime, venueId: venueId),
       const SizedBox(height: 14),
+      _mundialVotaSection(partido: partido, local: local, visitante: visitante),
       _seccion('PROYECCIÓN AL TÍTULO'),
       mundialFavoritosTituloCard(favoritos, local: local, visitante: visitante),
       const SizedBox(height: 12),
@@ -1280,6 +1328,7 @@ Widget _buildListaJugado({
       const SizedBox(height: 10),
       Row(children: [_badgePremiumMundial()]),
       const SizedBox(height: 12),
+      _mundialVotaSection(partido: partido, local: local, visitante: visitante),
       mundialEstadioFotoTarjeta(
         venueIdJugado,
         venueName: estadio,

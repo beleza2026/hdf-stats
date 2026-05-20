@@ -10,9 +10,14 @@ import 'widgets/premium_gate.dart';
 
 /// Hub Premium: récords, sedes, quiniela, alertas.
 class MundialPremiumHub extends StatefulWidget {
-  const MundialPremiumHub({super.key, required this.esPremium});
+  const MundialPremiumHub({
+    super.key,
+    required this.esPremium,
+    this.onPremiumChanged,
+  });
 
   final bool esPremium;
+  final Future<void> Function()? onPremiumChanged;
 
   @override
   State<MundialPremiumHub> createState() => _MundialPremiumHubState();
@@ -33,8 +38,20 @@ class _MundialPremiumHubState extends State<MundialPremiumHub> {
   @override
   void initState() {
     super.initState();
-    if (widget.esPremium) _load();
-    else setState(() => _loading = false);
+    if (widget.esPremium) {
+      _load();
+    } else {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(MundialPremiumHub oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.esPremium && !oldWidget.esPremium) {
+      setState(() => _loading = true);
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -89,6 +106,7 @@ class _MundialPremiumHubState extends State<MundialPremiumHub> {
         esPremium: false,
         title: 'Extra Premium · Mundial',
         subtitle: 'Récords del torneo, sedes 2026, quiniela, alertas y más.',
+        onPremiumChanged: widget.onPremiumChanged,
         child: const SizedBox.shrink(),
       );
     }
@@ -251,47 +269,102 @@ class _MundialPremiumHubState extends State<MundialPremiumHub> {
     );
   }
 
+  String? _quinielaResultado1X2(String? pred) {
+    if (pred == null || pred.isEmpty) return null;
+    final parts = pred.split(RegExp(r'[-:xX\s]+'));
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0].trim());
+    final a = int.tryParse(parts[1].trim());
+    if (h == null || a == null) return null;
+    if (h > a) return 'local';
+    if (h < a) return 'visitante';
+    return 'empate';
+  }
+
+  Future<void> _guardarQuiniela(int fid, String score) async {
+    await MundialPrefsService.setQuinielaPrediction(fid, score);
+    final q = await MundialPrefsService.getQuiniela();
+    final ft = _fixture
+        .where((x) => const {'FT', 'AET', 'PEN'}.contains(x['fixture']?['status']?['short']))
+        .toList();
+    final pts = await MundialPrefsService.totalPuntosQuiniela(ft);
+    if (mounted) {
+      setState(() {
+        _quiniela = q;
+        _puntosQuiniela = pts;
+      });
+    }
+  }
+
+  Widget _quinielaBtn(String label, bool selected, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF00E650) : const Color(0xFF0D1B2A),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? const Color(0xFF00E650) : Colors.white24,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.black : Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _quinielaTile(Map<String, dynamic> p) {
     final fid = (p['fixture']?['id'] as num?)?.toInt() ?? 0;
     final home = p['teams']?['home']?['name'] ?? '';
     final away = p['teams']?['away']?['name'] ?? '';
-    final ctrl = TextEditingController(text: _quiniela[fid] ?? '');
+    final pred = _quiniela[fid];
+    final sel = _quinielaResultado1X2(pred);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: const Color(0xFF1B2A3B), borderRadius: BorderRadius.circular(10)),
-      child: Row(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A3B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: sel != null ? const Color(0xFF00E650).withValues(alpha: 0.35) : Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Text('$home vs $away', style: const TextStyle(color: Colors.white70, fontSize: 11), maxLines: 2),
+          Text(
+            '$home vs $away',
+            style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+            maxLines: 2,
           ),
-          SizedBox(
-            width: 56,
-            child: TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.text,
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _quinielaBtn('Local', sel == 'local', () => _guardarQuiniela(fid, '1-0')),
+              const SizedBox(width: 6),
+              _quinielaBtn('Empate', sel == 'empate', () => _guardarQuiniela(fid, '0-0')),
+              const SizedBox(width: 6),
+              _quinielaBtn('Visit.', sel == 'visitante', () => _guardarQuiniela(fid, '0-1')),
+            ],
+          ),
+          if (pred != null && pred.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Marcador pronóstico: $pred',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                hintText: '2-1',
-                hintStyle: TextStyle(color: Colors.white24, fontSize: 12),
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF00C853))),
-              ),
-              onSubmitted: (v) async {
-                await MundialPrefsService.setQuinielaPrediction(fid, v);
-                final q = await MundialPrefsService.getQuiniela();
-                final ft = _fixture.where((x) => const {'FT', 'AET', 'PEN'}.contains(x['fixture']?['status']?['short'])).toList();
-                final pts = await MundialPrefsService.totalPuntosQuiniela(ft);
-                if (mounted) setState(() {
-                  _quiniela = q;
-                  _puntosQuiniela = pts;
-                });
-              },
+              style: const TextStyle(color: Color(0xFF00E650), fontSize: 10),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -14,6 +14,9 @@ import 'penales_shootout_helper.dart';
 import 'image_decode_helper.dart';
 import 'nationality_flags.dart';
 import 'widgets/premium_gate.dart';
+import 'screens/predicciones_mundial_screen.dart';
+import 'screens/posesion_mundial_screen.dart';
+import 'services/premium_service.dart';
 
 /// Nombres que devuelve la API a veces no coinciden con el mapa de países; normalizamos para la bandera.
 String _mundialNombreParaBandera(String teamName) {
@@ -235,16 +238,79 @@ class MundialScreen extends StatefulWidget {
 
 class _MundialScreenState extends State<MundialScreen>
     with SingleTickerProviderStateMixin {
+  static const int _tabPosesion = 6;
+  static const int _tabExtra = 9;
+
   late TabController _tabController;
+  int _lastTabIndex = 0;
+  late bool _premiumOk;
+
+  bool get _tienePremiumMundial =>
+      widget.esPremium || _premiumOk || PremiumService.unlockAllForPreview;
+
+  bool get _puedePosesion => _tienePremiumMundial;
+  bool get _puedeExtra => _tienePremiumMundial;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    _premiumOk = widget.esPremium;
+    _tabController = TabController(length: 10, vsync: this);
+    _tabController.addListener(_onTabChanged);
+  }
+
+  @override
+  void didUpdateWidget(MundialScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.esPremium) _premiumOk = true;
+  }
+
+  Future<void> _refrescarPremiumMundial() async {
+    if (await PremiumService.isPremium()) {
+      if (mounted) setState(() => _premiumOk = true);
+    }
+  }
+
+  Future<void> _intentarAccesoTabPremium(int tabIndex) async {
+    if (tabIndex == _tabPosesion && _puedePosesion) return;
+    if (tabIndex == _tabExtra && _puedeExtra) return;
+    await PaywallScreen.open(context);
+    await _refrescarPremiumMundial();
+  }
+
+  bool _tabRequierePremium(int index) =>
+      index == _tabPosesion || index == _tabExtra;
+
+  bool _puedeAccederTab(int index) {
+    if (index == _tabPosesion) return _puedePosesion;
+    if (index == _tabExtra) return _puedeExtra;
+    return true;
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    final idx = _tabController.index;
+    if (_tabRequierePremium(idx) && !_puedeAccederTab(idx)) {
+      final prev = _lastTabIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _intentarAccesoTabPremium(idx);
+        if (!mounted) return;
+        if (!_puedeAccederTab(idx)) {
+          _tabController.animateTo(prev);
+        } else {
+          setState(() {});
+        }
+      });
+      return;
+    }
+    if (!_tabRequierePremium(idx) || _puedeAccederTab(idx)) {
+      _lastTabIndex = idx;
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -280,15 +346,30 @@ class _MundialScreenState extends State<MundialScreen>
           unselectedLabelColor: Colors.white38,
           labelStyle:
               const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          onTap: (index) async {
+            if (_tabRequierePremium(index) && !_puedeAccederTab(index)) {
+              await _intentarAccesoTabPremium(index);
+              if (!mounted) return;
+              if (!_puedeAccederTab(index)) {
+                _tabController.animateTo(_lastTabIndex);
+              } else {
+                setState(() {});
+              }
+            } else {
+              _lastTabIndex = index;
+            }
+          },
           tabs: [
             const Tab(text: 'HOY'),
             const Tab(text: 'FIXTURE'),
             const Tab(text: 'GRUPOS'),
-            Tab(text: widget.esPremium ? 'GOLEADORES' : 'GOLEADORES 🔒'),
-            Tab(text: widget.esPremium ? 'CRUCES' : 'CRUCES 🔒'),
-            Tab(text: widget.esPremium ? 'SIMULADOR' : 'SIMULADOR 🔒'),
-            Tab(text: widget.esPremium ? 'MEJORES ⭐' : 'MEJORES 🔒'),
-            Tab(text: widget.esPremium ? 'EXTRA ⭐' : 'EXTRA 🔒'),
+            Tab(text: _tienePremiumMundial ? 'GOLEADORES' : 'GOLEADORES 🔒'),
+            Tab(text: _tienePremiumMundial ? 'CRUCES' : 'CRUCES 🔒'),
+            const Tab(text: 'PREDICCIONES'),
+            Tab(text: _puedePosesion ? 'POSESIÓN' : 'POSESIÓN 🔒'),
+            Tab(text: _tienePremiumMundial ? 'SIMULADOR' : 'SIMULADOR 🔒'),
+            Tab(text: _tienePremiumMundial ? 'MEJORES ⭐' : 'MEJORES 🔒'),
+            Tab(text: _puedeExtra ? 'EXTRA ⭐' : 'EXTRA 🔒'),
           ],
         ),
       ),
@@ -298,17 +379,26 @@ class _MundialScreenState extends State<MundialScreen>
           _TabHoy(esPremium: widget.esPremium),
           _TabFixture(esPremium: widget.esPremium),
           _TabGrupos(),
-          widget.esPremium
+          _tienePremiumMundial
               ? _TabGoleadores()
               : const _MundialTabPremiumLocked(title: 'Goleadores del Mundial'),
-          widget.esPremium
+          _tienePremiumMundial
               ? _TabCruces()
               : const _MundialTabPremiumLocked(title: 'Cruces del Mundial'),
-          widget.esPremium
+          PrediccionesMundialScreen(esPremium: _tienePremiumMundial),
+          _puedePosesion
+              ? const PosesionMundialScreen()
+              : const SizedBox.shrink(),
+          _tienePremiumMundial
               ? const MundialSimuladorScreen()
               : const _MundialTabPremiumLocked(title: 'Simulador del Mundial'),
-          _TabMejores(esPremium: widget.esPremium),
-          MundialPremiumHub(esPremium: widget.esPremium),
+          _TabMejores(esPremium: _tienePremiumMundial),
+          _puedeExtra
+              ? MundialPremiumHub(
+                  esPremium: true,
+                  onPremiumChanged: _refrescarPremiumMundial,
+                )
+              : const _MundialTabPremiumLocked(title: 'Extra Premium · Mundial'),
         ],
       ),
     );

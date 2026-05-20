@@ -79,7 +79,7 @@ class LiveMatchSectionView extends StatelessWidget {
                   const SizedBox(height: 8),
                   Center(
                     child: Text(
-                      'Liga Profesional · deslizá hacia abajo para actualizar',
+                      'Liga y copas con equipos argentinos · deslizá para actualizar',
                       style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 13),
                       textAlign: TextAlign.center,
                     ),

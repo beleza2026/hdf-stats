@@ -1,6 +1,9 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'paywall_screen.dart';
+import 'services/premium_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Partidos marcados manualmente para notificaciones push.
@@ -105,6 +108,12 @@ class _MatchFollowToggleState extends State<MatchFollowToggle> {
 
   Future<void> _tap() async {
     if (_busy) return;
+    if (!PremiumService.unlockAllForPreview && !await PremiumService.isPremium()) {
+      if (!mounted) return;
+      final ok = await PaywallScreen.open(context);
+      if (!mounted || ok != true) return;
+    }
+    if (!mounted) return;
     setState(() => _busy = true);
     final r = await MatchFollowService.toggle(widget.fixtureId);
     if (!mounted) return;

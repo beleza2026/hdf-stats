@@ -14,7 +14,11 @@ class PartidoDetailVotaSection extends StatelessWidget {
     required this.jugado,
     required this.isLive,
     this.statusShort,
+    this.mundial = false,
   });
+
+  /// Si `true`, persiste en `votos_mundial` (Mundial 2026).
+  final bool mundial;
 
   final int fixtureId;
   final String localName;
@@ -50,6 +54,7 @@ class PartidoDetailVotaSection extends StatelessWidget {
           jugado: jugado,
           isLive: isLive,
           statusShort: statusShort,
+          mundial: mundial,
         ),
         const SizedBox(height: 12),
       ],

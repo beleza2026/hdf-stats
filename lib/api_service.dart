@@ -255,6 +255,91 @@ class ApiService {
     list.sort((a, b) => _fixtureKickoffMs(a).compareTo(_fixtureKickoffMs(b)));
   }
 
+  /// HOY + próximos días (incluye hoy): 0 = solo hoy, 7 = hoy + una semana.
+  static const int ventanaAgendaPartidosDias = 7;
+
+  static ({String from, String to}) _rangoAgendaPartidos({int dias = ventanaAgendaPartidosDias}) {
+    final hoy = _dateOnlyLocal(DateTime.now().toLocal());
+    final hasta = hoy.add(Duration(days: dias));
+    return (from: _ymdApi(hoy), to: _ymdApi(hasta));
+  }
+
+  /// Fixtures en ventana [from, to] (Argentina). Pagina si hace falta.
+  static Future<List<Map<String, dynamic>>> _fixturesLeagueFromToAllPages({
+    required int leagueId,
+    required int season,
+    required String from,
+    required String to,
+  }) async {
+    final out = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final base =
+          'league=$leagueId&season=$season&from=$from&to=$to&timezone=America/Argentina/Buenos_Aires';
+      final uri = page == 1
+          ? Uri.parse('$_baseUrl/fixtures?$base')
+          : Uri.parse('$_baseUrl/fixtures?$base&page=$page');
+      final response = await http.get(uri, headers: _headers);
+      if (response.statusCode != 200) break;
+      final data = jsonDecode(response.body);
+      if (_apiSportsDecodedHasErrors(data)) break;
+      final fixtures = (data as Map)['response'] as List? ?? [];
+      for (final f in fixtures) {
+        out.add(f as Map<String, dynamic>);
+      }
+      final paging = (data as Map)['paging'];
+      final totalPages = paging is Map
+          ? (paging['total'] as num?)?.toInt() ?? 1
+          : 1;
+      if (page >= totalPages || fixtures.isEmpty) break;
+      page++;
+    }
+    return out;
+  }
+
+  static void _mergeFixturesUnicos(
+    List<Map<String, dynamic>> dest,
+    Set<int> ids,
+    List<Map<String, dynamic>> src,
+  ) {
+    for (final f in src) {
+      final id = (f['fixture']?['id'] as num?)?.toInt() ?? 0;
+      if (id <= 0 || ids.contains(id)) continue;
+      ids.add(id);
+      dest.add(f);
+    }
+  }
+
+  /// Agrupa partidos por día local (yyyy-MM-dd), ordenado cronológicamente.
+  static Map<String, List<Map<String, dynamic>>> agruparPartidosPorDiaLocal(
+    List<Map<String, dynamic>> partidos,
+  ) {
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final p in partidos) {
+      final dt = DateTime.tryParse(p['fixture']?['date']?.toString() ?? '')?.toLocal();
+      final key = dt != null ? _ymdApi(_dateOnlyLocal(dt)) : 'sin-fecha';
+      map.putIfAbsent(key, () => []).add(p);
+    }
+    for (final list in map.values) {
+      _sortFixturesByKickoff(list);
+    }
+    final keys = map.keys.toList()..sort();
+    return {for (final k in keys) k: map[k]!};
+  }
+
+  static String etiquetaDiaAgenda(String ymd) {
+    final parts = ymd.split('-');
+    if (parts.length != 3) return ymd.toUpperCase();
+    final d = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+    final hoy = _dateOnlyLocal(DateTime.now().toLocal());
+    final dia = _dateOnlyLocal(d);
+    if (dia == hoy) return 'HOY';
+    if (dia == hoy.add(const Duration(days: 1))) return 'MAÑANA';
+    const wd = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'];
+    const mo = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+    return '${wd[dia.weekday - 1]} ${dia.day} ${mo[dia.month - 1]}';
+  }
+
   /// Fixtures de un día (Argentina). Sin `round` ni `group`; pagina si hace falta.
   static Future<List<Map<String, dynamic>>> _fixturesByDateAllPages({
     required int leagueId,
@@ -287,18 +372,22 @@ class ApiService {
     return out;
   }
 
-  /// Libertadores (13) / Sudamericana (11): todos los partidos del día local, cualquier grupo/ronda.
-  static Future<List<Map<String, dynamic>>> getPartidosHoyConmebol(int leagueId) async {
+  /// Libertadores (13) / Sudamericana (11): partidos en ventana local (hoy + [dias]).
+  static Future<List<Map<String, dynamic>>> getPartidosConmebolProximos(
+    int leagueId, {
+    int dias = ventanaAgendaPartidosDias,
+  }) async {
     if (leagueId != leagueLibertadores && leagueId != leagueSudamericana) {
       return [];
     }
-    final fecha = _ymdApi(DateTime.now().toLocal());
+    final rango = _rangoAgendaPartidos(dias: dias);
     for (final season in [_season, _season - 1]) {
       try {
-        final list = await _fixturesByDateAllPages(
+        final list = await _fixturesLeagueFromToAllPages(
           leagueId: leagueId,
           season: season,
-          fecha: fecha,
+          from: rango.from,
+          to: rango.to,
         );
         if (list.isNotEmpty) {
           _sortFixturesByKickoff(list);
@@ -309,24 +398,160 @@ class ApiService {
     return [];
   }
 
-  static Future<List<Map<String, dynamic>>> getPartidosHoy() async {
-    final fecha = _ymdApi(DateTime.now().toLocal());
+  static Future<List<Map<String, dynamic>>> getPartidosHoyConmebol(int leagueId) =>
+      getPartidosConmebolProximos(leagueId);
+
+  /// Cualquier liga API-Football en ventana local (Copa Argentina, etc.).
+  static Future<List<Map<String, dynamic>>> getPartidosLigaProximos(
+    int leagueId, {
+    int dias = ventanaAgendaPartidosDias,
+    List<int>? seasons,
+  }) async {
+    final rango = _rangoAgendaPartidos(dias: dias);
+    final tries = seasons ?? [_season, _season - 1];
+    for (final season in tries) {
+      try {
+        final list = await _fixturesLeagueFromToAllPages(
+          leagueId: leagueId,
+          season: season,
+          from: rango.from,
+          to: rango.to,
+        );
+        if (list.isNotEmpty) {
+          _sortFixturesByKickoff(list);
+          return list;
+        }
+      } catch (_) {}
+    }
+    return [];
+  }
+
+  static bool _esLigaArgentinaFixture(Map<String, dynamic> f) {
+    final league = f['league'];
+    if (league is! Map) return false;
+    final lid = league['id'];
+    final id = lid is int ? lid : (lid as num?)?.toInt();
+    return id == _ligaArgentina;
+  }
+
+  /// Al menos un club de la nómina LPF (misma que copas en vivo / tabla DT).
+  static bool partidoConClubArgentino(Map<String, dynamic> f) {
+    if (_esLigaArgentinaFixture(f)) return true;
+    final hId = f['teams']?['home']?['id']?.toString() ?? '';
+    final aId = f['teams']?['away']?['id']?.toString() ?? '';
+    return _equiposArgTablaDT.contains(hId) || _equiposArgTablaDT.contains(aId);
+  }
+
+  static List<Map<String, dynamic>> _filtrarPartidosClubArgentino(
+    List<Map<String, dynamic>> list,
+  ) =>
+      list.where(partidoConClubArgentino).toList();
+
+  /// Ambos clubes con `country` Argentina (API-Football; a menudo viene vacío).
+  static bool ambosEquiposArgentinos(Map<String, dynamic> f) {
+    final home = f['teams']?['home']?['country'] as String? ?? '';
+    final away = f['teams']?['away']?['country'] as String? ?? '';
+    if (home == 'Argentina' && away == 'Argentina') return true;
+    return partidoLigaAmbosClubesLpf(f);
+  }
+
+  /// Liga 128 y ambos IDs en nómina LPF (cuando `country` no viene en la API).
+  static bool partidoLigaAmbosClubesLpf(Map<String, dynamic> f) {
+    if (!_esLigaArgentinaFixture(f)) return false;
+    final hId = f['teams']?['home']?['id']?.toString() ?? '';
+    final aId = f['teams']?['away']?['id']?.toString() ?? '';
+    return _equiposArgTablaDT.contains(hId) && _equiposArgTablaDT.contains(aId);
+  }
+
+  static int? _leagueIdFixture(Map<String, dynamic> f) {
+    final league = f['league'];
+    if (league is! Map) return null;
+    final lid = league['id'];
+    return lid is int ? lid : (lid as num?)?.toInt();
+  }
+
+  /// HOY / En vivo: Liga (ambos argentinos), Copa Arg. (todos) y copas CONMEBOL con club argentino.
+  static bool partidoAgendaArgentina(Map<String, dynamic> f) {
+    final lid = _leagueIdFixture(f);
+    if (lid == null) return false;
+    if (lid == _copaArgentina) return true;
+    if (lid == _ligaArgentina) return partidoLigaAmbosClubesLpf(f);
+    if (lid == leagueLibertadores || lid == leagueSudamericana) {
+      return partidoConClubArgentino(f);
+    }
+    return false;
+  }
+
+  /// Liga Profesional (128) en ventana local; solo cruces entre clubes LPF.
+  static Future<List<Map<String, dynamic>>> getPartidosLigaArgentinaProximos({
+    int dias = ventanaAgendaPartidosDias,
+  }) async {
+    final rango = _rangoAgendaPartidos(dias: dias);
+    final porId = <int, Map<String, dynamic>>{};
+    for (final season in [_season, _season - 1]) {
+      try {
+        final raw = await _fixturesLeagueFromToAllPages(
+          leagueId: _ligaArgentina,
+          season: season,
+          from: rango.from,
+          to: rango.to,
+        );
+        for (final f in raw) {
+          if (!partidoLigaAmbosClubesLpf(f)) continue;
+          final id = (f['fixture']?['id'] as num?)?.toInt() ?? 0;
+          if (id <= 0) continue;
+          porId[id] = f;
+        }
+      } catch (_) {}
+    }
+    final list = porId.values.toList();
+    _sortFixturesByKickoff(list);
+    return list;
+  }
+
+  static Future<List<Map<String, dynamic>>> getPartidosHoyLigaArgentina() =>
+      getPartidosLigaArgentinaProximos();
+
+  /// Liga + Libertadores + Sudamericana + Copa Argentina (próxima semana).
+  static Future<List<Map<String, dynamic>>> getPartidosAgendaArgentina({
+    int dias = ventanaAgendaPartidosDias,
+  }) async {
     final todos = <Map<String, dynamic>>[];
+    final ids = <int>{};
     try {
-      final liga = await _fixturesByDateAllPages(
-        leagueId: _ligaArgentina,
-        season: _season,
-        fecha: fecha,
+      _mergeFixturesUnicos(todos, ids, await getPartidosLigaArgentinaProximos(dias: dias));
+      _mergeFixturesUnicos(
+        todos,
+        ids,
+        _filtrarPartidosClubArgentino(
+          await getPartidosConmebolProximos(leagueLibertadores, dias: dias),
+        ),
       );
-      todos.addAll(liga);
-      todos.addAll(await getPartidosHoyConmebol(leagueLibertadores));
-      todos.addAll(await getPartidosHoyConmebol(leagueSudamericana));
+      _mergeFixturesUnicos(
+        todos,
+        ids,
+        _filtrarPartidosClubArgentino(
+          await getPartidosConmebolProximos(leagueSudamericana, dias: dias),
+        ),
+      );
+      _mergeFixturesUnicos(
+        todos,
+        ids,
+        await getPartidosLigaProximos(
+          _copaArgentina,
+          dias: dias,
+          seasons: [_season, _season - 1, 2025, 2024],
+        ),
+      );
       _sortFixturesByKickoff(todos);
       return todos;
     } catch (_) {
       return [];
     }
   }
+
+  static Future<List<Map<String, dynamic>>> getPartidosHoy() =>
+      getPartidosAgendaArgentina();
 
   static DateTime _dateOnlyLocal(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -1415,6 +1640,22 @@ class ApiService {
       return [];
     }
   }
+  /// Señales de TV en Argentina (Sportmonks). Requiere `SPORTMONKS_API_TOKEN`.
+  static Future<List<String>> getCanalesTransmisionArgentina({
+    required String local,
+    required String visitante,
+    String? fechaPartido,
+    int? homeTeamId,
+    int? awayTeamId,
+  }) =>
+      SportmonksService.getCanalesTvArgentina(
+        homeName: local,
+        awayName: visitante,
+        fixtureDateIso: fechaPartido,
+        homeApiFootballId: homeTeamId,
+        awayApiFootballId: awayTeamId,
+      );
+
   static Future<Map<String, dynamic>?> getDetallePartido(int fixtureId) async {
     try {
       final response = await http.get(Uri.parse('$_baseUrl/fixtures?id=$fixtureId'), headers: _headers);
@@ -1641,15 +1882,19 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getPartidosEnVivo() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&live=all'),
+        Uri.parse('$_baseUrl/fixtures?live=all'),
         headers: _headers,
       );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final fixtures = data['response'] as List;
-        return fixtures.map((f) => f as Map<String, dynamic>).toList();
-      }
-      return [];
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body);
+      if (_apiSportsDecodedHasErrors(data)) return [];
+      final raw = (data as Map)['response'] as List? ?? [];
+      final list = raw
+          .map((f) => f as Map<String, dynamic>)
+          .where(partidoAgendaArgentina)
+          .toList();
+      _sortFixturesByKickoff(list);
+      return list;
     } catch (e) {
       return [];
     }
@@ -1675,15 +1920,45 @@ class ApiService {
     }
   }
 
+  /// Partidos finalizados LPF (todas las páginas).
+  static Future<List<Map<String, dynamic>>> _fixturesLigaFtTodasPaginas() async {
+    final out = <Map<String, dynamic>>[];
+    for (final season in [_season, _season - 1]) {
+      var page = 1;
+      while (true) {
+        final base =
+            'league=$_ligaArgentina&season=$season&status=FT&timezone=America/Argentina/Buenos_Aires';
+        final uri = page == 1
+            ? Uri.parse('$_baseUrl/fixtures?$base')
+            : Uri.parse('$_baseUrl/fixtures?$base&page=$page');
+        final response = await http.get(uri, headers: _headers);
+        if (response.statusCode != 200) break;
+        final data = jsonDecode(response.body);
+        if (_apiSportsDecodedHasErrors(data)) break;
+        final fixtures = (data as Map)['response'] as List? ?? [];
+        for (final f in fixtures) {
+          out.add(f as Map<String, dynamic>);
+        }
+        final paging = (data as Map)['paging'];
+        final totalPages = paging is Map
+            ? (paging['total'] as num?)?.toInt() ?? 1
+            : 1;
+        if (page >= totalPages || fixtures.isEmpty) break;
+        page++;
+      }
+    }
+    final porId = <int, Map<String, dynamic>>{};
+    for (final f in out) {
+      final id = (f['fixture']?['id'] as num?)?.toInt() ?? 0;
+      if (id > 0) porId[id] = f;
+    }
+    return porId.values.toList();
+  }
+
   static Future<List<Map<String, dynamic>>> getTablaArbitros() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/fixtures?league=$_ligaArgentina&season=$_season&status=FT'),
-        headers: _headers,
-      );
-      if (response.statusCode != 200) return [];
-      final data = jsonDecode(response.body);
-      final fixtures = (data['response'] as List).cast<Map<String, dynamic>>();
+      final fixtures = await _fixturesLigaFtTodasPaginas();
+      if (fixtures.isEmpty) return [];
 
       final Map<String, Map<String, dynamic>> arbitros = {};
       final List<Map<String, dynamic>> fixturesConArbitro = [];
@@ -3556,48 +3831,62 @@ for (final f in jugados) {
 
   // ══ NOTICIAS RSS ══════════════════════════════════════════════════════════
   // Mapeo de equipos a keywords para filtrar noticias
+  /// IDs API-Sports LPF (misma nómina que `getEquiposLiga` / `_clubInfo` en main).
   static const Map<int, List<String>> _teamKeywords = {
-    435: ['River', 'River Plate', 'Millonario'],
-    433: ['Boca', 'Boca Juniors', 'Xeneize'],
-    440: ['Racing', 'Racing Club', 'Academia'],
-    436: ['Independiente'],
-    437: ['San Lorenzo', 'Ciclón'],
-    438: ['Huracán', 'Huracan', 'Quemero'],
-    442: ['Vélez', 'Velez', 'Fortín'],
-    432: ['Talleres'],
-    443: ['Belgrano'],
-    444: ['Estudiantes'],
-    445: ['Gimnasia'],
-    446: ['Rosario Central', 'Central'],
-    447: ['Newell\'s', 'Newells', 'Lepra'],
-    450: ['Lanús', 'Lanus', 'Granate'],
-    451: ['Banfield'],
-    452: ['Arsenal'],
-    453: ['Tigre'],
-    454: ['Quilmes'],
-    455: ['Platense'],
-    456: ['Sarmiento'],
-    457: ['Colón', 'Colon'],
-    458: ['Unión', 'Union'],
-    459: ['Atlético Tucumán', 'Atletico Tucuman', 'Decano'],
-    460: ['Godoy Cruz', 'Tomba'],
-    461: ['Instituto'],
-    462: ['Riestra', 'Deportivo Riestra'],
+    451: ['Boca', 'Boca Juniors', 'Xeneize', 'Bombonera'],
+    435: ['River', 'River Plate', 'Millonario', 'Monumental'],
+    436: ['Racing', 'Racing Club', 'Academia'],
+    453: ['Independiente', 'Rojo'],
+    460: ['San Lorenzo', 'Ciclón', 'Ciclon'],
+    445: ['Huracán', 'Huracan', 'Globo'],
+    438: ['Vélez', 'Velez', 'Fortín', 'Fortin'],
+    440: ['Belgrano', 'Pirata'],
+    450: ['Estudiantes', 'Pincha'],
+    434: ['Gimnasia', 'Gimnasia La Plata', 'Lobo'],
+    446: ['Lanús', 'Lanus', 'Granate'],
+    449: ['Banfield', 'Taladro'],
+    1064: ['Platense', 'Calamar'],
+    452: ['Tigre', 'Matador'],
+    441: ['Unión', 'Union', 'Tatengue'],
+    456: ['Talleres', 'La T'],
+    457: ['Newell\'s', 'Newells', 'Lepra'],
     463: ['Aldosivi'],
-    464: ['Barracas Central'],
-    465: ['Argentinos Juniors', 'Argentinos', 'Bicho'],
+    2432: ['Barracas', 'Barracas Central'],
+    458: ['Argentinos', 'Argentinos Juniors', 'Bicho'],
+    437: ['Rosario Central', 'Central', 'Canalla'],
+    442: ['Defensa', 'Defensa y Justicia', 'Halcón'],
+    478: ['Instituto', 'Gloria'],
+    476: ['Riestra', 'Deportivo Riestra'],
+    474: ['Sarmiento', 'Verde'],
+    455: ['Atlético Tucumán', 'Atletico Tucuman', 'Decano'],
+    473: ['Independiente Rivadavia', 'Rivadavia'],
+    2424: ['Estudiantes de Río Cuarto', 'Estudiantes Rio Cuarto'],
+    1065: ['Central Córdoba', 'Central Cordoba'],
+    1066: ['Gimnasia Mendoza'],
   };
 
   static List<String> _getKeywordsForTeam(int? teamId, String? teamName) {
+    final out = <String>{};
+    if (teamName != null && teamName.trim().isNotEmpty) {
+      final nombre = teamName.trim();
+      out.add(nombre);
+      for (final p in nombre.split(RegExp(r'[\s.]+'))) {
+        if (p.length > 3) out.add(p);
+      }
+    }
     if (teamId != null && _teamKeywords.containsKey(teamId)) {
-      return _teamKeywords[teamId]!;
+      out.addAll(_teamKeywords[teamId]!);
     }
-    if (teamName != null && teamName.isNotEmpty) {
-      // Fallback: use team name parts
-      final parts = teamName.split(' ').where((p) => p.length > 3).toList();
-      return [teamName, ...parts];
-    }
-    return [];
+    return out.toList();
+  }
+
+  static bool noticiaMencionaEquipo(Map<String, dynamic> n, List<String> keywords) {
+    if (keywords.isEmpty) return false;
+    final title = (n['titulo'] as String? ?? '').toLowerCase();
+    final desc = (n['descripcion'] as String? ?? '').toLowerCase();
+    return keywords.any(
+      (kw) => title.contains(kw.toLowerCase()) || desc.contains(kw.toLowerCase()),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> getNoticias({
@@ -3628,39 +3917,30 @@ for (final f in jugados) {
       } catch (_) {}
     }
 
-    // Filter to Argentina-only news
-    const argKeywords = [
-      'liga profesional', 'lpf', 'apertura', 'clausura', 'afa', 
-      'boca', 'river', 'racing', 'independiente', 'san lorenzo',
-      'huracán', 'huracan', 'vélez', 'velez', 'talleres', 'belgrano',
-      'estudiantes', 'gimnasia', 'rosario central', 'newell', 'lanús', 'lanus',
-      'banfield', 'tigre', 'platense', 'sarmiento', 'colón', 'colon',
-      'unión', 'union', 'atlético tucumán', 'atletico tucuman', 'godoy cruz',
-      'instituto', 'riestra', 'aldosivi', 'barracas', 'argentinos juniors',
-      'quilmes', 'arsenal', 'zona a', 'zona b', 'torneo apertura', 'torneo clausura',
-      'bombonera', 'monumental', 'superclásico', 'superclasico',
-    ];
-
-    final argNoticias = allNoticias.where((n) {
-      final title = (n['titulo'] as String? ?? '').toLowerCase();
-      final desc = (n['descripcion'] as String? ?? '').toLowerCase();
-      return argKeywords.any((kw) => title.contains(kw) || desc.contains(kw));
-    }).toList();
-
-    // Filter by team keywords if provided
-    if (keywords.isNotEmpty) {
-      final filtered = argNoticias.where((n) {
-        final title = (n['titulo'] as String? ?? '').toLowerCase();
-        final desc = (n['descripcion'] as String? ?? '').toLowerCase();
-        return keywords.any((kw) =>
-          title.contains(kw.toLowerCase()) ||
-          desc.contains(kw.toLowerCase()));
-      }).toList();
-      if (filtered.isNotEmpty) return filtered;
-      return [];
+    // Feeds ya son fútbol argentino: todas las notas, sin recortar por palabra clave.
+    final vistos = <String>{};
+    final noticias = <Map<String, dynamic>>[];
+    for (final n in allNoticias) {
+      final link = (n['link'] as String? ?? '').trim();
+      final titulo = (n['titulo'] as String? ?? '').trim();
+      if (titulo.isEmpty) continue;
+      final key = link.isNotEmpty ? link : titulo;
+      if (vistos.contains(key)) continue;
+      vistos.add(key);
+      noticias.add(n);
     }
 
-    return argNoticias;
+    for (final n in noticias) {
+      n['esEquipoHincha'] = noticiaMencionaEquipo(n, keywords);
+    }
+    noticias.sort((a, b) {
+      final ah = a['esEquipoHincha'] == true ? 0 : 1;
+      final bh = b['esEquipoHincha'] == true ? 0 : 1;
+      if (ah != bh) return ah.compareTo(bh);
+      return 0;
+    });
+
+    return noticias;
   }
 
   static List<Map<String, dynamic>> _parseRss(String xml, String feedUrl) {

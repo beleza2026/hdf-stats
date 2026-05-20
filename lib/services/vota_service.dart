@@ -59,18 +59,38 @@ class VotaTotals {
 class VotaAlreadyVotedException implements Exception {}
 
 class VotaService {
-  static DocumentReference<Map<String, dynamic>> _fixtureDoc(String fixtureId) =>
-      FirebaseFirestore.instance.collection('votos').doc(fixtureId);
+  static const String collectionLiga = 'votos';
 
-  static DocumentReference<Map<String, dynamic>> _userDoc(String fixtureId, String uid) =>
-      _fixtureDoc(fixtureId).collection('usuarios').doc(uid);
+  static DocumentReference<Map<String, dynamic>> _fixtureDoc(
+    String fixtureId, {
+    String collection = collectionLiga,
+  }) =>
+      FirebaseFirestore.instance.collection(collection).doc(fixtureId);
 
-  static Stream<VotaTotals> watchTotals(String fixtureId) {
-    return _fixtureDoc(fixtureId).snapshots().map((s) => VotaTotals.fromMap(s.data()));
+  static DocumentReference<Map<String, dynamic>> _userDoc(
+    String fixtureId,
+    String uid, {
+    String collection = collectionLiga,
+  }) =>
+      _fixtureDoc(fixtureId, collection: collection).collection('usuarios').doc(uid);
+
+  static Stream<VotaTotals> watchTotals(
+    String fixtureId, {
+    String collection = collectionLiga,
+  }) {
+    return _fixtureDoc(fixtureId, collection: collection)
+        .snapshots()
+        .map((s) => VotaTotals.fromMap(s.data()));
   }
 
-  static Stream<String?> watchUserVote(String fixtureId, String uid) {
-    return _userDoc(fixtureId, uid).snapshots().map((s) => s.data()?['voto'] as String?);
+  static Stream<String?> watchUserVote(
+    String fixtureId,
+    String uid, {
+    String collection = collectionLiga,
+  }) {
+    return _userDoc(fixtureId, uid, collection: collection)
+        .snapshots()
+        .map((s) => s.data()?['voto'] as String?);
   }
 
   /// Partido próximo: se puede votar. En juego o finalizado: solo resultados.
@@ -96,12 +116,13 @@ class VotaService {
     required String fixtureId,
     required String uid,
     required String voto,
+    String collection = collectionLiga,
   }) async {
     if (voto != 'local' && voto != 'empate' && voto != 'visitante') {
       throw ArgumentError('voto inválido');
     }
-    final fixtureRef = _fixtureDoc(fixtureId);
-    final userRef = _userDoc(fixtureId, uid);
+    final fixtureRef = _fixtureDoc(fixtureId, collection: collection);
+    final userRef = _userDoc(fixtureId, uid, collection: collection);
 
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final userSnap = await tx.get(userRef);
