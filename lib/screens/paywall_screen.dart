@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,44 +53,58 @@ class _PaywallScreenState extends State<PaywallScreen> {
   @override
   void initState() {
     super.initState();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
     debugPrint(
       'Paywall opened - RevenueCat initialized: ${PremiumService.isConfigured}',
     );
-    _cargarOfertas();
-    _logOfferingsDebug();
+    if (!PremiumService.isConfigured) {
+      final ok = await PremiumService.ensureConfigured();
+      debugPrint('Paywall ensureConfigured: $ok');
+      if (mounted) setState(() {});
+    }
+    unawaited(_logOfferingsDebug());
+    unawaited(_cargarOfertas());
   }
 
   Future<void> _logOfferingsDebug() async {
     if (!PremiumService.isConfigured) {
-      debugPrint('Offerings: RevenueCat no configurado (revisá REVENUECAT_API_KEY_IOS)');
+      debugPrint('Offerings: RevenueCat no configurado (REVENUECAT_API_KEY_IOS)');
       return;
     }
     try {
-      final offerings = await Purchases.getOfferings();
-      debugPrint('Offerings: ${offerings.current?.identifier ?? 'null'}');
-      debugPrint(
-        'Offerings current packages: ${offerings.current?.availablePackages.length ?? 0}',
+      final offerings = await Purchases.getOfferings().timeout(
+        const Duration(seconds: 15),
       );
+      debugPrint('Offerings: ${offerings.current?.identifier ?? 'null'}');
     } catch (e) {
       debugPrint('Offerings log error: $e');
     }
   }
 
   Future<void> _cargarOfertas() async {
+    if (!mounted) return;
     setState(() {
       _loadingOfferings = true;
       _loadError = null;
     });
     try {
       if (!PremiumService.isConfigured) {
-        setState(() {
-          _loadingOfferings = false;
-          _loadError = 'Servicio temporalmente no disponible';
-        });
+        if (mounted) {
+          setState(() {
+            _loadingOfferings = false;
+            _loadError = 'Servicio temporalmente no disponible';
+          });
+        }
         return;
       }
-      final offering = await PremiumService.fetchOffering();
+      final offering = await PremiumService.fetchOffering().timeout(
+        const Duration(seconds: 20),
+      );
       debugPrint('Paywall prefetch offering: ${offering?.identifier}');
+      if (!mounted) return;
       if (offering == null) {
         setState(() {
           _loadingOfferings = false;
@@ -98,12 +114,21 @@ class _PaywallScreenState extends State<PaywallScreen> {
       }
       _aplicarOffering(offering);
       setState(() => _loadingOfferings = false);
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _loadingOfferings = false;
+          _loadError = 'Servicio temporalmente no disponible';
+        });
+      }
     } catch (e) {
       debugPrint('Paywall offerings prefetch: $e');
-      setState(() {
-        _loadingOfferings = false;
-        _loadError = 'Servicio temporalmente no disponible';
-      });
+      if (mounted) {
+        setState(() {
+          _loadingOfferings = false;
+          _loadError = 'Servicio temporalmente no disponible';
+        });
+      }
     }
   }
 
@@ -172,29 +197,40 @@ class _PaywallScreenState extends State<PaywallScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  /// CTA principal — nunca `onPressed: null`; refresca offerings al tocar.
+  /// CTA principal — siempre visible y con `onPressed` explícito (nunca null).
   Future<void> _onTrialButtonPressed() async {
     if (_isLoading) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final gate = await DeviceTrialService.verifyTrialAllowedForUser(user);
-      if (!gate.allowed) {
-        _snack(
-          gate.blockMessage ?? 'Prueba no disponible en este dispositivo.',
-        );
-        return;
-      }
-    }
-
+    HapticFeedback.lightImpact();
     setState(() => _isLoading = true);
+
     try {
       if (!PremiumService.isConfigured) {
-        _snack('Servicio temporalmente no disponible');
-        return;
+        final ok = await PremiumService.ensureConfigured();
+        if (!ok) {
+          _snack('Servicio temporalmente no disponible');
+          return;
+        }
       }
 
-      final offerings = await Purchases.getOfferings();
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final gate = await DeviceTrialService.verifyTrialAllowedForUser(user)
+            .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => DeviceTrialGateResult.allowed(),
+        );
+        if (!gate.allowed) {
+          _snack(
+            gate.blockMessage ?? 'Prueba no disponible en este dispositivo.',
+          );
+          return;
+        }
+      }
+
+      final offerings = await Purchases.getOfferings().timeout(
+        const Duration(seconds: 20),
+      );
       debugPrint('Offerings: ${offerings.current?.identifier}');
 
       final offering =
@@ -206,6 +242,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
       }
 
       _aplicarOffering(offering);
+      if (mounted) setState(() {});
+
       final package = _packageDesdeOffering(offering);
       if (package == null) {
         _snack('Servicio temporalmente no disponible');
@@ -236,6 +274,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
         return;
       }
       _snack(_mensajeError(e));
+    } on TimeoutException {
+      _snack('Servicio no disponible, intentá de nuevo');
     } catch (e) {
       debugPrint('Paywall purchase error: $e');
       _snack(_mensajeError(e));
@@ -260,11 +300,15 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   Future<void> _restaurar({bool silentCancel = false}) async {
     if (_isLoading) return;
+    HapticFeedback.selectionClick();
     setState(() => _isLoading = true);
     try {
       if (!PremiumService.isConfigured) {
-        _snack('Servicio temporalmente no disponible');
-        return;
+        final ok = await PremiumService.ensureConfigured();
+        if (!ok) {
+          _snack('Servicio temporalmente no disponible');
+          return;
+        }
       }
       final ok = await PremiumService.restaurarCompras();
       if (!mounted) return;
@@ -286,52 +330,130 @@ class _PaywallScreenState extends State<PaywallScreen> {
     }
   }
 
+  Widget _trialCtaButton() {
+    return Semantics(
+      button: true,
+      enabled: !_isLoading,
+      label: 'Empezar prueba gratis, 7 días gratis',
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: FilledButton(
+          onPressed: _isLoading ? null : () => unawaited(_onTrialButtonPressed()),
+          style: FilledButton.styleFrom(
+            backgroundColor: _green,
+            foregroundColor: Colors.black,
+            disabledBackgroundColor: _green.withValues(alpha: 0.7),
+            disabledForegroundColor: Colors.black54,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: _gold,
+                  ),
+                )
+              : const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'EMPEZAR PRUEBA GRATIS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '7 días gratis',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            Column(
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white54),
-                    onPressed: () {
-                      if (_isLoading) return;
-                      Navigator.pop(context, false);
-                    },
-                  ),
-                ),
-                Expanded(
-                  child: _loadingOfferings
-                      ? const Center(
-                          child: CircularProgressIndicator(color: _gold),
-                        )
-                      : _content(),
-                ),
-              ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white54),
+                onPressed: _isLoading
+                    ? null
+                    : () => Navigator.pop(context, false),
+              ),
             ),
-            if (_isLoading)
-              Container(
-                color: Colors.black54,
-                child: const Center(
-                  child: CircularProgressIndicator(color: _gold),
+            Expanded(child: _scrollContent()),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _trialCtaButton(),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _isLoading ? null : () => unawaited(_restaurar()),
+              child: const Text(
+                'Restaurar compra',
+                style: TextStyle(
+                  color: Colors.white38,
+                  decoration: TextDecoration.underline,
                 ),
               ),
+            ),
+            const Text(
+              'Se cobra automáticamente. Cancelá cuando quieras.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white30, fontSize: 11, height: 1.35),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _content() {
+  Widget _scrollContent() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       child: Column(
         children: [
+          if (_loadingOfferings)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: _gold),
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'Cargando planes…',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
           if (_loadError != null) ...[
             Container(
               width: double.infinity,
@@ -349,8 +471,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          Image.asset('assets/images/matchi.png', height: 120, fit: BoxFit.contain),
-          const SizedBox(height: 12),
+          Image.asset('assets/images/matchi.png', height: 100, fit: BoxFit.contain),
+          const SizedBox(height: 10),
           const Text(
             'MATCHGOL PREMIUM ⭐',
             style: TextStyle(
@@ -365,7 +487,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             'Accedé a todas las estadísticas',
             style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           ..._benefits.map(
             (b) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
@@ -376,14 +498,18 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   Expanded(
                     child: Text(
                       b,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.3),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
           _planCard(
             index: 0,
             titulo: 'MENSUAL',
@@ -398,50 +524,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
             precio: _precioAnualDisplay(),
             subtitulo: '${_precioAnualPorMes()}\nProbá 7 días gratis',
             destacado: true,
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _onTrialButtonPressed,
-              style: FilledButton.styleFrom(
-                backgroundColor: _green,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: _gold,
-                      ),
-                    )
-                  : const Text(
-                      '7 días gratis',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: _restaurar,
-            child: const Text(
-              'Restaurar compra',
-              style: TextStyle(color: Colors.white38, decoration: TextDecoration.underline),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Se cobra automáticamente. Cancelá cuando quieras.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white30, fontSize: 11, height: 1.35),
           ),
         ],
       ),
@@ -462,45 +544,48 @@ class _PaywallScreenState extends State<PaywallScreen> {
             ? _green.withValues(alpha: 0.6)
             : Colors.white24;
 
-    return GestureDetector(
-      onTap: () {
-        if (_isLoading) return;
-        setState(() => _planSeleccionado = index);
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1B2A3B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: selected ? 2 : 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              titulo,
-              style: TextStyle(
-                color: destacado ? _green : Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _isLoading
+            ? null
+            : () => setState(() => _planSeleccionado = index),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B2A3B),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor, width: selected ? 2 : 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                titulo,
+                style: TextStyle(
+                  color: destacado ? _green : Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              precio,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+              const SizedBox(height: 6),
+              Text(
+                precio,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitulo,
-              style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                subtitulo,
+                style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
+              ),
+            ],
+          ),
         ),
       ),
     );

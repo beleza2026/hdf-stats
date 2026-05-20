@@ -78,11 +78,16 @@ void main() async {
     debugPrint('Firebase Auth anónimo falló: $e');
   }
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // RevenueCat: Purchases.configure() DEBE completarse antes de runApp (Guideline 2.1a).
   if (!kIsWeb) {
     await PremiumService.init();
-    debugPrint(
-      'main: Purchases.configure antes de runApp — configurado=${PremiumService.isConfigured}',
-    );
+    if (!PremiumService.isConfigured) {
+      debugPrint(
+        'main: AVISO — RevenueCat no configurado; paywall iOS mostrará mensaje hasta tener REVENUECAT_API_KEY_IOS.',
+      );
+    } else {
+      debugPrint('main: Purchases.configure() OK antes de runApp');
+    }
   }
   runApp(const HDFStatsApp());
 }

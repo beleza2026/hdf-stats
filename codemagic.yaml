@@ -44,6 +44,7 @@ workflows:
       - name: Build IPA
         script: |
           flutter build ipa --release \
+            --dart-define=REVENUECAT_API_KEY_IOS="$REVENUECAT_API_KEY_IOS" \
             --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
     artifacts:
       - build/ios/ipa/*.ipa

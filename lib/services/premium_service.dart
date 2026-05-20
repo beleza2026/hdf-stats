@@ -59,6 +59,10 @@ class PremiumService {
   /// `true` tras `Purchases.configure()` exitoso en `init()`.
   static bool isConfigured = false;
 
+  static bool _apiKeyValid(String key) =>
+      key.isNotEmpty && !key.contains('XXXXXXXXX');
+
+  /// Llamar desde `main()` antes de `runApp()`.
   static Future<void> init() async {
     if (kIsWeb) return;
     isConfigured = false;
@@ -73,14 +77,23 @@ class PremiumService {
       return;
     }
 
-    if (apiKey.isEmpty || apiKey.contains('XXXXXXXXX')) {
-      debugPrint('RevenueCat: API key iOS no configurada (REVENUECAT_API_KEY_IOS).');
+    if (!_apiKeyValid(apiKey)) {
+      debugPrint(
+        'RevenueCat: API key no configurada (iOS: REVENUECAT_API_KEY_IOS en build).',
+      );
       if (Platform.isIOS) return;
     }
 
     await Purchases.configure(PurchasesConfiguration(apiKey));
     isConfigured = true;
     debugPrint('RevenueCat: Purchases.configure() OK (${Platform.isIOS ? 'iOS' : 'Android'})');
+  }
+
+  /// Reintenta `configure` si el paywall se abre sin SDK listo (p. ej. build sin define).
+  static Future<bool> ensureConfigured() async {
+    if (isConfigured) return true;
+    await init();
+    return isConfigured;
   }
 
   static Future<bool> isPremium() async {
