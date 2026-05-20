@@ -42,7 +42,6 @@ import 'screens/mi_cuenta_screen.dart';
 import 'services/hinchas_service.dart';
 import 'app_icons.dart';
 import 'widgets/hoy_match_card.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -996,7 +995,7 @@ class _MainScreenState extends State<MainScreen> {
           backgroundColor: const Color(0xFF0D1B2A),
           elevation: 0,
           leading: IconButton(
-            icon: AppIcons.phosphor(AppIcons.back, size: 22, color: AppIcons.accentAlt),
+            icon: AppIcons.icon(AppIcons.back, size: 22, color: AppIcons.accentAlt),
             tooltip: 'Atrás',
             onPressed: _atrasJerarquico,
           ),
@@ -1008,7 +1007,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
           actions: [
             IconButton(
-              icon: AppIcons.phosphor(AppIcons.home, size: 22, color: Colors.white54),
+              icon: AppIcons.icon(AppIcons.home, size: 22, color: Colors.white54),
               tooltip: 'Inicio',
               onPressed: _irInicio,
             ),
@@ -1028,7 +1027,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
             Builder(
               builder: (ctx) => IconButton(
-                icon: AppIcons.phosphor(AppIcons.cuenta, size: 22, color: Colors.white70),
+                icon: AppIcons.icon(AppIcons.cuenta, size: 22, color: Colors.white70),
                 onPressed: () => _mostrarPanelCodigo(ctx),
               ),
             ),
@@ -1295,7 +1294,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
     );
   }
 
-  Widget _dashBoton(PhosphorIconData icon, String titulo, String sub, Color color, VoidCallback onTap) {
+  Widget _dashBoton(IconData icon, String titulo, String sub, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1314,7 +1313,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Center(child: AppIcons.phosphor(icon, size: 26, color: color)),
+            child: Center(child: AppIcons.icon(icon, size: 26, color: color)),
           ),
           const SizedBox(width: 16),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1322,7 +1321,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             const SizedBox(height: 2),
             Text(sub, style: const TextStyle(color: Colors.white38, fontSize: 11)),
           ])),
-          AppIcons.phosphor(AppIcons.chevron, size: 20, color: color.withValues(alpha: 0.5)),
+          AppIcons.icon(AppIcons.chevron, size: 20, color: color.withValues(alpha: 0.5)),
         ]),
       ),
     );
@@ -1335,7 +1334,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         backgroundColor: const Color(0xFF0D1B2A),
         elevation: 0,
         leading: IconButton(
-          icon: AppIcons.phosphor(AppIcons.home, size: 24, color: AppIcons.accentAlt),
+          icon: AppIcons.icon(AppIcons.home, size: 24, color: AppIcons.accentAlt),
           onPressed: _irInicio,
         ),
         title: const Text('TORNEOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.5)),
@@ -1361,7 +1360,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
   }
 
   Widget _torneoItem({
-    PhosphorIconData? icon,
+    IconData? icon,
     String? flagEmoji,
     required String nombre,
     required String sub,
@@ -1371,7 +1370,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
     final accent = activo ? AppIcons.accentAlt : Colors.white24;
     final Widget leadingChild = flagEmoji != null
         ? Text(flagEmoji, style: const TextStyle(fontSize: 26))
-        : AppIcons.phosphor(icon ?? AppIcons.ligaInternacional, size: 22, color: accent);
+        : AppIcons.icon(icon ?? AppIcons.ligaInternacional, size: 22, color: accent);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1398,7 +1397,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
             const SizedBox(height: 2),
             Text(sub, style: TextStyle(color: activo ? AppIcons.accentAlt : Colors.white24, fontSize: 11)),
           ])),
-          AppIcons.phosphor(AppIcons.chevron, size: 18, color: accent),
+          AppIcons.icon(AppIcons.chevron, size: 18, color: accent),
         ]),
       ),
     );
@@ -1411,13 +1410,13 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         backgroundColor: const Color(0xFF0D1B2A),
         elevation: 0,
         leading: IconButton(
-          icon: AppIcons.phosphor(AppIcons.back, size: 20, color: AppIcons.accentAlt),
+          icon: AppIcons.icon(AppIcons.back, size: 20, color: AppIcons.accentAlt),
           onPressed: _irTorneos,
         ),
         title: const Text('LIGA ARGENTINA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1.5)),
         actions: [
           IconButton(
-            icon: AppIcons.phosphor(AppIcons.home, size: 22, color: Colors.white38),
+            icon: AppIcons.icon(AppIcons.home, size: 22, color: Colors.white38),
             onPressed: _irInicio,
           ),
         ],
@@ -1445,7 +1444,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  AppIcons.phosphor(AppIcons.tablaMoral, size: 18, color: AppIcons.accentAlt),
+                  AppIcons.icon(AppIcons.tablaMoral, size: 18, color: AppIcons.accentAlt),
                   const SizedBox(width: 6),
                   const Text('TABLA MORAL', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   const Spacer(),
@@ -1538,7 +1537,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Stack(clipBehavior: Clip.none, alignment: Alignment.topRight, children: [
-            AppIcons.phosphor(icon, size: 24, color: badge ? AppIcons.accentAlt : accent),
+            AppIcons.icon(icon, size: 24, color: badge ? AppIcons.accentAlt : accent),
             if (locked)
               const Positioned(
                 top: -6,

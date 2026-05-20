@@ -1,87 +1,83 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-/// Iconografía unificada (Phosphor Icons 2.0.0) para MatchGol Stats.
+/// Iconografía unificada (Material Icons) para MatchGol Stats.
 abstract final class AppIcons {
   static const Color accent = Color(0xFF00E650);
   static const Color accentAlt = Color(0xFF00C853);
 
-  static final _s = PhosphorIcons.regular;
-  static final _fill = PhosphorIcons.fill;
-
-  static Widget phosphor(
-    PhosphorIconData icon, {
+  static Widget icon(
+    IconData icon, {
     double size = 24,
     Color? color,
   }) =>
-      PhosphorIcon(icon, size: size, color: color ?? accent);
+      Icon(icon, size: size, color: color ?? accent);
 
   /// Ícono de cada sección del hub Liga (`_selectedIndex`).
-  static PhosphorIconData ligaSection(int index) {
+  static IconData ligaSection(int index) {
     switch (index) {
       case 0:
-        return _s.soccerBall;
+        return Icons.sports_soccer;
       case 1:
-        return _s.table;
+        return Icons.leaderboard;
       case 2:
-        return _s.sneaker;
+        return Icons.sports;
       case 3:
-        return _s.hand;
+        return Icons.sports_handball;
       case 4:
-        return _s.calendar;
+        return Icons.calendar_today;
       case 5:
-        return _s.broadcast;
+        return Icons.live_tv;
       case 6:
-        return _s.chartLineUp;
+        return Icons.show_chart;
       case 7:
-        return _s.globeHemisphereWest;
+        return Icons.public;
       case 8:
-        return _s.newspaper;
+        return Icons.newspaper;
       case 9:
-        return _fill.trophy;
+        return Icons.emoji_events;
       case 10:
-        return _fill.medal;
+        return Icons.military_tech;
       case 11:
-        return _s.warning;
+        return Icons.warning_amber;
       case 12:
-        return _s.prohibit;
+        return Icons.block;
       case 13:
-        return _s.chartPie;
+        return Icons.pie_chart;
       case 14:
-        return _s.trendDown;
+        return Icons.trending_down;
       case 15:
-        return _fill.trophy;
+        return Icons.emoji_events;
       case 16:
-        return _s.trendUp;
+        return Icons.trending_up;
       case 17:
-        return _s.bandaids;
+        return Icons.healing;
       case 18:
-        return _s.usersThree;
+        return Icons.groups;
       case 19:
-        return _s.gavel;
+        return Icons.gavel;
       default:
-        return _s.circle;
+        return Icons.circle_outlined;
     }
   }
 
   // Dashboard principal
-  static PhosphorIconData get torneos => _fill.trophy;
-  static PhosphorIconData get mundial => _fill.globeHemisphereWest;
-  static PhosphorIconData get noticias => _s.newspaper;
-  static PhosphorIconData get tablaHinchas => _fill.usersThree;
+  static const IconData torneos = Icons.emoji_events;
+  static const IconData mundial = Icons.public;
+  static const IconData noticias = Icons.newspaper;
+  static const IconData tablaHinchas = Icons.groups;
 
   // Pantalla Torneos
-  static PhosphorIconData get ligaArgentina => _fill.flag;
-  static PhosphorIconData get copaArgentina => _fill.trophy;
-  static PhosphorIconData get libertadores => _fill.crown;
-  static PhosphorIconData get sudamericana => _fill.medal;
-  static PhosphorIconData get ligaInternacional => _s.globe;
+  static const IconData ligaArgentina = Icons.flag;
+  static const IconData copaArgentina = Icons.emoji_events;
+  static const IconData libertadores = Icons.workspace_premium;
+  static const IconData sudamericana = Icons.military_tech;
+  static const IconData ligaInternacional = Icons.language;
 
   // Navegación / UI
-  static PhosphorIconData get home => _s.house;
-  static PhosphorIconData get back => _s.caretLeft;
-  static PhosphorIconData get cuenta => _s.userCircle;
-  static PhosphorIconData get chevron => _s.caretRight;
-  static PhosphorIconData get enVivo => _fill.broadcast;
-  static PhosphorIconData get tablaMoral => _s.brain;
+  static const IconData home = Icons.home;
+  static const IconData back = Icons.arrow_back;
+  static const IconData cuenta = Icons.account_circle;
+  static const IconData chevron = Icons.chevron_right;
+  static const IconData enVivo = Icons.sensors;
+  static const IconData tablaMoral = Icons.psychology;
 }

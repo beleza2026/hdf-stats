@@ -10,7 +10,6 @@ import 'player_career_sheet.dart';
 import 'image_decode_helper.dart';
 import 'widgets/hoy_match_card.dart';
 import 'app_icons.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 typedef OnTapPartido = void Function(
   BuildContext context,
@@ -35,7 +34,7 @@ class CopaScreen extends StatefulWidget {
   final String nombreCopa;
   /// Si se omite, se usa [titleIcon] en el AppBar.
   final String emoji;
-  final PhosphorIconData? titleIcon;
+  final IconData? titleIcon;
   final OnTapPartido onTapPartido;
 
   /// Cuando la pantalla está embebida en el home (no hay ruta encima), usar esto
@@ -97,7 +96,7 @@ class _CopaScreenState extends State<CopaScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           if (widget.titleIcon != null) ...[
-            AppIcons.phosphor(widget.titleIcon!, size: 22, color: AppIcons.accent),
+            AppIcons.icon(widget.titleIcon!, size: 22, color: AppIcons.accent),
             const SizedBox(width: 8),
           ],
           Flexible(
