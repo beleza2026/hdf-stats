@@ -259,9 +259,21 @@ class _PaywallScreenState extends State<PaywallScreen> {
           customerInfo: result.customerInfo,
         );
       }
-      final activo = result.customerInfo.entitlements.active
-          .containsKey(PremiumService.entitlementId);
-      if (activo && mounted) Navigator.pop(context, true);
+
+      var info = result.customerInfo;
+      var activo = PremiumService.hasPremiumEntitlement(info);
+      if (!activo) {
+        info = await PremiumService.fetchCustomerInfoFresh();
+        activo = PremiumService.hasPremiumEntitlement(info);
+      }
+      debugPrint('Paywall post-purchase premium=$activo trialKeys=${info.entitlements.active.keys}');
+
+      if (!mounted) return;
+      if (activo) {
+        Navigator.pop(context, true);
+      } else {
+        _snack('Compra registrada. Tocá Restaurar compra si el contenido no aparece.');
+      }
     } on PlatformException catch (e) {
       debugPrint('Paywall purchase PlatformException: $e');
       final code = PurchasesErrorHelper.getErrorCode(e);
@@ -331,52 +343,61 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   Widget _trialCtaButton() {
-    return Semantics(
-      button: true,
-      enabled: !_isLoading,
-      label: 'Empezar prueba gratis, 7 días gratis',
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: FilledButton(
-          onPressed: _isLoading ? null : () => unawaited(_onTrialButtonPressed()),
-          style: FilledButton.styleFrom(
-            backgroundColor: _green,
-            foregroundColor: Colors.black,
-            disabledBackgroundColor: _green.withValues(alpha: 0.7),
-            disabledForegroundColor: Colors.black54,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return AbsorbPointer(
+      absorbing: false,
+      child: Semantics(
+        button: true,
+        enabled: true,
+        label: 'Empezar prueba gratis, 14 días gratis',
+        child: Material(
+          color: _green,
+          borderRadius: BorderRadius.circular(12),
+          elevation: 2,
+          child: InkWell(
+            onTap: () {
+              if (_isLoading) return;
+              unawaited(_onTrialButtonPressed());
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: Center(
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: _gold,
+                        ),
+                      )
+                    : const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'EMPEZAR PRUEBA GRATIS',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            '14 días gratis',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
           ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 24,
-                  width: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: _gold,
-                  ),
-                )
-              : const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'EMPEZAR PRUEBA GRATIS',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '7 días gratis',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
         ),
       ),
     );
@@ -410,7 +431,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
             _trialCtaButton(),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: _isLoading ? null : () => unawaited(_restaurar()),
+              onPressed: () {
+                if (_isLoading) return;
+                unawaited(_restaurar());
+              },
               child: const Text(
                 'Restaurar compra',
                 style: TextStyle(
@@ -514,7 +538,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             index: 0,
             titulo: 'MENSUAL',
             precio: _precioMensualDisplay(),
-            subtitulo: 'Probá 7 días gratis',
+            subtitulo: 'Probá 14 días gratis',
             destacado: false,
           ),
           const SizedBox(height: 10),
@@ -522,7 +546,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             index: 1,
             titulo: '⭐ ANUAL  — AHORRÁ 16%',
             precio: _precioAnualDisplay(),
-            subtitulo: '${_precioAnualPorMes()}\nProbá 7 días gratis',
+            subtitulo: '${_precioAnualPorMes()}\nProbá 14 días gratis',
             destacado: true,
           ),
         ],

@@ -274,8 +274,8 @@ class _MundialScreenState extends State<MundialScreen>
   Future<void> _intentarAccesoTabPremium(int tabIndex) async {
     if (tabIndex == _tabPosesion && _puedePosesion) return;
     if (tabIndex == _tabExtra && _puedeExtra) return;
-    await PaywallScreen.open(context);
-    await _refrescarPremiumMundial();
+    final ok = await PaywallScreen.open(context);
+    if (ok == true) await _refrescarPremiumMundial();
   }
 
   bool _tabRequierePremium(int index) =>
@@ -1643,12 +1643,28 @@ class _TabMejoresState extends State<_TabMejores> {
   bool _cargando = true;
   int _pagina = 1;
   bool _hayMas = true;
+  bool _premiumLocal = false;
+
+  bool get _tienePremium => widget.esPremium || _premiumLocal;
 
   @override
   void initState() {
     super.initState();
-    if (widget.esPremium) _cargar();
-    else setState(() => _cargando = false);
+    _premiumLocal = widget.esPremium;
+    if (_tienePremium) {
+      _cargar();
+    } else {
+      setState(() => _cargando = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_TabMejores oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.esPremium && !_premiumLocal) {
+      _premiumLocal = true;
+      if (_jugadores.isEmpty && !_cargando) _cargar();
+    }
   }
 
   Future<void> _cargar() async {
@@ -1665,7 +1681,7 @@ class _TabMejoresState extends State<_TabMejores> {
   @override
   Widget build(BuildContext context) {
     // PAYWALL
-    if (!widget.esPremium) {
+    if (!_tienePremium) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -1680,7 +1696,18 @@ class _TabMejoresState extends State<_TabMejores> {
                 textAlign: TextAlign.center),
             const SizedBox(height: 24),
             GestureDetector(
-              onTap: kIsWeb ? null : () => PaywallScreen.open(context),
+              onTap: kIsWeb
+                  ? null
+                  : () async {
+                      final ok = await PaywallScreen.open(context);
+                      if (ok == true && await PremiumService.isPremium() && mounted) {
+                        setState(() {
+                          _premiumLocal = true;
+                          _cargando = true;
+                        });
+                        await _cargar();
+                      }
+                    },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                 decoration: BoxDecoration(

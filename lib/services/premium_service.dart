@@ -96,11 +96,45 @@ class PremiumService {
     return isConfigured;
   }
 
+  /// Trial activo o suscripción pagada cuentan como premium.
+  static bool hasPremiumEntitlement(CustomerInfo info) {
+    if (info.entitlements.active.containsKey(entitlementId)) {
+      return true;
+    }
+    final ent = info.entitlements.all[entitlementId];
+    if (ent != null && ent.isActive) {
+      return true;
+    }
+    for (final e in info.entitlements.active.values) {
+      if (e.isActive &&
+          (e.periodType == PeriodType.trial ||
+              e.periodType == PeriodType.intro)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Refresca caché de RevenueCat tras compra/restaurar.
+  static Future<CustomerInfo> fetchCustomerInfoFresh() async {
+    try {
+      await Purchases.invalidateCustomerInfoCache();
+    } catch (e) {
+      debugPrint('RevenueCat invalidate cache: $e');
+    }
+    return Purchases.getCustomerInfo();
+  }
+
   static Future<bool> isPremium() async {
     if (unlockAllForPreview) return true;
     try {
       final info = await Purchases.getCustomerInfo();
-      return info.entitlements.active.containsKey(entitlementId);
+      final premium = hasPremiumEntitlement(info);
+      debugPrint(
+        'RevenueCat isPremium=$premium active=${info.entitlements.active.keys} '
+        'allPremium=${info.entitlements.all[entitlementId]?.isActive}',
+      );
+      return premium;
     } catch (e) {
       debugPrint('RevenueCat isPremium error: $e');
       return false;
@@ -119,7 +153,11 @@ class PremiumService {
     }
     try {
       final info = await Purchases.getCustomerInfo();
-      final ent = info.entitlements.active[entitlementId];
+      if (!hasPremiumEntitlement(info)) {
+        return const PremiumSubscriptionStatus(isPremium: false);
+      }
+      final ent = info.entitlements.active[entitlementId] ??
+          info.entitlements.all[entitlementId];
       if (ent == null) {
         return const PremiumSubscriptionStatus(isPremium: false);
       }
@@ -162,7 +200,9 @@ class PremiumService {
   static Future<bool> restaurarCompras() async {
     try {
       final info = await Purchases.restorePurchases();
-      return info.entitlements.active.containsKey(entitlementId);
+      if (hasPremiumEntitlement(info)) return true;
+      final fresh = await fetchCustomerInfoFresh();
+      return hasPremiumEntitlement(fresh);
     } catch (e) {
       debugPrint('RevenueCat restaurar error: $e');
       rethrow;
