@@ -58,6 +58,7 @@ class PremiumService {
 
   /// `true` tras `Purchases.configure()` exitoso en `init()`.
   static bool isConfigured = false;
+  static bool _customerInfoListenerAttached = false;
 
   static bool _apiKeyValid(String key) =>
       key.isNotEmpty && !key.contains('XXXXXXXXX');
@@ -87,6 +88,14 @@ class PremiumService {
     await Purchases.configure(PurchasesConfiguration(apiKey));
     isConfigured = true;
     debugPrint('RevenueCat: Purchases.configure() OK (${Platform.isIOS ? 'iOS' : 'Android'})');
+
+    // TODO: quitar — debug temporal trial / premium
+    if (!_customerInfoListenerAttached) {
+      _customerInfoListenerAttached = true;
+      Purchases.addCustomerInfoUpdateListener((info) {
+        print('RevenueCat OK: ${info.entitlements.active}');
+      });
+    }
   }
 
   /// Reintenta `configure` si el paywall se abre sin SDK listo (p. ej. build sin define).
@@ -98,17 +107,15 @@ class PremiumService {
 
   /// Trial activo o suscripción pagada cuentan como premium.
   static bool hasPremiumEntitlement(CustomerInfo info) {
-    if (info.entitlements.active.containsKey(entitlementId)) {
-      return true;
+    for (final entry in info.entitlements.active.entries) {
+      if (entry.key.toLowerCase() == entitlementId.toLowerCase() &&
+          entry.value.isActive) {
+        return true;
+      }
     }
-    final ent = info.entitlements.all[entitlementId];
-    if (ent != null && ent.isActive) {
-      return true;
-    }
-    for (final e in info.entitlements.active.values) {
-      if (e.isActive &&
-          (e.periodType == PeriodType.trial ||
-              e.periodType == PeriodType.intro)) {
+    for (final entry in info.entitlements.all.entries) {
+      if (entry.key.toLowerCase() == entitlementId.toLowerCase() &&
+          entry.value.isActive) {
         return true;
       }
     }
@@ -126,7 +133,12 @@ class PremiumService {
   }
 
   static Future<bool> isPremium() async {
-    if (unlockAllForPreview) return true;
+    if (unlockAllForPreview) {
+      debugPrint(
+        'RevenueCat isPremium: true (DESIGNER_UNLOCK_ALL — solo desarrollo)',
+      );
+      return true;
+    }
     try {
       final info = await Purchases.getCustomerInfo();
       final premium = hasPremiumEntitlement(info);
