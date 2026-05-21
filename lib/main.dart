@@ -116,7 +116,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  bool _esPremium = PremiumService.unlockAllForPreview;
+  bool _esPremium = false;
   int _selectedIndex = 0;
   bool _showDashboard = true;
   bool _showTorneos = false;
@@ -151,6 +151,13 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _cargarPremium() async {
+    if (PremiumService.forceFreeUi) {
+      debugPrint(
+        'Premium: FORCE_FREE_UI=true — candados activos (false en dart_defines para producción)',
+      );
+      if (mounted) setState(() => _esPremium = false);
+      return;
+    }
     if (PremiumService.unlockAllForPreview) {
       debugPrint(
         'Premium: DESIGNER_UNLOCK_ALL=true — todo desbloqueado (cambiá a false en dart_defines.json)',
@@ -167,11 +174,11 @@ class _MainScreenState extends State<MainScreen> {
   static Set<int> get _indicesSeccionPremium => PremiumAccess.ligaSectionIndicesPremium;
 
   Future<bool> _asegurarPremium() async {
-    if (PremiumService.unlockAllForPreview || _esPremium) return true;
+    if (PremiumService.effectivePremium(_esPremium)) return true;
     if (kIsWeb) return false;
-    final ok = await PaywallScreen.open(context);
-    if (ok == true) await _cargarPremium();
-    return _esPremium;
+    await PaywallScreen.open(context);
+    await _cargarPremium();
+    return PremiumService.effectivePremium(_esPremium);
   }
 
   Widget _gatePremium(
@@ -1356,8 +1363,8 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
           const SizedBox(height: 16),
           const Text('SUDAMÉRICA', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          _torneoItem(icon: AppIcons.libertadores, nombre: 'Copa Libertadores', sub: 'CONMEBOL 2025 · Premium', activo: true, onTap: _irLibertadores, premiumLocked: !_esPremium),
-          _torneoItem(icon: AppIcons.sudamericana, nombre: 'Copa Sudamericana', sub: 'CONMEBOL 2026 · Premium', activo: true, onTap: _irSudamericana, premiumLocked: !_esPremium),
+          _torneoItem(icon: AppIcons.libertadores, nombre: 'Copa Libertadores', sub: 'CONMEBOL 2025 · Premium', activo: true, onTap: _irLibertadores, premiumLocked: !PremiumService.effectivePremium(_esPremium)),
+          _torneoItem(icon: AppIcons.sudamericana, nombre: 'Copa Sudamericana', sub: 'CONMEBOL 2026 · Premium', activo: true, onTap: _irSudamericana, premiumLocked: !PremiumService.effectivePremium(_esPremium)),
           const SizedBox(height: 16),
           const Text('LIGAS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           const SizedBox(height: 8),
@@ -1537,7 +1544,9 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
   Widget _ligaBoton(int index, String label, {bool badge = false}) {
     final icon = AppIcons.ligaSection(index);
     final accent = badge ? AppIcons.accentAlt : AppIcons.accent;
-    final locked = !_esPremium && _indicesSeccionPremium.contains(index);
+    final locked =
+        !PremiumService.effectivePremium(_esPremium) &&
+        _indicesSeccionPremium.contains(index);
     return GestureDetector(
       onTap: () => _irSeccion(index),
       child: Container(
@@ -1869,7 +1878,9 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
       future: PremiumService.getSubscriptionStatus(),
       builder: (context, snap) {
         final status = snap.data;
-        final premium = _esPremium || (status?.isPremium ?? false);
+        final premium = PremiumService.effectivePremium(
+          _esPremium || (status?.isPremium ?? false),
+        );
         if (snap.connectionState == ConnectionState.waiting && status == null) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -1917,11 +1928,9 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
-                  final ok = await PaywallScreen.open(context);
-                  if (ok == true) {
-                    await _cargarPremium();
-                    if (context.mounted) setModalState(() {});
-                  }
+                  await PaywallScreen.open(context);
+                  await _cargarPremium();
+                  if (context.mounted) setModalState(() {});
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00E650),

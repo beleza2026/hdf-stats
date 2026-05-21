@@ -243,8 +243,9 @@ class _MundialScreenState extends State<MundialScreen>
   int _lastTabIndex = 0;
   late bool _premiumOk;
 
-  bool get _tienePremiumMundial =>
-      widget.esPremium || _premiumOk || PremiumService.unlockAllForPreview;
+  bool get _tienePremiumMundial => PremiumService.effectivePremium(
+        widget.esPremium || _premiumOk,
+      );
 
   @override
   void initState() {
@@ -257,19 +258,20 @@ class _MundialScreenState extends State<MundialScreen>
   @override
   void didUpdateWidget(MundialScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.esPremium) _premiumOk = true;
+    if (oldWidget.esPremium != widget.esPremium) {
+      _premiumOk = widget.esPremium;
+    }
   }
 
   Future<void> _refrescarPremiumMundial() async {
-    if (await PremiumService.isPremium()) {
-      if (mounted) setState(() => _premiumOk = true);
-    }
+    final v = await PremiumService.isPremium();
+    if (mounted) setState(() => _premiumOk = v);
   }
 
   Future<void> _intentarAccesoTabPremium(int tabIndex) async {
     if (_puedeAccederTab(tabIndex)) return;
-    final ok = await PaywallScreen.open(context);
-    if (ok == true) await _refrescarPremiumMundial();
+    await PaywallScreen.open(context);
+    await _refrescarPremiumMundial();
   }
 
   bool _tabRequierePremium(int index) =>
@@ -1694,12 +1696,12 @@ class _TabMejoresState extends State<_TabMejores> {
               onTap: kIsWeb
                   ? null
                   : () async {
-                      final ok = await PaywallScreen.open(context);
-                      if (ok == true && await PremiumService.isPremium() && mounted) {
-                        setState(() {
-                          _premiumLocal = true;
-                          _cargando = true;
-                        });
+                      await PaywallScreen.open(context);
+                      final v = await PremiumService.isPremium();
+                      if (!mounted) return;
+                      setState(() => _premiumLocal = v);
+                      if (v) {
+                        setState(() => _cargando = true);
                         await _cargar();
                       }
                     },

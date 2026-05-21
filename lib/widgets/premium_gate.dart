@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import '../paywall_screen.dart';
 import '../services/premium_service.dart';
 
-bool _designerUnlockAll() => PremiumService.unlockAllForPreview;
-
 /// Bloquea [child] si el usuario no tiene premium; ofrece abrir [PaywallScreen].
 class PremiumGate extends StatelessWidget {
   const PremiumGate({
@@ -27,7 +25,7 @@ class PremiumGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (esPremium || _designerUnlockAll()) return child;
+    if (PremiumService.effectivePremium(esPremium)) return child;
     return _LockedPremiumPanel(
       title: title,
       subtitle: subtitle,
@@ -81,8 +79,8 @@ class _LockedPremiumPanel extends StatelessWidget {
             if (!kIsWeb)
               FilledButton(
                 onPressed: () async {
-                  final ok = await PaywallScreen.open(context);
-                  if (ok == true) await onPremiumChanged?.call();
+                  await PaywallScreen.open(context);
+                  await onPremiumChanged?.call();
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF00E650),

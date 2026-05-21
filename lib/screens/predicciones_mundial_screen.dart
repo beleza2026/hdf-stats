@@ -230,10 +230,7 @@ class _PrediccionesMundialScreenState extends State<PrediccionesMundialScreen> {
                 title: 'Predicción HDF™',
                 subtitle: 'Activá Premium para ver los porcentajes de la IA.',
                 compact: true,
-                onPremiumChanged: () async {
-                  final ok = await PaywallScreen.open(context);
-                  if (ok == true) await _refrescarPremium();
-                },
+                onPremiumChanged: _refrescarPremium,
                 child: Column(
                   children: [
                     _barraPred('${flagH.isNotEmpty ? '$flagH ' : ''}${p.homeName}', p.pctLocal, destacado: p.predichoKey == 'local'),

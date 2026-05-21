@@ -38,7 +38,8 @@ class PremiumSubscriptionStatus {
 class PremiumService {
   PremiumService._();
 
-  static const String entitlementId = 'premium';
+  /// Debe coincidir con el entitlement en RevenueCat (p. ej. `Premium`).
+  static const String entitlementId = 'Premium';
   static const String productMonthly = 'matchgol_monthly';
   static const String productAnnual = 'matchgol_annual';
   static const String offeringId = 'default_matchgol';
@@ -50,10 +51,30 @@ class PremiumService {
     defaultValue: 'appl_XXXXXXXXX',
   );
 
-  static bool get unlockAllForPreview {
-    const flag = String.fromEnvironment('DESIGNER_UNLOCK_ALL', defaultValue: '');
+  static bool _envFlagTrue(String name) {
+    final flag = String.fromEnvironment(name, defaultValue: '');
     final f = flag.trim().toLowerCase();
     return f == 'true' || f == '1' || f == 'yes';
+  }
+
+  static bool get unlockAllForPreview => _envFlagTrue('DESIGNER_UNLOCK_ALL');
+
+  /// Solo desarrollo: ignora suscripción RC y muestra candados (probar modo FREE).
+  static bool get forceFreeUi => _envFlagTrue('FORCE_FREE_UI');
+
+  /// Usar en UI gates: por defecto FREE; solo true con sub real o DESIGNER_UNLOCK_ALL.
+  static bool effectivePremium(bool fromCache) {
+    if (forceFreeUi) return false;
+    if (unlockAllForPreview) return true;
+    return fromCache == true;
+  }
+
+  /// Solo entitlements en `active` (nunca inferir desde `all`).
+  static EntitlementInfo? _entitlementInfo(CustomerInfo info) {
+    for (final e in info.entitlements.active.entries) {
+      if (e.key.toLowerCase() == entitlementId.toLowerCase()) return e.value;
+    }
+    return null;
   }
 
   /// `true` tras `Purchases.configure()` exitoso en `init()`.
@@ -105,21 +126,11 @@ class PremiumService {
     return isConfigured;
   }
 
-  /// Trial activo o suscripción pagada cuentan como premium.
+  /// Trial activo o suscripción pagada cuentan como premium (solo mapa `active`).
   static bool hasPremiumEntitlement(CustomerInfo info) {
-    for (final entry in info.entitlements.active.entries) {
-      if (entry.key.toLowerCase() == entitlementId.toLowerCase() &&
-          entry.value.isActive) {
-        return true;
-      }
-    }
-    for (final entry in info.entitlements.all.entries) {
-      if (entry.key.toLowerCase() == entitlementId.toLowerCase() &&
-          entry.value.isActive) {
-        return true;
-      }
-    }
-    return false;
+    if (info.entitlements.active.isEmpty) return false;
+    final ent = _entitlementInfo(info);
+    return ent != null && ent.isActive;
   }
 
   /// Refresca caché de RevenueCat tras compra/restaurar.
@@ -133,6 +144,12 @@ class PremiumService {
   }
 
   static Future<bool> isPremium() async {
+    if (forceFreeUi) {
+      debugPrint(
+        'RevenueCat isPremium: false (FORCE_FREE_UI — probando candados sin sub)',
+      );
+      return false;
+    }
     if (unlockAllForPreview) {
       debugPrint(
         'RevenueCat isPremium: true (DESIGNER_UNLOCK_ALL — solo desarrollo)',
@@ -142,9 +159,10 @@ class PremiumService {
     try {
       final info = await Purchases.getCustomerInfo();
       final premium = hasPremiumEntitlement(info);
+      final ent = _entitlementInfo(info);
       debugPrint(
         'RevenueCat isPremium=$premium active=${info.entitlements.active.keys} '
-        'allPremium=${info.entitlements.all[entitlementId]?.isActive}',
+        'entitlement=${ent?.identifier} trial=${ent?.periodType}',
       );
       return premium;
     } catch (e) {
@@ -154,6 +172,12 @@ class PremiumService {
   }
 
   static Future<PremiumSubscriptionStatus> getSubscriptionStatus() async {
+    if (forceFreeUi) {
+      return const PremiumSubscriptionStatus(isPremium: false);
+    }
+    if (!isConfigured) {
+      return const PremiumSubscriptionStatus(isPremium: false);
+    }
     if (unlockAllForPreview) {
       return const PremiumSubscriptionStatus(
         isPremium: true,
@@ -168,8 +192,7 @@ class PremiumService {
       if (!hasPremiumEntitlement(info)) {
         return const PremiumSubscriptionStatus(isPremium: false);
       }
-      final ent = info.entitlements.active[entitlementId] ??
-          info.entitlements.all[entitlementId];
+      final ent = _entitlementInfo(info);
       if (ent == null) {
         return const PremiumSubscriptionStatus(isPremium: false);
       }

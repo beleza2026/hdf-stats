@@ -130,7 +130,8 @@ class _VotaWidgetState extends State<VotaWidget> {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final premium =
-        widget.mundial || (_esPremium ?? false) || PremiumService.unlockAllForPreview;
+        widget.mundial ||
+            PremiumService.effectivePremium(_esPremium ?? false);
 
     return StreamBuilder<VotaTotals>(
       stream: VotaService.watchTotals(_fixtureKey, collection: _votosCollection),
@@ -286,8 +287,8 @@ class _VotaWidgetState extends State<VotaWidget> {
         const SizedBox(height: 12),
         FilledButton(
           onPressed: () async {
-            final ok = await PaywallScreen.open(context);
-            if (ok == true) await _loadPremium();
+            await PaywallScreen.open(context);
+            await _loadPremium();
           },
           style: FilledButton.styleFrom(
             backgroundColor: _green,
