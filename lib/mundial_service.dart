@@ -1,3 +1,5 @@
+import 'competition_name_helper.dart';
+import 'competition_name_helper.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -1522,7 +1524,7 @@ class MundialService {
 
       final team = childMap(st?['team']);
       final league = childMap(st?['league']);
-      var etiqueta = league['name'] as String? ?? '';
+      var etiqueta = sanitizarNombreCompetencia(league['name'] as String? ?? '');
       if (etiqueta.isEmpty) etiqueta = team['name'] as String? ?? 'Sin club';
       if (etiqueta.trim().isEmpty) etiqueta = 'Otro';
       porLiga[etiqueta] = (porLiga[etiqueta] ?? 0) + 1;

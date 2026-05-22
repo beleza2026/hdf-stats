@@ -287,7 +287,9 @@ class _VotaWidgetState extends State<VotaWidget> {
         const SizedBox(height: 12),
         FilledButton(
           onPressed: () async {
-            await PaywallScreen.open(context);
+            if (!PremiumService.shouldBypassPaywall) {
+              await PaywallScreen.open(context);
+            }
             await _loadPremium();
           },
           style: FilledButton.styleFrom(

@@ -51,16 +51,29 @@ class PremiumService {
     defaultValue: 'appl_XXXXXXXXX',
   );
 
-  static bool _envFlagTrue(String name) {
-    final flag = String.fromEnvironment(name, defaultValue: '');
-    final f = flag.trim().toLowerCase();
+  /// Valores crudos de `--dart-define-from-file` (deben ser [const] con nombre literal).
+  static const String designerUnlockAllRaw = String.fromEnvironment(
+    'DESIGNER_UNLOCK_ALL',
+    defaultValue: '',
+  );
+  static const String forceFreeUiRaw = String.fromEnvironment(
+    'FORCE_FREE_UI',
+    defaultValue: '',
+  );
+
+  /// `"true"` / `"1"` / `"yes"` desde [dart_defines.json] (no usar [bool.fromEnvironment]).
+  static bool _parseEnvBool(String raw) {
+    final f = raw.trim().toLowerCase();
     return f == 'true' || f == '1' || f == 'yes';
   }
 
-  static bool get unlockAllForPreview => _envFlagTrue('DESIGNER_UNLOCK_ALL');
+  static bool get unlockAllForPreview => _parseEnvBool(designerUnlockAllRaw);
 
   /// Solo desarrollo: ignora suscripción RC y muestra candados (probar modo FREE).
-  static bool get forceFreeUi => _envFlagTrue('FORCE_FREE_UI');
+  static bool get forceFreeUi => _parseEnvBool(forceFreeUiRaw);
+
+  /// Modo diseño: nunca abrir paywall; acceso total sin RevenueCat.
+  static bool get shouldBypassPaywall => unlockAllForPreview;
 
   /// Usar en UI gates: por defecto FREE; solo true con sub real o DESIGNER_UNLOCK_ALL.
   static bool effectivePremium(bool fromCache) {

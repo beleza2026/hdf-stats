@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../device_trial_service.dart';
 import '../services/premium_service.dart';
@@ -12,7 +15,14 @@ import '../services/premium_service.dart';
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key});
 
+  /// Abre el paywall salvo [PremiumService.shouldBypassPaywall] (DESIGNER_UNLOCK_ALL).
   static Future<bool?> open(BuildContext context) {
+    if (PremiumService.shouldBypassPaywall) {
+      debugPrint(
+        'PaywallScreen.open: omitido — DESIGNER_UNLOCK_ALL (sin RevenueCat ni offerings)',
+      );
+      return Future<bool?>.value(true);
+    }
     return Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -50,10 +60,20 @@ class _PaywallScreenState extends State<PaywallScreen> {
   /// 0 = mensual, 1 = anual (recomendado).
   int _planSeleccionado = 1;
 
+  final TextEditingController _codigoCortesiaController = TextEditingController();
+  String? _codigoCortesiaMensaje;
+  bool _codigoCortesiaCargando = false;
+
   @override
   void initState() {
     super.initState();
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    _codigoCortesiaController.dispose();
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -195,6 +215,202 @@ class _PaywallScreenState extends State<PaywallScreen> {
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _abrirUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _snack('No se pudo abrir el enlace');
+    }
+  }
+
+  Widget _legalLinksRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        TextButton(
+          onPressed: () => _abrirUrl(
+            'https://willowy-moonbeam-415d5b.netlify.app',
+          ),
+          child: const Text(
+            'Política de Privacidad',
+            style: TextStyle(fontSize: 11, color: Colors.white54),
+          ),
+        ),
+        const Text('·', style: TextStyle(color: Colors.white54)),
+        TextButton(
+          onPressed: () => _abrirUrl(
+            'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/',
+          ),
+          child: const Text(
+            'Términos de Uso',
+            style: TextStyle(fontSize: 11, color: Colors.white54),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _aplicarCodigoCortesia() async {
+    final codigo = _codigoCortesiaController.text.trim().toUpperCase();
+    if (codigo.isEmpty) return;
+    setState(() {
+      _codigoCortesiaCargando = true;
+      _codigoCortesiaMensaje = null;
+    });
+    try {
+      final docRef = await FirebaseFirestore.instance
+          .collection('codigos_cortesia')
+          .doc(codigo)
+          .get();
+      if (!docRef.exists) {
+        setState(() {
+          _codigoCortesiaMensaje = '❌ Código inválido o inactivo.';
+          _codigoCortesiaCargando = false;
+        });
+        return;
+      }
+      final data = docRef.data()!;
+      if (data['activo'] != true) {
+        setState(() {
+          _codigoCortesiaMensaje = '❌ Código inválido o inactivo.';
+          _codigoCortesiaCargando = false;
+        });
+        return;
+      }
+      final usosActuales = (data['usos_actuales'] as num?)?.toInt() ?? 0;
+      final usosMaximos = (data['usos_maximos'] as num?)?.toInt() ?? 0;
+      if (usosActuales >= usosMaximos) {
+        setState(() {
+          _codigoCortesiaMensaje = '❌ Código agotado.';
+          _codigoCortesiaCargando = false;
+        });
+        return;
+      }
+      await FirebaseFirestore.instance
+          .collection('codigos_cortesia')
+          .doc(codigo)
+          .update({'usos_actuales': FieldValue.increment(1)});
+      final meses = (data['meses_gratis'] as num?)?.toInt() ?? 1;
+      setState(() {
+        _codigoCortesiaMensaje =
+            '✅ ¡Código válido! Tenés $meses mes${meses > 1 ? 'es' : ''} gratis de HDF Stats Premium.';
+        _codigoCortesiaCargando = false;
+      });
+    } catch (e) {
+      setState(() {
+        _codigoCortesiaMensaje = '❌ Error al validar el código. Intentá de nuevo.';
+        _codigoCortesiaCargando = false;
+      });
+    }
+  }
+
+  /// Código de cortesía / promo — solo Android (Play promo codes).
+  Widget _codigoCortesiaSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'CÓDIGO DE CORTESÍA',
+          style: TextStyle(
+            color: Color(0xFF00E650),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Ingresá tu código para acceder a HDF Stats Premium gratis.',
+          style: TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _codigoCortesiaController,
+                textCapitalization: TextCapitalization.characters,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Ej: SORTEO-ABRIL',
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: const Color(0xFF0D1B2A),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF00E650)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            _codigoCortesiaCargando
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF00E650),
+                    ),
+                  )
+                : ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E650),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: _isLoading ? null : _aplicarCodigoCortesia,
+                    child: const Text(
+                      'APLICAR',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+          ],
+        ),
+        if (_codigoCortesiaMensaje != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _codigoCortesiaMensaje!.startsWith('✅')
+                  ? const Color(0xFF00E650).withValues(alpha: 0.1)
+                  : Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _codigoCortesiaMensaje!.startsWith('✅')
+                    ? const Color(0xFF00E650).withValues(alpha: 0.4)
+                    : Colors.red.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Text(
+              _codigoCortesiaMensaje!,
+              style: TextStyle(
+                color: _codigoCortesiaMensaje!.startsWith('✅')
+                    ? const Color(0xFF00E650)
+                    : Colors.red,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   /// CTA principal — siempre visible y con `onPressed` explícito (nunca null).
@@ -430,6 +646,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
           children: [
             _trialCtaButton(),
             const SizedBox(height: 8),
+            _legalLinksRow(),
+            const SizedBox(height: 4),
             TextButton(
               onPressed: () {
                 if (_isLoading) return;
@@ -549,6 +767,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
             subtitulo: '${_precioAnualPorMes()}\nProbá 14 días gratis',
             destacado: true,
           ),
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 18),
+            _codigoCortesiaSection(),
+          ],
         ],
       ),
     );

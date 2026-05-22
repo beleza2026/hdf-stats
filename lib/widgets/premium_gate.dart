@@ -79,7 +79,9 @@ class _LockedPremiumPanel extends StatelessWidget {
             if (!kIsWeb)
               FilledButton(
                 onPressed: () async {
-                  await PaywallScreen.open(context);
+                  if (!PremiumService.shouldBypassPaywall) {
+                    await PaywallScreen.open(context);
+                  }
                   await onPremiumChanged?.call();
                 },
                 style: FilledButton.styleFrom(

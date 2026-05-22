@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'api_service.dart';
+import 'competition_name_helper.dart';
 import 'nationality_flags.dart';
 import 'widgets/datos_mercado_sportmonks_section.dart';
 
@@ -334,7 +335,7 @@ class _PlayerCareerBodyState extends State<_PlayerCareerBody> {
                           if (selDetalle != null && selDetalle.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             Text(
-                              selDetalle,
+                              sanitizarNombreCompetencia(selDetalle),
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 11, height: 1.35),
                             ),

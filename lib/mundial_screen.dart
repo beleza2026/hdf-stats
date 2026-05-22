@@ -270,7 +270,9 @@ class _MundialScreenState extends State<MundialScreen>
 
   Future<void> _intentarAccesoTabPremium(int tabIndex) async {
     if (_puedeAccederTab(tabIndex)) return;
-    await PaywallScreen.open(context);
+    if (!PremiumService.shouldBypassPaywall) {
+      await PaywallScreen.open(context);
+    }
     await _refrescarPremiumMundial();
   }
 
@@ -1237,7 +1239,7 @@ class _TabCrucesState extends State<_TabCruces> {
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                '32avos según bracket FIFA (partidos 73–88). Donde hay "3°", mostramos el mejor tercero provisional del pool de grupos indicado; la llave final depende de los 8 terceros que clasifiquen.',
+                '32avos según bracket Mundial (partidos 73–88). Donde hay "3°", mostramos el mejor tercero provisional del pool de grupos indicado; la llave final depende de los 8 terceros que clasifiquen.',
                 style: TextStyle(color: Colors.white54, fontSize: 11),
               ),
             ),
@@ -1696,7 +1698,9 @@ class _TabMejoresState extends State<_TabMejores> {
               onTap: kIsWeb
                   ? null
                   : () async {
-                      await PaywallScreen.open(context);
+                      if (!PremiumService.shouldBypassPaywall) {
+                        await PaywallScreen.open(context);
+                      }
                       final v = await PremiumService.isPremium();
                       if (!mounted) return;
                       setState(() => _premiumLocal = v);

@@ -463,7 +463,7 @@ class _MundialSimuladorScreenState extends State<MundialSimuladorScreen>
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket FIFA 2026)'),
+        _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket Mundial 2026)'),
         const Padding(
           padding: EdgeInsets.only(bottom: 6),
           child: Text(

@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -89,6 +90,13 @@ void main() async {
     } else {
       debugPrint('main: Purchases.configure() OK antes de runApp');
     }
+    debugPrint(
+      'main: DESIGNER_UNLOCK_ALL raw="${PremiumService.designerUnlockAllRaw}" '
+      '→ ${PremiumService.unlockAllForPreview} | '
+      'FORCE_FREE_UI raw="${PremiumService.forceFreeUiRaw}" '
+      '→ ${PremiumService.forceFreeUi} | '
+      'bypassPaywall=${PremiumService.shouldBypassPaywall}',
+    );
   }
   runApp(const HDFStatsApp());
 }
@@ -116,7 +124,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  bool _esPremium = false;
+  bool _esPremium = PremiumService.effectivePremium(false);
   int _selectedIndex = 0;
   bool _showDashboard = true;
   bool _showTorneos = false;
@@ -174,6 +182,7 @@ class _MainScreenState extends State<MainScreen> {
   static Set<int> get _indicesSeccionPremium => PremiumAccess.ligaSectionIndicesPremium;
 
   Future<bool> _asegurarPremium() async {
+    if (PremiumService.shouldBypassPaywall) return true;
     if (PremiumService.effectivePremium(_esPremium)) return true;
     if (kIsWeb) return false;
     await PaywallScreen.open(context);
@@ -1977,86 +1986,87 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               const SizedBox(height: 16),
               const Divider(color: Colors.white12),
               const SizedBox(height: 12),
-        const Text('CÓDIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              const SizedBox(height: 8),
-              const Text('Ingresá tu código para acceder a HDF Stats Premium gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    textCapitalization: TextCapitalization.characters,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
-                    decoration: InputDecoration(
-                      hintText: 'Ej: SORTEO-ABRIL',
-                      hintStyle: const TextStyle(color: Colors.white24),
-                      filled: true,
-                      fillColor: const Color(0xFF0D1B2A),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00C853))),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                cargando
-                  ? const CircularProgressIndicator(color: Color(0xFF00C853))
-                  : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: () async {
-                        final codigo = controller.text.trim().toUpperCase();
-                        if (codigo.isEmpty) return;
-                        setModalState(() => cargando = true);
-                        try {
-                          // Fix: buscar por Document ID evita indice Firestore
-                          final docRef = await FirebaseFirestore.instance
-                            .collection('codigos_cortesia')
-                            .doc(codigo)
-                            .get();
-                          if (!docRef.exists) {
-              setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
-                            return;
-                          }
-                          final data = docRef.data()!;
-                          if (data['activo'] != true) {
-              setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
-                            return;
-                          }
-                          final usosActuales = (data['usos_actuales'] as num?)?.toInt() ?? 0;
-                          final usosMaximos = (data['usos_maximos'] as num?)?.toInt() ?? 0;
-                          if (usosActuales >= usosMaximos) {
-              setModalState(() { mensaje = '❌ Código agotado.'; cargando = false; });
-                            return;
-                          }
-                          await FirebaseFirestore.instance.collection('codigos_cortesia').doc(codigo).update({
-                            'usos_actuales': FieldValue.increment(1),
-                          });
-                          final meses = (data['meses_gratis'] as num?)?.toInt() ?? 1;
-                          setModalState(() { mensaje = '✅ ¡Código válido! Tenés $meses mes${meses > 1 ? "es" : ""} gratis de HDF Stats Premium.'; cargando = false; });
-                        } catch (e) {
-              setModalState(() { mensaje = '❌ Error al validar el código. Intentá de nuevo.'; cargando = false; });
-                        }
-                      },
-                      child: const Text('APLICAR', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-              ]),
-              if (mensaje != null) ...[
+              if (Platform.isAndroid) ...[
+                const Text('CÓDIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 8),
+                const Text('Ingresá tu código para acceder a HDF Stats Premium gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: mensaje!.startsWith('✅') ? const Color(0xFF00C853).withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: mensaje!.startsWith('✅') ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4)),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      textCapitalization: TextCapitalization.characters,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                      decoration: InputDecoration(
+                        hintText: 'Ej: SORTEO-ABRIL',
+                        hintStyle: const TextStyle(color: Colors.white24),
+                        filled: true,
+                        fillColor: const Color(0xFF0D1B2A),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00C853))),
+                      ),
+                    ),
                   ),
-                  child: Text(mensaje!, style: TextStyle(color: mensaje!.startsWith('✅') ? const Color(0xFF00C853) : Colors.red, fontSize: 13)),
-                ),
+                  const SizedBox(width: 10),
+                  cargando
+                    ? const CircularProgressIndicator(color: Color(0xFF00C853))
+                    : ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00C853),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () async {
+                          final codigo = controller.text.trim().toUpperCase();
+                          if (codigo.isEmpty) return;
+                          setModalState(() => cargando = true);
+                          try {
+                            final docRef = await FirebaseFirestore.instance
+                                .collection('codigos_cortesia')
+                                .doc(codigo)
+                                .get();
+                            if (!docRef.exists) {
+                              setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
+                              return;
+                            }
+                            final data = docRef.data()!;
+                            if (data['activo'] != true) {
+                              setModalState(() { mensaje = '❌ Código inválido o inactivo.'; cargando = false; });
+                              return;
+                            }
+                            final usosActuales = (data['usos_actuales'] as num?)?.toInt() ?? 0;
+                            final usosMaximos = (data['usos_maximos'] as num?)?.toInt() ?? 0;
+                            if (usosActuales >= usosMaximos) {
+                              setModalState(() { mensaje = '❌ Código agotado.'; cargando = false; });
+                              return;
+                            }
+                            await FirebaseFirestore.instance.collection('codigos_cortesia').doc(codigo).update({
+                              'usos_actuales': FieldValue.increment(1),
+                            });
+                            final meses = (data['meses_gratis'] as num?)?.toInt() ?? 1;
+                            setModalState(() { mensaje = '✅ ¡Código válido! Tenés $meses mes${meses > 1 ? "es" : ""} gratis de HDF Stats Premium.'; cargando = false; });
+                          } catch (e) {
+                            setModalState(() { mensaje = '❌ Error al validar el código. Intentá de nuevo.'; cargando = false; });
+                          }
+                        },
+                        child: const Text('APLICAR', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                ]),
+                if (mensaje != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: mensaje!.startsWith('✅') ? const Color(0xFF00C853).withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: mensaje!.startsWith('✅') ? const Color(0xFF00C853).withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(mensaje!, style: TextStyle(color: mensaje!.startsWith('✅') ? const Color(0xFF00C853) : Colors.red, fontSize: 13)),
+                  ),
+                ],
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 16),
               const Divider(color: Colors.white12),
               const SizedBox(height: 8),
               const Text('TABLA DE HINCHAS', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
@@ -9404,7 +9414,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
   Widget _buildBracketTab() {
     final r32 = _buildR32Matches();
     return ListView(padding: const EdgeInsets.all(12), children: [
-      _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket oficial FIFA)'),
+      _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket oficial Mundial)'),
       const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Cruces reales: 1J vs 2H • 1H vs 2J • 1C vs 2F... Toca para elegir ganador', style: TextStyle(color: Colors.white38, fontSize: 10))),
       ...r32.asMap().entries.map((e) => _buildMatchCard('r32_${e.key}', e.value[0], e.value[1])),
       const SizedBox(height: 12),

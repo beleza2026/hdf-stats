@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api_service.dart';
+import 'competition_name_helper.dart';
 import 'image_decode_helper.dart';
 import 'mundial_premium_widgets.dart';
 import 'mundial_service.dart';
@@ -395,7 +396,10 @@ class _MundialSeleccionSheetBodyState extends State<_MundialSeleccionSheetBody> 
                             children: [
                               const Text('• ', style: TextStyle(color: Color(0xFF00C853), fontSize: 12)),
                               Expanded(
-                                child: Text(p, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                child: Text(
+                                  sanitizarNombreCompetencia(p),
+                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
                               ),
                             ],
                           ),
@@ -421,7 +425,7 @@ class _MundialSeleccionSheetBodyState extends State<_MundialSeleccionSheetBody> 
                     _filaHist('Finales disputadas (ediciones consultadas)', '${hist['finalesJugadas'] ?? 0}'),
                     if ((hist['historicoFuente'] as String?) == 'fifa') ...[
                       const Divider(color: Colors.white10, height: 20),
-                      const Text('Récords históricos en Mundiales (referencia FIFA)',
+                      const Text('Récords históricos en Mundiales (referencia Mundial)',
                           style: TextStyle(color: Colors.white38, fontSize: 11)),
                       const SizedBox(height: 6),
                       if ((hist['goleadorHistoricoNombre'] as String? ?? '').isNotEmpty)

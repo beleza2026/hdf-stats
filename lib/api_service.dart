@@ -1,4 +1,5 @@
-﻿import 'dart:async';
+﻿import 'competition_name_helper.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5050,7 +5051,9 @@ for (final f in jugados) {
       final m = Map<String, dynamic>.from(raw);
       if (_ligaStatEsSeleccion(m)) {
         tieneSel = true;
-        final lname = m['league']?['name'] as String? ?? '';
+        final lname = sanitizarNombreCompetencia(
+          m['league']?['name'] as String? ?? '',
+        );
         final season = m['season']?.toString() ?? '';
         final pj = (m['games']?['appearences'] as num?)?.toInt() ??
             (m['games']?['appearances'] as num?)?.toInt() ??

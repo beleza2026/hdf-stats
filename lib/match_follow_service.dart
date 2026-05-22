@@ -108,7 +108,8 @@ class _MatchFollowToggleState extends State<MatchFollowToggle> {
 
   Future<void> _tap() async {
     if (_busy) return;
-    if (!PremiumService.unlockAllForPreview && !await PremiumService.isPremium()) {
+    if (!PremiumService.shouldBypassPaywall &&
+        !await PremiumService.isPremium()) {
       if (!mounted) return;
       final ok = await PaywallScreen.open(context);
       if (!mounted || ok != true) return;

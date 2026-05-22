@@ -406,7 +406,7 @@ Widget _resumenSeleccionDuelo(
         Text('Mejor puesto: $mejor', style: const TextStyle(color: Colors.white54, fontSize: 11)),
         if (goleador.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Text('Goleador hist. FIFA: $goleador ($golesG)', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          Text('Goleador hist. Mundial: $goleador ($golesG)', style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ],
         if (presencias.isNotEmpty) ...[
           const SizedBox(height: 2),
@@ -577,7 +577,7 @@ void showMundialPartidoSheet(BuildContext context, Map<String, dynamic> partido,
               esPremium: false,
               title: 'Insert Premium · Mundial',
               subtitle:
-                  'Activá Premium para ver estadio, clima, H2H, récords FIFA, formaciones, destacados del torneo y estadísticas en vivo.',
+                  'Activá Premium para ver estadio, clima, H2H, récords del Mundial, formaciones, destacados del torneo y estadísticas en vivo.',
               child: const SizedBox.shrink(),
             ),
           ],

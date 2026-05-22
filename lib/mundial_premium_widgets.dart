@@ -1,3 +1,4 @@
+import 'competition_name_helper.dart';
 import 'package:flutter/material.dart';
 
 import 'image_decode_helper.dart';
@@ -315,7 +316,7 @@ Widget mundialPlantelCapasCard(Map<String, dynamic> capas) {
         const SizedBox(height: 12),
         ...ligas.take(6).map((e) {
           final cant = (e['cant'] as num?)?.toInt() ?? 0;
-          final liga = e['liga'] as String? ?? '';
+          final liga = sanitizarNombreCompetencia(e['liga'] as String? ?? '');
           final flex = max > 0 ? ((cant / max) * 100).round().clamp(4, 100) : 4;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),

@@ -1,3 +1,4 @@
+import '../competition_name_helper.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -1452,11 +1453,12 @@ class SportmonksService {
       if (row == null) continue;
       final trophy = _asMap(row['trophy']) ?? row;
       final league = _asMap(row['league']) ?? _asMap(trophy?['league']);
-      final leagueName = _asString(league?['name']) ??
+      final leagueNameRaw = _asString(league?['name']) ??
           _asString(trophy?['name']) ??
           _asString(row['name']) ??
           '';
-      if (!_esTrofeoMundialSm(leagueName)) continue;
+      if (!_esTrofeoMundialSm(leagueNameRaw)) continue;
+      final leagueName = sanitizarNombreCompetencia(leagueNameRaw);
       final season = _asMap(row['season']);
       final year = _parseIntLoose(season?['name']) ??
           _parseIntLoose(season?['id']) ??
@@ -2728,7 +2730,9 @@ class SportmonksService {
         if (st == null || !_statRowIsNational(st)) continue;
         tieneSel = true;
         final league = _asMap(st['league']) ?? _asMap(_asMap(st['season'])?['league']);
-        final lname = _asString(league?['name']) ?? 'Selección';
+        final lname = sanitizarNombreCompetencia(
+          _asString(league?['name']) ?? 'Selección',
+        );
         final season = _asMap(st['season']);
         final seasonLabel = _asString(season?['name']) ?? '';
         final details = st['details'];

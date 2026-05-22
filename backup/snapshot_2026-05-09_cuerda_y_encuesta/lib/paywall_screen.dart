@@ -119,7 +119,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.amber.withOpacity(0.4)),
                     ),
-                    child: const Text('7 días gratis — cancelá cuando quieras',
+                    child: const Text('14 días gratis — cancelá cuando quieras',
                         style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(height: 24),
