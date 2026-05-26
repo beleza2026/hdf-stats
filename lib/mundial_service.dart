@@ -1,5 +1,4 @@
 import 'competition_name_helper.dart';
-import 'competition_name_helper.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -211,23 +210,168 @@ class MundialService {
   /// Inicio aproximado de la fase de grupos del Mundial 2026 (UTC).
   static final DateTime mundial2026InicioUtc = DateTime.utc(2026, 6, 11, 14, 0);
 
-  /// A partir de esta fecha asumimos planteles definitivos publicados (fin de mayo 2026).
+  /// Tras esta fecha (fin de mayo 2026) activamos convocatorias definitivas de 26 en API/UI.
   static final DateTime mundialPlantelDefinitivoDesde = DateTime(2026, 5, 31);
 
-  static bool get plantelesMundialSonDefinitivos =>
+  /// Antes del 31/05: listas API desactualizadas → solo modo provisional.
+  static bool get convocatoriasMundialDefinitivasActivas =>
       DateTime.now().isAfter(mundialPlantelDefinitivoDesde);
 
-  static String mensajeEstadoPlantelMundial() {
-    if (plantelesMundialSonDefinitivos) {
-      return 'Plantel: se muestran dorsal, datos de jugador y club actual. Si la federación actualiza la lista, usá Actualizar plantel.';
+  /// Convocatoria FIFA Mundial 2026: 26 jugadores oficiales (no 23 como ediciones anteriores).
+  static const int plantelOficialTamanio = 26;
+  static const int _plantelOficialMinJugadores = plantelOficialTamanio;
+  static const int _plantelOficialMaxJugadores = plantelOficialTamanio;
+  static const int _plantelOficialMinConDorsal = 20;
+
+  static const int plantelOficialMinJugadoresVisible = plantelOficialTamanio;
+  static const int plantelOficialMaxJugadoresVisible = plantelOficialTamanio;
+
+  static final Map<int, bool> _plantelDefinitivoPorEquipo = {};
+  static final Map<int, DateTime> _plantelDefinitivoAt = {};
+  static const Duration _plantelDefinitivoTtl = Duration(hours: 6);
+  static Set<int>? _idsPlantelDefinitivoGlobal;
+  static DateTime? _idsPlantelDefinitivoGlobalAt;
+
+  static bool get plantelesMundialSonDefinitivos => convocatoriasMundialDefinitivasActivas;
+
+  /// Dorsal en fila de plantel (statistics.games o player.number).
+  static int dorsalPlantelRow(Map<String, dynamic> row, {int? nationalTeamId}) {
+    final st = statisticsMundialLiga1(row, priorizarSeleccionId: nationalTeamId);
+    final games = childMap(st?['games']);
+    final n = _statInt(games['number']);
+    if (n != 0) return n;
+    final pl = childMap(row['player']);
+    return _statInt(pl['number']);
+  }
+
+  /// Lista cerrada en `players/squads`: exactamente 26 jugadores (reglamento Mundial 2026).
+  /// Dorsales pueden venir incompletos mientras la API actualiza.
+  static bool _squadsEsConvocatoriaCerrada(List<dynamic> players) {
+    if (!convocatoriasMundialDefinitivasActivas) return false;
+    if (players.length != plantelOficialTamanio) {
+      return false;
     }
-    return 'Lista provisional: las convocatorias definitivas se esperan a fin de mayo. Los dorsales y datos pueden cambiar — tocá Actualizar plantel cuando estén oficiales.';
+    var conNombre = 0;
+    for (final raw in players) {
+      if (raw is! Map) continue;
+      final m = raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw);
+      final id = (m['id'] as num?)?.toInt() ?? 0;
+      final name = (m['name'] as String?)?.trim() ?? '';
+      if (id > 0 && name.isNotEmpty) conNombre++;
+    }
+    return conNombre >= plantelOficialTamanio;
+  }
+
+  static bool convocatoriaMundialCompletaEnApi(int cantidadJugadores) =>
+      convocatoriasMundialDefinitivasActivas &&
+      cantidadJugadores == plantelOficialTamanio;
+
+  /// Plantel ya cargado con dorsales coherentes (filtro sobre listas mezcladas SM/API).
+  static bool _squadsRawEsPlantelOficial(List<dynamic> players) =>
+      _squadsEsConvocatoriaCerrada(players);
+
+  /// Lista publicada en API (`players/squads`) con convocatoria oficial (≈26 y dorsales).
+  static bool plantelPareceDefinitivo(
+    List<Map<String, dynamic>> plantel, {
+    int? nationalTeamId,
+  }) {
+    if (plantel.isEmpty) return false;
+    if (plantel.length < _plantelOficialMinJugadores ||
+        plantel.length > _plantelOficialMaxJugadores) {
+      return false;
+    }
+    var conDorsal = 0;
+    final dorsales = <int>{};
+    for (final row in plantel) {
+      final d = dorsalPlantelRow(row, nationalTeamId: nationalTeamId);
+      if (d > 0 && d <= 99) {
+        conDorsal++;
+        dorsales.add(d);
+      }
+    }
+    return conDorsal >= _plantelOficialMinConDorsal &&
+        dorsales.length >= conDorsal - 2;
+  }
+
+  static void _cachePlantelDefinitivoEquipo(int teamId, bool definitivo) {
+    _plantelDefinitivoPorEquipo[teamId] = definitivo;
+    _plantelDefinitivoAt[teamId] = DateTime.now();
+    if (definitivo) {
+      _idsPlantelDefinitivoGlobal ??= <int>{};
+      _idsPlantelDefinitivoGlobal!.add(teamId);
+    }
+  }
+
+  static bool? _plantelDefinitivoCacheado(int teamId) {
+    final at = _plantelDefinitivoAt[teamId];
+    if (at == null || !_plantelDefinitivoPorEquipo.containsKey(teamId)) return null;
+    if (DateTime.now().difference(at) > _plantelDefinitivoTtl) return null;
+    return _plantelDefinitivoPorEquipo[teamId];
+  }
+
+  /// `true` solo tras el 31/05 y si la API tiene los $plantelOficialTamanio jugadores de esa selección.
+  static bool plantelMundialEsDefinitivo(int teamId) {
+    if (!convocatoriasMundialDefinitivasActivas) return false;
+    if (teamId <= 0) return false;
+    return _plantelDefinitivoCacheado(teamId) == true;
+  }
+
+  static String mensajeEstadoPlantelMundial({int? teamId}) {
+    if (!convocatoriasMundialDefinitivasActivas) {
+      return 'Lista provisional: las convocatorias definitivas de $plantelOficialTamanio jugadores se publican tras el 31 de mayo. Los datos de la API pueden estar desactualizados — actualizá el plantel después de esa fecha.';
+    }
+    if (teamId != null && plantelMundialEsDefinitivo(teamId)) {
+      return 'Convocatoria oficial ($plantelOficialTamanio jugadores): dorsales, posición y datos. Si la federación actualiza la lista, usá Actualizar plantel.';
+    }
+    return 'Lista provisional: cada selección debe tener $plantelOficialTamanio jugadores en la API. Tocá Actualizar plantel cuando estén los 26 oficiales.';
+  }
+
+  /// Ids de selecciones con plantel oficial detectado (cache ~6 h; consulta squads por equipo).
+  static Future<Set<int>> getIdsSeleccionesConPlantelDefinitivo({bool forzar = false}) async {
+    if (!convocatoriasMundialDefinitivasActivas) return {};
+    final now = DateTime.now();
+    if (!forzar &&
+        _idsPlantelDefinitivoGlobal != null &&
+        _idsPlantelDefinitivoGlobalAt != null &&
+        now.difference(_idsPlantelDefinitivoGlobalAt!) < _plantelDefinitivoTtl) {
+      return Set<int>.from(_idsPlantelDefinitivoGlobal!);
+    }
+    final ids = <int>{};
+    try {
+      final grupos = await getGrupos();
+      for (final g in grupos) {
+        for (final row in g) {
+          final tid = (childMap(row['team'])['id'] as num?)?.toInt() ?? 0;
+          if (tid <= 0) continue;
+          if (await esPlantelMundialDefinitivoEnApi(tid)) ids.add(tid);
+          await Future<void>.delayed(const Duration(milliseconds: 90));
+        }
+      }
+    } catch (_) {}
+    _idsPlantelDefinitivoGlobal = ids;
+    _idsPlantelDefinitivoGlobalAt = now;
+    return ids;
+  }
+
+  /// Comprueba `players/squads` (convocatoria publicada con dorsales).
+  static Future<bool> esPlantelMundialDefinitivoEnApi(int teamId) async {
+    if (teamId <= 0 || !convocatoriasMundialDefinitivasActivas) return false;
+    final cached = _plantelDefinitivoCacheado(teamId);
+    if (cached != null) return cached;
+    final squad = await _fetchSquadsPlayersRaw(teamId);
+    final ok = _squadsEsConvocatoriaCerrada(squad);
+    _cachePlantelDefinitivoEquipo(teamId, ok);
+    return ok;
   }
 
   static Future<void> refrescarCachePlantelMundial() async {
     SportmonksService.invalidateMundialPlantelCache();
     _favoritosTituloCache = null;
     _favoritosTituloCacheAt = null;
+    _plantelDefinitivoPorEquipo.clear();
+    _plantelDefinitivoAt.clear();
+    _idsPlantelDefinitivoGlobal = null;
+    _idsPlantelDefinitivoGlobalAt = null;
   }
 
   /// `true` solo si ya pasó la fecha de inicio del torneo **y** hay al menos un FT
@@ -1164,42 +1308,180 @@ class MundialService {
     return out;
   }
 
+  static Future<List<dynamic>> _fetchSquadsPlayersRaw(int teamId) async {
+    if (teamId <= 0) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('$_baseUrl/players/squads?team=$teamId'),
+        headers: _headers,
+      );
+      if (res.statusCode != 200) return [];
+      final data = json.decode(res.body);
+      if (_apiErrorsPresent(data)) return [];
+      final resp = data['response'];
+      if (resp is! List || resp.isEmpty) return [];
+      final block0 = resp[0];
+      if (block0 is! Map) return [];
+      return block0['players'] as List? ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static String _squadsPositionToApi(String? raw) {
+    final s = (raw ?? '').toLowerCase();
+    if (s.contains('goal')) return 'G';
+    if (s.contains('defend')) return 'D';
+    if (s.contains('mid')) return 'M';
+    if (s.contains('attack') ||
+        s.contains('forward') ||
+        s.contains('strik') ||
+        s.contains('wing')) {
+      return 'F';
+    }
+    return '';
+  }
+
+  static Map<String, dynamic> _filaPlantelDesdeSquadsPlayer(
+    Map<String, dynamic> m,
+    int teamId,
+  ) {
+    final id = (m['id'] as num?)?.toInt() ?? 0;
+    final numRaw = m['number'];
+    final dorsal = numRaw is num ? numRaw.toInt() : int.tryParse('$numRaw') ?? 0;
+    final posApi = _squadsPositionToApi(m['position'] as String?);
+    return {
+      'player': {
+        'id': id,
+        'name': m['name'],
+        'photo': m['photo'],
+        'age': m['age'],
+        'nationality': m['nationality'],
+        'number': dorsal,
+      },
+      'statistics': [
+        {
+          'league': {'id': _leagueId, 'name': 'World Cup'},
+          'team': {'id': teamId},
+          'games': {
+            'position': posApi,
+            'number': dorsal,
+            'appearences': 0,
+            'appearances': 0,
+          },
+          'goals': {'total': 0, 'assists': 0},
+          'cards': {'yellow': 0, 'red': 0, 'yellowred': 0},
+        },
+      ],
+    };
+  }
+
+  /// Plantel solo desde `players/squads` + enriquecimiento stats API (misma fuente que la convocatoria).
+  static Future<List<Map<String, dynamic>>?> _plantelMundialDesdeSquadsOficial(
+    int teamId,
+  ) async {
+    if (teamId <= 0) return null;
+    final squadRaw = await _fetchSquadsPlayersRaw(teamId);
+    if (!_squadsEsConvocatoriaCerrada(squadRaw)) return null;
+
+    final apiById = <int, Map<String, dynamic>>{};
+    void poner(List<Map<String, dynamic>> list) {
+      for (final r in list) {
+        final id = _playerIdPlantel(r);
+        if (id != null && id > 0) apiById[id] = r;
+      }
+    }
+
+    poner(await _playersPaginated(teamId: teamId, leagueId: _leagueId, season: _season));
+    if (apiById.isEmpty) {
+      poner(await _playersPaginated(teamId: teamId, leagueId: _leagueId, season: 2025));
+    }
+
+    final out = <Map<String, dynamic>>[];
+    for (final raw in squadRaw) {
+      if (raw is! Map) continue;
+      final m = Map<String, dynamic>.from(raw);
+      final id = (m['id'] as num?)?.toInt() ?? 0;
+      if (id <= 0) continue;
+      out.add(apiById[id] ?? _filaPlantelDesdeSquadsPlayer(m, teamId));
+    }
+    if (out.length < _plantelOficialMinJugadores) return null;
+    _cachePlantelDefinitivoEquipo(teamId, true);
+    return out;
+  }
+
+  static Future<Set<int>?> _idsPlantelOficialSquads(int teamId) async {
+    final squad = await _fetchSquadsPlayersRaw(teamId);
+    if (!_squadsEsConvocatoriaCerrada(squad)) return null;
+    final ids = <int>{};
+    for (final raw in squad) {
+      if (raw is! Map) continue;
+      final id = ((raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw))['id']
+              as num?)
+          ?.toInt() ??
+          0;
+      if (id > 0) ids.add(id);
+    }
+    return ids.isEmpty ? null : ids;
+  }
+
+  static Future<List<Map<String, dynamic>>> _aplicarFiltroPlantelOficial(
+    int teamId,
+    List<Map<String, dynamic>> plantel,
+  ) async {
+    if (teamId <= 0 || plantel.isEmpty) return plantel;
+    if (!convocatoriasMundialDefinitivasActivas) return plantel;
+
+    final idsOficial = await _idsPlantelOficialSquads(teamId);
+    if (idsOficial != null && idsOficial.isNotEmpty) {
+      final filtrado = plantel
+          .where((r) {
+            final id = _playerIdPlantel(r);
+            return id != null && idsOficial.contains(id);
+          })
+          .toList();
+      if (filtrado.length >= _plantelOficialMinJugadores) {
+        _cachePlantelDefinitivoEquipo(teamId, true);
+        return filtrado;
+      }
+      final desdeSquads = await _plantelMundialDesdeSquadsOficial(teamId);
+      if (desdeSquads != null && desdeSquads.isNotEmpty) {
+        return desdeSquads;
+      }
+    }
+
+    if (plantelPareceDefinitivo(plantel, nationalTeamId: teamId)) {
+      _cachePlantelDefinitivoEquipo(teamId, true);
+      if (plantel.length > _plantelOficialMaxJugadores) {
+        final soloNumerados = plantel
+            .where((r) => dorsalPlantelRow(r, nationalTeamId: teamId) > 0)
+            .toList();
+        if (soloNumerados.length >= _plantelOficialMinJugadores &&
+            soloNumerados.length <= _plantelOficialMaxJugadores) {
+          return soloNumerados;
+        }
+      }
+      return plantel;
+    }
+
+    _cachePlantelDefinitivoEquipo(teamId, false);
+    return plantel;
+  }
+
   static Future<List<Map<String, dynamic>>> _squadsSoloFaltantes(
     int teamId,
     Set<int> ya,
   ) async {
     final extra = <Map<String, dynamic>>[];
-    try {
-      final res = await http.get(Uri.parse('$_baseUrl/players/squads?team=$teamId'), headers: _headers);
-      if (res.statusCode != 200) return extra;
-      final data = json.decode(res.body);
-      if (_apiErrorsPresent(data)) return extra;
-      final resp = data['response'];
-      if (resp is! List || resp.isEmpty) return extra;
-      final block0 = resp[0];
-      if (block0 is! Map) return extra;
-      final players = block0['players'] as List?;
-      if (players == null) return extra;
-      for (final pl in players) {
-        if (pl is! Map) continue;
-        final m = Map<String, dynamic>.from(pl);
-        final id = (m['id'] as num?)?.toInt() ?? 0;
-        if (id <= 0 || ya.contains(id)) continue;
-        final numRaw = m['number'];
-        final dorsal = numRaw is num ? numRaw.toInt() : int.tryParse('$numRaw');
-        extra.add({
-          'player': {
-            'id': id,
-            'name': m['name'],
-            'photo': m['photo'],
-            'age': m['age'],
-            'nationality': m['nationality'],
-            'number': dorsal,
-          },
-          'statistics': <dynamic>[],
-        });
-      }
-    } catch (_) {}
+    final players = await _fetchSquadsPlayersRaw(teamId);
+    if (_squadsEsConvocatoriaCerrada(players)) return extra;
+    for (final pl in players) {
+      if (pl is! Map) continue;
+      final m = Map<String, dynamic>.from(pl);
+      final id = (m['id'] as num?)?.toInt() ?? 0;
+      if (id <= 0 || ya.contains(id)) continue;
+      extra.add(_filaPlantelDesdeSquadsPlayer(m, teamId));
+    }
     return extra;
   }
 
@@ -1210,15 +1492,33 @@ class MundialService {
     bool forzarActualizacion = false,
   }) async {
     if (teamId <= 0) return [];
-    if (forzarActualizacion) await refrescarCachePlantelMundial();
+    if (forzarActualizacion) {
+      await refrescarCachePlantelMundial();
+      _plantelDefinitivoPorEquipo.remove(teamId);
+      _plantelDefinitivoAt.remove(teamId);
+      _idsPlantelDefinitivoGlobal = null;
+      _idsPlantelDefinitivoGlobalAt = null;
+    }
+    if (convocatoriasMundialDefinitivasActivas) {
+      final oficialSquads = await _plantelMundialDesdeSquadsOficial(teamId);
+      if (oficialSquads != null && oficialSquads.isNotEmpty) {
+        return oficialSquads;
+      }
+    }
+
     final hint = teamName?.trim() ?? '';
+    List<Map<String, dynamic>> plantel;
     if (SportmonksService.hasConfiguredToken && hint.isNotEmpty) {
       final sm = await SportmonksService().fetchMundialPlantelApiFormat(teamId, hint);
       if (sm != null && sm.isNotEmpty) {
-        return _enriquecerPlantelConIdsApi(sm, teamId);
+        plantel = await _enriquecerPlantelConIdsApi(sm, teamId);
+      } else {
+        plantel = await _getPlantelMundialSoloApiFootball(teamId);
       }
+    } else {
+      plantel = await _getPlantelMundialSoloApiFootball(teamId);
     }
-    return _getPlantelMundialSoloApiFootball(teamId);
+    return _aplicarFiltroPlantelOficial(teamId, plantel);
   }
 
   static String etiquetaPosicionPlantel(String? pos) {
@@ -1233,6 +1533,12 @@ class MundialService {
   /// Solo API-Football (respaldo y cruce de ids).
   static Future<List<Map<String, dynamic>>> _getPlantelMundialSoloApiFootball(int teamId) async {
     if (teamId <= 0) return [];
+
+    final desdeSquads = await _plantelMundialDesdeSquadsOficial(teamId);
+    if (desdeSquads != null && desdeSquads.isNotEmpty) {
+      return desdeSquads;
+    }
+
     final porId = <int, Map<String, dynamic>>{};
     void poner(List<Map<String, dynamic>> list) {
       for (final r in list) {

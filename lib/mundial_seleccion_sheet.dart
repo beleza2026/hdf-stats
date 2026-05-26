@@ -455,7 +455,11 @@ class _MundialSeleccionSheetBodyState extends State<_MundialSeleccionSheetBody> 
                 ),
               ),
               const SizedBox(height: 18),
-              _bannerEstadoPlantel(onActualizar: _actualizarPlantel, cantidad: plantelRaw.length),
+              _bannerEstadoPlantel(
+                onActualizar: _actualizarPlantel,
+                cantidad: plantelRaw.length,
+                teamId: widget.teamId,
+              ),
               const SizedBox(height: 12),
               if (plantelRaw.isNotEmpty) ...[
                 mundialPlantelCapasCard(MundialService.analisisCapasPlantel(plantelRaw)),
@@ -464,8 +468,12 @@ class _MundialSeleccionSheetBodyState extends State<_MundialSeleccionSheetBody> 
               _seccionTitulo('PLANTEL — MUNDIAL 2026'),
               Text(
                 plantelRaw.isEmpty
-                    ? 'Sin jugadores en API. Cuando la federación publique la lista definitiva, tocá Actualizar plantel.'
-                    : '${plantelRaw.length} jugadores · dorsal, posición, edad, stats del torneo y club actual.',
+                    ? 'Sin jugadores en API. Las convocatorias definitivas se esperan tras el 31 de mayo.'
+                    : !MundialService.convocatoriasMundialDefinitivasActivas
+                        ? '${plantelRaw.length} jugadores en API (provisional, puede estar desactualizado). Definitivas de ${MundialService.plantelOficialTamanio} tras el 31 de mayo.'
+                        : plantelRaw.length == MundialService.plantelOficialTamanio
+                            ? '${MundialService.plantelOficialTamanio} jugadores (convocatoria oficial) · dorsal, posición, edad, stats y club actual.'
+                            : '${plantelRaw.length}/${MundialService.plantelOficialTamanio} en API · tocá Actualizar plantel cuando estén los ${MundialService.plantelOficialTamanio} oficiales.',
                 style: const TextStyle(color: Colors.white38, fontSize: 11),
               ),
               const SizedBox(height: 10),
@@ -491,8 +499,12 @@ class _MundialSeleccionSheetBodyState extends State<_MundialSeleccionSheetBody> 
   }
 }
 
-Widget _bannerEstadoPlantel({required VoidCallback onActualizar, required int cantidad}) {
-  final definitivo = MundialService.plantelesMundialSonDefinitivos;
+Widget _bannerEstadoPlantel({
+  required VoidCallback onActualizar,
+  required int cantidad,
+  required int teamId,
+}) {
+  final definitivo = MundialService.plantelMundialEsDefinitivo(teamId);
   return Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
@@ -527,7 +539,10 @@ Widget _bannerEstadoPlantel({required VoidCallback onActualizar, required int ca
           ],
         ),
         const SizedBox(height: 6),
-        Text(MundialService.mensajeEstadoPlantelMundial(), style: const TextStyle(color: Colors.white60, fontSize: 10, height: 1.35)),
+        Text(
+          MundialService.mensajeEstadoPlantelMundial(teamId: teamId),
+          style: const TextStyle(color: Colors.white60, fontSize: 10, height: 1.35),
+        ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: onActualizar,

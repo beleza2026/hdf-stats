@@ -756,6 +756,7 @@ class _TabGrupos extends StatefulWidget {
 
 class _TabGruposState extends State<_TabGrupos> {
   List<List<Map<String, dynamic>>> _grupos = [];
+  Set<int> _plantelOficialIds = {};
   bool _cargando = true;
 
   @override
@@ -766,7 +767,14 @@ class _TabGruposState extends State<_TabGrupos> {
 
   Future<void> _cargar() async {
     final data = await MundialService.getGrupos();
-    if (mounted) setState(() { _grupos = data; _cargando = false; });
+    if (!mounted) return;
+    setState(() {
+      _grupos = data;
+      _cargando = false;
+    });
+    MundialService.getIdsSeleccionesConPlantelDefinitivo().then((ids) {
+      if (mounted) setState(() => _plantelOficialIds = ids);
+    });
   }
 
   @override
@@ -775,7 +783,15 @@ class _TabGruposState extends State<_TabGrupos> {
     if (_grupos.isEmpty) {
       return const Center(child: Text('Sin datos de grupos', style: TextStyle(color: Colors.white54)));
     }
-    return ListView.builder(
+    return RefreshIndicator(
+      color: const Color(0xFF00C853),
+      onRefresh: () async {
+        await _cargar();
+        final ids = await MundialService.getIdsSeleccionesConPlantelDefinitivo(forzar: true);
+        if (mounted) setState(() => _plantelOficialIds = ids);
+      },
+      child: ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: _grupos.length,
       itemBuilder: (context, i) {
@@ -784,6 +800,7 @@ class _TabGruposState extends State<_TabGrupos> {
         final nombreGrupo = grupo[0]['group'] as String? ?? 'Grupo ${i + 1}';
         return _cardGrupo(nombreGrupo, grupo);
       },
+    ),
     );
   }
 
@@ -836,6 +853,7 @@ class _TabGruposState extends State<_TabGrupos> {
           final tid = (team['id'] as num?)?.toInt() ?? 0;
           final pais = team['country'] as String? ?? nombre;
           final clasifica = idx < 2;
+          final plantelOficial = tid > 0 && _plantelOficialIds.contains(tid);
 
           return Container(
             decoration: BoxDecoration(
@@ -865,15 +883,32 @@ class _TabGruposState extends State<_TabGrupos> {
                   : const Icon(Icons.sports_soccer, size: 20, color: Colors.white24),
               const SizedBox(width: 8),
               Expanded(
-                child: _mundialNombreTappable(
-                  context,
-                  teamId: tid,
-                  teamName: nombre,
-                  teamLogo: logo,
-                  country: pais,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  textAlign: TextAlign.left,
-                  maxLines: 1,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _mundialNombreTappable(
+                        context,
+                        teamId: tid,
+                        teamName: nombre,
+                        teamLogo: logo,
+                        country: pais,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        textAlign: TextAlign.left,
+                        maxLines: 1,
+                      ),
+                    ),
+                    if (plantelOficial) ...[
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: 'Convocatoria oficial publicada (26 jugadores)',
+                        child: Icon(
+                          Icons.verified,
+                          size: 14,
+                          color: const Color(0xFF00C853).withValues(alpha: 0.9),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               for (final val in [pj, g, e, p])
