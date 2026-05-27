@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: stable
-      xcode: 15.4
+      xcode: 16.2
       cocoapods: default
       groups:
         - matchgol
