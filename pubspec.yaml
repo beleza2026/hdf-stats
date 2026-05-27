@@ -44,7 +44,7 @@ dependencies:
   firebase_analytics: 11.4.5
   flutter_local_notifications: ^18.0.0
   purchases_flutter: ^10.0.1
-  device_info_plus: ^13.1.0
+  device_info_plus: 9.1.2
   crypto: ^3.0.7
 dev_dependencies:
   flutter_test:
