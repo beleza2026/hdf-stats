@@ -19,7 +19,7 @@ workflows:
       - name: Flutter pub get
         script: |
           flutter pub get
-          cd ios && find . -name "*.resolved" -delete 2>/dev/null || true && cd ..
+          flutter config --no-enable-swift-package-manager
       - name: Install pods
         script: |
           cd ios
