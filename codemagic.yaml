@@ -17,7 +17,9 @@ workflows:
         bundle_identifier: com.hdfstats.app
     scripts:
       - name: Flutter pub get
-        script: flutter pub get
+        script: |
+          flutter pub get
+          cd ios && find . -name "*.resolved" -delete 2>/dev/null || true && cd ..
       - name: Install pods
         script: |
           cd ios
