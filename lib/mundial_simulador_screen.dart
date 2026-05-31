@@ -5,7 +5,7 @@ import 'api_service.dart';
 import 'mundial_seleccion_sheet.dart';
 
 /// Simulador de cruces Mundial 2026: reordenar grupos, elegir 8 mejores terceros,
-/// avanzar bracket (R32 oficial FIFA) y ver un campeón proyectado.
+/// avanzar bracket (R32 oficial del Mundial) y ver un campeón proyectado.
 class MundialSimuladorScreen extends StatefulWidget {
   const MundialSimuladorScreen({super.key});
 

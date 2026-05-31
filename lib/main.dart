@@ -9158,9 +9158,9 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
   }
 
   List<List<Map<String, dynamic>?>> _buildR32Matches() {
-    // â•â• BRACKET OFICIAL FIFA MUNDIAL 2026 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // Fuente: Wikipedia — 2026 FIFA World Cup knockout stage
-    // 16 partidos del Round of 32, cruces FIJOS segun reglamento FIFA:
+    // Bracket oficial Mundial 2026
+    // Fuente: Wikipedia — 2026 World Cup knockout stage
+    // 16 partidos del Round of 32, cruces FIJOS segun reglamento oficial:
     //
     // Match 1:  2A vs 2B          Match 9:  1D vs 3ro(B/E/F/I/J)
     // Match 2:  1E vs 3ro(A/B/C/D/F)  Match 10: 1G vs 3ro(A/E/H/I/J)

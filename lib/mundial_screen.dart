@@ -1122,9 +1122,9 @@ class _TabGoleadoresState extends State<_TabGoleadores> {
   }
 }
 
-// ── Bracket 32avos Mundial 2026 (partidos FIFA 73–88). Terceros en cruces `t:`: mejor 3°
+// ── Bracket 32avos Mundial 2026 (partidos 73–88). Terceros en cruces `t:`: mejor 3°
 // provisional entre los grupos del pool (la matriz final depende de los 8 terceros que clasifiquen).
-// Referencia: sorteo / procedimiento FIFA Mundial 2026 (fase eliminatoria inicial).
+// Referencia: sorteo / procedimiento oficial Mundial 2026 (fase eliminatoria inicial).
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MundialR32Def {
@@ -1210,7 +1210,7 @@ Map<String, dynamic>? _mundialR32ResolveSide(String spec, Map<String, Map<String
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB CRUCES (32avos — bracket FIFA 2026)
+// TAB CRUCES (32avos — bracket Mundial 2026)
 // ─────────────────────────────────────────────────────────────────────────────
 class _TabCruces extends StatefulWidget {
   @override

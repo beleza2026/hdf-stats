@@ -17,7 +17,7 @@ String? _iso2FromCountryName(String? raw) {
   return _countryNameLowerToIso2[k];
 }
 
-/// Nombres en inglés/minúsculas (API-Sports / FIFA style).
+/// Nombres en inglés/minúsculas (API-Sports / estilo competiciones internacionales).
 const Map<String, String> _countryNameLowerToIso2 = {
   'afghanistan': 'AF',
   'albania': 'AL',

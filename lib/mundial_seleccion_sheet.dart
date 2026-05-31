@@ -423,7 +423,7 @@ class _MundialSeleccionSheetBodyState extends State<_MundialSeleccionSheetBody> 
                   children: [
                     _filaHist('Partidos jugados (ediciones 2010–2026, API)', '${hist['partidosJugados'] ?? 0}'),
                     _filaHist('Finales disputadas (ediciones consultadas)', '${hist['finalesJugadas'] ?? 0}'),
-                    if ((hist['historicoFuente'] as String?) == 'fifa') ...[
+                    if ((hist['historicoFuente'] as String?) == 'mundial') ...[
                       const Divider(color: Colors.white10, height: 20),
                       const Text('Récords históricos en Mundiales (referencia Mundial)',
                           style: TextStyle(color: Colors.white38, fontSize: 11)),

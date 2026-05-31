@@ -1301,7 +1301,7 @@ class SportmonksService {
     final hit = _cache[cacheKey];
     if (hit is int && hit > 0) return (id: hit, error: null);
 
-    const queries = ['World Cup 2026', 'FIFA World Cup', 'World Cup'];
+    const queries = ['World Cup 2026', 'World Cup'];
     for (final q in queries) {
       try {
         final uri = Uri.parse('$_baseUrl/leagues/search/${Uri.encodeComponent(q)}').replace(
@@ -1420,8 +1420,7 @@ class SportmonksService {
     final l = (label ?? '').toLowerCase();
     return l.contains('world cup') ||
         l.contains('worldcup') ||
-        l.contains('copa mundial') ||
-        l.contains('fifa world');
+        l.contains('copa mundial');
   }
 
   static int _rankPuestoMundial(String place) {

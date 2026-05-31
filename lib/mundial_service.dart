@@ -217,7 +217,7 @@ class MundialService {
   static bool get convocatoriasMundialDefinitivasActivas =>
       DateTime.now().isAfter(mundialPlantelDefinitivoDesde);
 
-  /// Convocatoria FIFA Mundial 2026: 26 jugadores oficiales (no 23 como ediciones anteriores).
+  /// Convocatoria oficial Mundial 2026: 26 jugadores (no 23 como ediciones anteriores).
   static const int plantelOficialTamanio = 26;
   static const int _plantelOficialMinJugadores = plantelOficialTamanio;
   static const int _plantelOficialMaxJugadores = plantelOficialTamanio;
@@ -632,7 +632,7 @@ class MundialService {
   }
 
   /// Única fuente de verdad para títulos mundiales (evita errores API/SM tipo México campeón).
-  static const Map<int, List<int>> _titulosMundialFifaPorApiId = {
+  static const Map<int, List<int>> _titulosMundialReferenciaPorApiId = {
     26: [2022, 1986, 1978],
     6: [2002, 1994, 1970, 1962, 1958],
     2: [2018, 1998],
@@ -643,15 +643,15 @@ class MundialService {
     7: [1950, 1930],
   };
 
-  static List<int> _titulosFifaParaEquipo(int apiTeamId, String teamName) {
-    final direct = _titulosMundialFifaPorApiId[apiTeamId];
+  static List<int> _titulosMundialParaEquipo(int apiTeamId, String teamName) {
+    final direct = _titulosMundialReferenciaPorApiId[apiTeamId];
     if (direct != null) return direct;
     final alt = _apiIdPorPaisKey[_normPaisKey(teamName)];
-    if (alt != null) return _titulosMundialFifaPorApiId[alt] ?? const [];
+    if (alt != null) return _titulosMundialReferenciaPorApiId[alt] ?? const [];
     return const [];
   }
 
-  /// Palmarés FIFA de referencia (cuando API/SM vienen incompletos).
+  /// Palmarés de referencia del Mundial (cuando API/SM vienen incompletos).
   static const Map<int, ({List<int> titulos, List<String> destacados, String? foto})>
       _palmaresReferenciaPorApiId = {
     26: (
@@ -801,7 +801,7 @@ class MundialService {
     return u.contains('media.api-sports.io/football/teams/');
   }
 
-  /// Foto para tarjetas de partido / encabezado (referencia FIFA + escudo API).
+  /// Foto para tarjetas de partido / encabezado (referencia oficial + escudo API).
   static String? fotoSeleccionParaTarjeta(
     int teamId, {
     String? logo,
@@ -883,9 +883,9 @@ class MundialService {
     return t;
   }
 
-  /// Réords históricos en Copas del Mundo (FIFA / fuentes oficiales). Evita errores de API (ej. Neymar ≠ más presencias de Brasil).
+  /// Récords históricos en Copas del Mundo (referencia oficial). Evita errores de API (ej. Neymar ≠ más presencias de Brasil).
   static const Map<int, ({String goleador, int goles, String presencias, int apps})>
-      _historicoMundialFifaPorApiId = {
+      _historicoMundialReferenciaPorApiId = {
     6: (goleador: 'Ronaldo', goles: 15, presencias: 'Cafu', apps: 20),
     26: (goleador: 'Lionel Messi', goles: 13, presencias: 'Lionel Messi', apps: 26),
     25: (goleador: 'Miroslav Klose', goles: 16, presencias: 'Lothar Matthäus', apps: 25),
@@ -911,10 +911,10 @@ class MundialService {
     int apiTeamId,
     String teamName,
   ) {
-    final direct = _historicoMundialFifaPorApiId[apiTeamId];
+    final direct = _historicoMundialReferenciaPorApiId[apiTeamId];
     if (direct != null) return direct;
     final alt = _apiIdPorPaisKey[_normPaisKey(teamName)];
-    if (alt != null) return _historicoMundialFifaPorApiId[alt];
+    if (alt != null) return _historicoMundialReferenciaPorApiId[alt];
     return null;
   }
 
@@ -963,21 +963,21 @@ class MundialService {
     return 5;
   }
 
-  /// Ficha unificada: Sportmonks + API-Football + referencia FIFA.
+  /// Ficha unificada: Sportmonks + API-Football + referencia oficial del Mundial.
   static Future<Map<String, dynamic>> getSeleccionPaisProfile(
     int teamId, {
     required String teamName,
   }) async {
     final hint = teamName.trim();
     final ref = _palmaresReferenciaPorApiId[teamId] ?? _palmaresRef(teamId, hint);
-    final titulosFifa = _titulosFifaParaEquipo(teamId, hint);
+    final titulosMundial = _titulosMundialParaEquipo(teamId, hint);
 
     Map<String, dynamic>? info;
     String? seleccionFotoSm;
-    final titulosSet = <int>{...titulosFifa};
+    final titulosSet = <int>{...titulosMundial};
     final destacadas = <String>[];
-    var mejorPuesto = titulosFifa.isNotEmpty ? 'Campeón del Mundo' : '-';
-    var mejorRank = titulosFifa.isNotEmpty ? 100 : 0;
+    var mejorPuesto = titulosMundial.isNotEmpty ? 'Campeón del Mundo' : '-';
+    var mejorRank = titulosMundial.isNotEmpty ? 100 : 0;
 
     if (ref != null) {
       for (final d in ref.destacados) {
@@ -1015,7 +1015,7 @@ class MundialService {
           if (s.isNotEmpty && !destacadas.contains(s)) destacadas.add(s);
         }
         final mp = sm['mejorPuestoTexto'] as String?;
-        if (titulosFifa.isEmpty &&
+        if (titulosMundial.isEmpty &&
             mp != null &&
             mp.trim().isNotEmpty &&
             mp != '-' &&
@@ -1055,12 +1055,12 @@ class MundialService {
       final ht = historico['mejorPuestoTexto'] as String?;
       if (ht != null && ht.trim().isNotEmpty && ht != '-') {
         final htLow = ht.toLowerCase();
-        final esCampeonFalso = titulosFifa.isEmpty &&
+        final esCampeonFalso = titulosMundial.isEmpty &&
             (htLow.contains('campeón') || htLow.contains('campeon') || htLow.contains('winner'));
         if (!esCampeonFalso) mejorPuesto = ht;
       }
     }
-    if (titulosFifa.isEmpty) {
+    if (titulosMundial.isEmpty) {
       final mpLow = mejorPuesto.toLowerCase();
       if (mpLow.contains('campeón') || mpLow.contains('campeon') || mpLow.contains('winner')) {
         mejorPuesto = ref != null && ref.destacados.isNotEmpty
@@ -1628,7 +1628,7 @@ class MundialService {
       out['goleadorHistoricoGoles'] = ref.goles;
       out['masPresenciasNombre'] = ref.presencias;
       out['masPresenciasPartidos'] = ref.apps;
-      out['historicoFuente'] = 'fifa';
+      out['historicoFuente'] = 'mundial';
     } else {
       out['historicoFuente'] = 'none';
     }
@@ -1686,7 +1686,7 @@ class MundialService {
       out['partidosJugados'] = pj;
       out['finalesJugadas'] = finales;
       var mejorFinal = mejorTxt;
-      if (_titulosFifaParaEquipo(teamId, teamName ?? '').isEmpty) {
+      if (_titulosMundialParaEquipo(teamId, teamName ?? '').isEmpty) {
         final low = mejorFinal.toLowerCase();
         if (low.contains('campeón') || low.contains('campeon') || low.contains('winner')) {
           mejorFinal = '-';

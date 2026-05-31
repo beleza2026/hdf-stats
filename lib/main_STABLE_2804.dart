@@ -2232,7 +2232,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
 
         String gl(String g) => 'Gr.$g';
 
-        // 16 CRUCES OFICIALES FIFA 2026 — Round of 32
+        // 16 CRUCES OFICIALES MUNDIAL 2026 — Round of 32
         final List<Map<String, dynamic>> partidos = [
           // P73 — 2°A vs 2°B
           {'l': getPos(1,'A'), 'v': getPos(1,'B'), 'lbl': '2° ${gl('A')} vs 2° ${gl('B')}', 'tipo': '2vs2'},
@@ -2290,7 +2290,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               Text('ROUND OF 32 — MUNDIAL 2026',
                 style: TextStyle(color: Color(0xFFFFD700), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
               SizedBox(height: 4),
-              Text('16 partidos oficiales FIFA. Los rivales de los 3ros dependen de los 8 mejores.',
+              Text('16 partidos oficiales del Mundial. Los rivales de los 3ros dependen de los 8 mejores.',
                 style: TextStyle(color: Colors.white54, fontSize: 11)),
             ]),
           ),
@@ -2412,7 +2412,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
                 const Text('🌎', style: TextStyle(fontSize: 28)),
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('COPA MUNDIAL FIFA 2026', style: TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  const Text('COPA MUNDIAL 2026', style: TextStyle(color: Color(0xFFFFD700), fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   const Text('Canadá • México • Estados Unidos', style: TextStyle(color: Colors.white54, fontSize: 11)),
                   const Text('11 junio — 19 julio 2026', style: TextStyle(color: Colors.white38, fontSize: 10)),
                 ]),
@@ -7517,9 +7517,9 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
   }
 
   List<List<Map<String, dynamic>?>> _buildR32Matches() {
-    // â•â• BRACKET OFICIAL FIFA MUNDIAL 2026 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    // Fuente: Wikipedia — 2026 FIFA World Cup knockout stage
-    // 16 partidos del Round of 32, cruces FIJOS segun reglamento FIFA:
+    // Bracket oficial Mundial 2026
+    // Fuente: Wikipedia — 2026 World Cup knockout stage
+    // 16 partidos del Round of 32, cruces FIJOS segun reglamento oficial:
     //
     // Match 1:  2A vs 2B          Match 9:  1D vs 3ro(B/E/F/I/J)
     // Match 2:  1E vs 3ro(A/B/C/D/F)  Match 10: 1G vs 3ro(A/E/H/I/J)
@@ -7773,7 +7773,7 @@ class _MundialSimuladorState extends State<_MundialSimuladorWidget> with SingleT
   Widget _buildBracketTab() {
     final r32 = _buildR32Matches();
     return ListView(padding: const EdgeInsets.all(12), children: [
-      _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket oficial FIFA)'),
+      _buildRoundHeader('ROUND OF 32 — 16 partidos (bracket oficial Mundial)'),
       const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Cruces reales: 1J vs 2H • 1H vs 2J • 1C vs 2F... Toca para elegir ganador', style: TextStyle(color: Colors.white38, fontSize: 10))),
       ...r32.asMap().entries.map((e) => _buildMatchCard('r32_${e.key}', e.value[0], e.value[1])),
       const SizedBox(height: 12),
