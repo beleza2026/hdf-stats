@@ -72,14 +72,12 @@ class PremiumService {
   /// Solo desarrollo: ignora suscripción RC y muestra candados (probar modo FREE).
   static bool get forceFreeUi => _parseEnvBool(forceFreeUiRaw);
 
-  /// Modo diseño: nunca abrir paywall; acceso total sin RevenueCat.
-  static bool get shouldBypassPaywall => unlockAllForPreview;
+  /// App liberada: nunca abrir paywall.
+  static bool get shouldBypassPaywall => true;
 
-  /// Usar en UI gates: por defecto FREE; solo true con sub real o DESIGNER_UNLOCK_ALL.
+  /// App liberada: todo el contenido se comporta como premium.
   static bool effectivePremium(bool fromCache) {
-    if (forceFreeUi) return false;
-    if (unlockAllForPreview) return true;
-    return fromCache == true;
+    return true;
   }
 
   /// Solo entitlements en `active` (nunca inferir desde `all`).
@@ -157,71 +155,17 @@ class PremiumService {
   }
 
   static Future<bool> isPremium() async {
-    if (forceFreeUi) {
-      debugPrint(
-        'RevenueCat isPremium: false (FORCE_FREE_UI — probando candados sin sub)',
-      );
-      return false;
-    }
-    if (unlockAllForPreview) {
-      debugPrint(
-        'RevenueCat isPremium: true (DESIGNER_UNLOCK_ALL — solo desarrollo)',
-      );
-      return true;
-    }
-    try {
-      final info = await Purchases.getCustomerInfo();
-      final premium = hasPremiumEntitlement(info);
-      final ent = _entitlementInfo(info);
-      debugPrint(
-        'RevenueCat isPremium=$premium active=${info.entitlements.active.keys} '
-        'entitlement=${ent?.identifier} trial=${ent?.periodType}',
-      );
-      return premium;
-    } catch (e) {
-      debugPrint('RevenueCat isPremium error: $e');
-      return false;
-    }
+    return true;
   }
 
   static Future<PremiumSubscriptionStatus> getSubscriptionStatus() async {
-    if (forceFreeUi) {
-      return const PremiumSubscriptionStatus(isPremium: false);
-    }
-    if (!isConfigured) {
-      return const PremiumSubscriptionStatus(isPremium: false);
-    }
-    if (unlockAllForPreview) {
-      return const PremiumSubscriptionStatus(
-        isPremium: true,
-        isInTrial: false,
-        expirationDate: null,
-        productIdentifier: 'designer_unlock',
-        willRenew: true,
-      );
-    }
-    try {
-      final info = await Purchases.getCustomerInfo();
-      if (!hasPremiumEntitlement(info)) {
-        return const PremiumSubscriptionStatus(isPremium: false);
-      }
-      final ent = _entitlementInfo(info);
-      if (ent == null) {
-        return const PremiumSubscriptionStatus(isPremium: false);
-      }
-      final inTrial = ent.periodType == PeriodType.trial ||
-          ent.periodType == PeriodType.intro;
-      return PremiumSubscriptionStatus(
-        isPremium: true,
-        isInTrial: inTrial,
-        expirationDate: _parseExpiration(ent.expirationDate),
-        productIdentifier: ent.productIdentifier,
-        willRenew: ent.willRenew,
-      );
-    } catch (e) {
-      debugPrint('RevenueCat status error: $e');
-      return const PremiumSubscriptionStatus(isPremium: false);
-    }
+    return const PremiumSubscriptionStatus(
+      isPremium: true,
+      isInTrial: false,
+      expirationDate: null,
+      productIdentifier: 'free_access',
+      willRenew: false,
+    );
   }
 
   static Future<Offering?> fetchOffering() async {
