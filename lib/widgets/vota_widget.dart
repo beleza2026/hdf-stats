@@ -280,7 +280,7 @@ class _VotaWidgetState extends State<VotaWidget> {
     return Column(
       children: [
         const Text(
-          'Resultados detallados con Premium',
+          'Resultados detallados',
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.white54, fontSize: 12),
         ),

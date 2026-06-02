@@ -1163,7 +1163,7 @@ class _MainScreenState extends State<MainScreen> {
       },
     ),
       title: 'Índice MatchGol™',
-      subtitle: 'Ranking de rendimiento por jugador con Premium.',
+      subtitle: 'Ranking de rendimiento por jugador.',
     );
   }
 
@@ -1506,7 +1506,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
                     },
                   ),
                   title: 'Tabla Moral',
-                  subtitle: 'Vista previa y tabla completa con Premium.',
+                  subtitle: 'Vista previa y tabla completa.',
                   compact: true,
                 ),
               ]),
@@ -1827,7 +1827,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         return _gatePremium(
           _buildArqueros(),
           title: 'Arqueros',
-          subtitle: 'Estadísticas de arqueros con Premium.',
+          subtitle: 'Estadísticas de arqueros.',
         );
       case 4: return _buildFixture();
       case 5: return _buildEnVivo();
@@ -1835,25 +1835,25 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
         return _gatePremium(
           _buildPredicciones(),
           title: 'Predicciones / VOTA',
-          subtitle: 'Predicciones HDF™ y votación con Premium.',
+          subtitle: 'Predicciones HDF™ y votación.',
         );
       case 7: return _buildMundial();
       case 8: return _buildNoticias();
       case 9: return CopaScreen(leagueId: 13, nombreCopa: 'Copa Libertadores', titleIcon: AppIcons.libertadores, onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
       case 10: return CopaScreen(leagueId: 11, nombreCopa: 'Copa Sudamericana', titleIcon: AppIcons.sudamericana, onTapPartido: (ctx, local, visitante, resultado, jugado, {fixtureId, homeId, awayId, fechaPartido, isLive = false, minuto = '', sourceLeagueId, partidoLista}) => _mostrarDetalle(ctx, local, visitante, resultado, jugado, fixtureId: fixtureId, homeId: homeId, awayId: awayId, fechaPartido: fechaPartido, isLive: isLive, minuto: minuto, sourceLeagueId: sourceLeagueId, partidoLista: partidoLista, datosFixtureCompletos: _esPremium));
-      case 11: return _gatePremium(_buildAlFilo(), title: 'Monitor de Bajas', subtitle: 'Al filo de suspensión con Premium.');
-      case 12: return _gatePremium(_buildExpulsados(), title: 'Monitor de Bajas', subtitle: 'Expulsados y sanciones con Premium.');
+      case 11: return _gatePremium(_buildAlFilo(), title: 'Monitor de Bajas', subtitle: 'Al filo de suspensión.');
+      case 12: return _gatePremium(_buildExpulsados(), title: 'Monitor de Bajas', subtitle: 'Expulsados y sanciones.');
       case 13:
         return _gatePremium(
           _buildTablaPosesion(),
           title: 'Tabla de posesión',
-          subtitle: 'Estadísticas de posesión con Premium.',
+          subtitle: 'Estadísticas de posesión.',
         );
       case 14:
         return _gatePremium(
           _buildCuerdaFloja(),
           title: 'En la cuerda floja',
-          subtitle: 'Equipos en zona de descenso con Premium.',
+          subtitle: 'Equipos en zona de descenso.',
         );
       case 15: return CopaScreen(
             leagueId: CopaService.leagueCopaArgentina,
@@ -1871,10 +1871,10 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
                     sourceLeagueId: sourceLeagueId,
                     partidoLista: partidoLista,
                     datosFixtureCompletos: true));
-      case 16: return _gatePremium(_buildRemontadaLigaSeccion(), title: 'Remontada', subtitle: 'Estadística de remontadas LPF con Premium.');
-      case 17: return _gatePremium(_buildLesionadosSportmonks(), title: 'Monitor de Bajas', subtitle: 'Lesionados LPF con Premium.');
+      case 16: return _gatePremium(_buildRemontadaLigaSeccion(), title: 'Remontada', subtitle: 'Estadística de remontadas LPF.');
+      case 17: return _gatePremium(_buildLesionadosSportmonks(), title: 'Monitor de Bajas', subtitle: 'Lesionados LPF.');
       case 18: return const TablaHinchasScreen();
-      case 19: return _gatePremium(_tabArbitros(), title: 'Árbitros', subtitle: 'Estadísticas por árbitro con Premium.');
+      case 19: return _gatePremium(_tabArbitros(), title: 'Árbitros', subtitle: 'Estadísticas por árbitro.');
       default: return _buildResultados();
     }
   }
@@ -1989,7 +1989,7 @@ Widget _buildIndiceTop10(List<Map<String, dynamic>> players) {
               if (Platform.isAndroid) ...[
                 const Text('CÓDIGO DE CORTESÍA', style: TextStyle(color: Color(0xFF00C853), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 const SizedBox(height: 8),
-                const Text('Ingresá tu código para acceder a HDF Stats Premium gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                const Text('Ingresá tu código para acceder a HDF Stats gratis.', style: TextStyle(color: Colors.white54, fontSize: 13)),
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(
@@ -3672,17 +3672,17 @@ Widget _expulsadoCard(Map<String, dynamic> j) {
         ),
         Expanded(child: TabBarView(children: [
           _tabPosiciones(),
-          _gatePremium(_tabRendimiento('home'), title: 'Tabla local', subtitle: 'Rendimiento como local con Premium.', compact: true),
-          _gatePremium(_tabRendimiento('away'), title: 'Tabla visitante', subtitle: 'Rendimiento como visitante con Premium.', compact: true),
-          _gatePremium(_tabUltimos5(), title: 'Últimos 5', subtitle: 'Forma reciente con Premium.', compact: true),
-          _gatePremium(_tabTiempo('first'), title: '1.er tiempo', subtitle: 'Estadísticas del 1.er tiempo con Premium.', compact: true),
-          _gatePremium(_tabTiempo('second'), title: '2.do tiempo', subtitle: 'Estadísticas del 2.do tiempo con Premium.', compact: true),
-          _gatePremium(_buildTablaMoral(), title: 'Tabla Moral', subtitle: 'Tabla moral con Premium.', compact: true),
-          _gatePremium(_buildCruces(), title: 'Cruces', subtitle: 'Cruces / eliminatorias con Premium.', compact: true),
-          _gatePremium(_tabAnual(), title: 'Tabla anual', subtitle: 'Acumulado anual con Premium.', compact: true),
-          _gatePremium(_tabPromedios(), title: 'Tabla de promedios', subtitle: 'Promedios con Premium.', compact: true),
-          _gatePremium(_tabEquipoDeFecha(), title: 'Equipo de la fecha', subtitle: 'Equipo de la semana con Premium.', compact: true),
-          _gatePremium(const TablaRachasTab(), title: 'Rachas', subtitle: 'Rachas de equipos con Premium.', compact: true),
+          _gatePremium(_tabRendimiento('home'), title: 'Tabla local', subtitle: 'Rendimiento como local.', compact: true),
+          _gatePremium(_tabRendimiento('away'), title: 'Tabla visitante', subtitle: 'Rendimiento como visitante.', compact: true),
+          _gatePremium(_tabUltimos5(), title: 'Últimos 5', subtitle: 'Forma reciente.', compact: true),
+          _gatePremium(_tabTiempo('first'), title: '1.er tiempo', subtitle: 'Estadísticas del 1.er tiempo.', compact: true),
+          _gatePremium(_tabTiempo('second'), title: '2.do tiempo', subtitle: 'Estadísticas del 2.do tiempo.', compact: true),
+          _gatePremium(_buildTablaMoral(), title: 'Tabla Moral', subtitle: 'Tabla moral.', compact: true),
+          _gatePremium(_buildCruces(), title: 'Cruces', subtitle: 'Cruces / eliminatorias.', compact: true),
+          _gatePremium(_tabAnual(), title: 'Tabla anual', subtitle: 'Acumulado anual.', compact: true),
+          _gatePremium(_tabPromedios(), title: 'Tabla de promedios', subtitle: 'Promedios.', compact: true),
+          _gatePremium(_tabEquipoDeFecha(), title: 'Equipo de la fecha', subtitle: 'Equipo de la semana.', compact: true),
+          _gatePremium(const TablaRachasTab(), title: 'Rachas', subtitle: 'Rachas de equipos.', compact: true),
         ])),
       ]),
     );
@@ -5381,8 +5381,8 @@ Widget _tabTiempo(String tipo) {
         ),
         Expanded(child: TabBarView(children: [
           _tabGoleadores(),
-          _gatePremium(_tabAsistencias(), title: 'Asistencias', subtitle: 'Tabla de asistencias con Premium.', compact: true),
-          _gatePremium(_tabEficacia(), title: 'Eficiencia goleadora', subtitle: 'Eficiencia de delanteros con Premium.', compact: true),
+          _gatePremium(_tabAsistencias(), title: 'Asistencias', subtitle: 'Tabla de asistencias.', compact: true),
+          _gatePremium(_tabEficacia(), title: 'Eficiencia goleadora', subtitle: 'Eficiencia de delanteros.', compact: true),
         ])),
       ]),
     );
